@@ -10,6 +10,10 @@
 
 cmake_minimum_required (VERSION 3.0)
 project (dspaces VERSION 2.2.0 LANGUAGES C)
+
+cmake_policy(SET CMP0078 NEW)
+cmake_policy(SET CMP0086 NEW)
+
 #enable_testing ()
 
 include(GNUInstallDirs)
