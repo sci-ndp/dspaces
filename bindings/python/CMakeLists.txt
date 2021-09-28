@@ -1,9 +1,5 @@
 cmake_policy(SET CMP0078 NEW)
 cmake_policy(SET CMP0086 NEW)
-include(UseSWIG)
-find_package(SWIG 3.0 COMPONENTS python REQUIRED)
-find_package(Python 3 COMPONENTS Interpreter Development NumPy)
-find_package(PythonLibs REQUIRED)
 
 string(REGEX REPLACE "^.*(lib/.*)$" "\\1" CMAKE_INSTALL_PYTHONDIR_DEFAULT "${Python_SITEARCH}")
 

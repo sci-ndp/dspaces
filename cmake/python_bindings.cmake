@@ -1,0 +1,15 @@
+include(UseSWIG)
+
+if(DSPACES_PYTHON_BINDINGS STREQUAL AUTO)
+    find_package(SWIG 3.0 COMPONENTS python)
+    find_package(Python 3 COMPONENTS Interpreter Development NumPy)
+    find_package(PythonLibs)
+elseif(DSPACES_PYTHON_BINDINGS)
+    find_package(SWIG 3.0 COMPONENTS python REQUIRED)
+    find_package(Python 3 COMPONENTS Interpreter Development NumPy REQUIRED)
+    find_package(PythonLibs REQUIRED)
+endif()
+
+if(SWIG_FOUND AND Python_FOUND AND PythonLibs_FOUND)
+    set(DSPACES_BUILD_PYTHON_BINDINGS TRUE)
+endif()

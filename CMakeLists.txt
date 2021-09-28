@@ -39,6 +39,8 @@ if((NOT BUILD_SHARED_LIBS) AND (NOT DEFINED CMAKE_POSITION_INDEPENDENT_CODE))
 endif()
 
 option(ENABLE_TESTS    "Build tests" OFF)
+set(DSPACES_PYTHON_BINDINGS AUTO CACHE STRING  "Build Python bindings")
+set_property(CACHE DSPACES_PYTHON_BINDINGS PROPERTY STRINGS "ON;TRUE;AUTO;OFF;FALSE")
 
 # add our cmake module directory to the path
 set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
@@ -54,6 +56,8 @@ set (BUILD_SHARED_LIBS "OFF" CACHE BOOL "Build a shared library")
 # packages we depend on
 include (xpkg-import)
 xpkg_import_module (margo REQUIRED margo)
+
+include(python_bindings)
 
 find_package(MPI COMPONENTS REQUIRED)
 

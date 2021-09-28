@@ -2,4 +2,6 @@ if(DSPACES_HAVE_FORTRAN)
     add_subdirectory(fortran)
 endif()
 
-add_subdirectory(python)
+if(DSPACES_BUILD_PYTHON_BINDINGS)
+    add_subdirectory(python)
+endif()
