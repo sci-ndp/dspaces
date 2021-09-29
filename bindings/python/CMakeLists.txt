@@ -8,11 +8,11 @@ set(CMAKE_PYTHON_OUTPUT_DIRECTORY
   ${PROJECT_BINARY_DIR}/${CMAKE_INSTALL_PYTHONDIR}
 )
 
-include_directories(SYSTEM ${PYTHON_INCLUDE_PATH})
+include_directories(SYSTEM ${PYTHON_INCLUDE_PATH} ${_Python_NumPy_INCLUDE_DIR})
 include_directories($<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 
 if(SWIG_FOUND)
-  message("SWIG found: ${SWIG_EXECUTABLE}")
+  message("-- SWIG found: ${SWIG_EXECUTABLE}")
 endif()
 
 swig_add_library(dspaces_wrapper
