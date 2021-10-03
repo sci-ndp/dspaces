@@ -1407,7 +1407,8 @@ static void query_rpc(hg_handle_t handle)
     DEBUG_OUT("Received query for %s with timeout %d",
               obj_desc_sprint(&in_odsc), timeout);
 
-    out.odsc_list.size = get_query_odscs(server, &in, timeout, &results, req_id);
+    out.odsc_list.size =
+        get_query_odscs(server, &in, timeout, &results, req_id);
 
     out.odsc_list.raw_odsc = (char *)results;
     margo_respond(handle, &out);

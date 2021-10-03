@@ -1468,7 +1468,10 @@ static void notify_rpc(hg_handle_t handle)
             get_data(client, num_odscs, subh->q_odsc, odsc_tab, data);
         }
     } else {
-        fprintf(stderr, "WARNING: got notification, but sub status was not DSPACES_SUB_WAIT (%i)\n", subh->status);
+        fprintf(stderr,
+                "WARNING: got notification, but sub status was not "
+                "DSPACES_SUB_WAIT (%i)\n",
+                subh->status);
         ABT_mutex_unlock(client->sub_mutex);
         odsc_tab = NULL;
         data = NULL;
