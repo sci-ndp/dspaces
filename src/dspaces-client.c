@@ -183,13 +183,14 @@ static int get_ss_info(dspaces_client_t client)
         return dspaces_ERR_MERCURY;
     }
 
+    DEBUG_OUT("Sending ss_rpc\n");
     hret = margo_forward(handle, NULL);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s):  margo_forward() failed\n", __func__);
         margo_destroy(handle);
         return dspaces_ERR_MERCURY;
     }
-
+    DEBUG_OUT("Got ss_rpc reply\n");
     hret = margo_get_output(handle, &out);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s): margo_get_output() failed\n", __func__);
@@ -1726,6 +1727,10 @@ static void notify_rpc(hg_handle_t handle)
             get_data(client, num_odscs, subh->q_odsc, odsc_tab, data);
         }
     } else {
+        fprintf(stderr,
+                "WARNING: got notification, but sub status was not "
+                "DSPACES_SUB_WAIT (%i)\n",
+                subh->status);
         ABT_mutex_unlock(client->sub_mutex);
         odsc_tab = NULL;
         data = NULL;
@@ -1787,6 +1792,7 @@ struct dspaces_sub_handle *dspaces_sub(dspaces_client_t client,
 {
     hg_addr_t my_addr, server_addr;
     hg_handle_t handle;
+    margo_request req;
     hg_return_t hret;
     struct dspaces_sub_handle *subh;
     odsc_gdim_t in;
@@ -1825,6 +1831,7 @@ struct dspaces_sub_handle *dspaces_sub(dspaces_client_t client,
     client->pending_sub++;
     subh->id = client->sub_serial++;
     register_client_sub(client, subh);
+    subh->status = DSPACES_SUB_WAIT;
     ABT_mutex_unlock(client->sub_mutex);
 
     memset(subh->q_odsc.bb.lb.c, 0, sizeof(uint64_t) * BBOX_MAX_NDIM);
@@ -1860,7 +1867,7 @@ struct dspaces_sub_handle *dspaces_sub(dspaces_client_t client,
                 hret);
         return (DSPACES_SUB_FAIL);
     }
-    hret = margo_forward(handle, &in);
+    hret = margo_iforward(handle, &in, &req);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: %s: margo_forward() failed with %d.\n",
                 __func__, hret);
@@ -1869,7 +1876,6 @@ struct dspaces_sub_handle *dspaces_sub(dspaces_client_t client,
     }
 
     DEBUG_OUT("subscription %d sent.\n", subh->id);
-    subh->status = DSPACES_SUB_WAIT;
 
     margo_addr_free(client->mid, server_addr);
     margo_destroy(handle);
@@ -1943,6 +1949,7 @@ void dspaces_kill(dspaces_client_t client)
     uint32_t in;
     hg_addr_t server_addr;
     hg_handle_t h;
+    margo_request req;
     hg_return_t hret;
 
     in = -1;
@@ -1956,7 +1963,7 @@ void dspaces_kill(dspaces_client_t client)
         margo_addr_free(client->mid, server_addr);
         return;
     }
-    margo_forward(h, &in);
+    margo_iforward(h, &in, &req);
 
     DEBUG_OUT("kill signal sent.\n");
 

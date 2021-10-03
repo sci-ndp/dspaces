@@ -577,6 +577,7 @@ static int obj_update_dht(dspaces_provider_t server, struct obj_data *od,
         // now send rpc to the server for dht_update
         hg_return_t hret;
         odsc_gdim_t in;
+        margo_request req;
         DEBUG_OUT("Server %d sending object %s to dht server %d \n",
                   server->dsg->rank, obj_desc_sprint(odsc), dht_tab[i]->rank);
 
@@ -592,7 +593,7 @@ static int obj_update_dht(dspaces_provider_t server, struct obj_data *od,
 
         hg_handle_t h;
         margo_create(server->mid, svr_addr, server->obj_update_id, &h);
-        margo_forward(h, &in);
+        margo_iforward(h, &in, &req);
         DEBUG_OUT("sent obj server %d to update dht %s in \n", dht_tab[i]->rank,
                   obj_desc_sprint(odsc));
 
@@ -955,11 +956,12 @@ static void kill_client(dspaces_provider_t server, char *client_addr)
 {
     hg_addr_t server_addr;
     hg_handle_t h;
+    margo_request req;
     int arg = -1;
 
     margo_addr_lookup(server->mid, client_addr, &server_addr);
     margo_create(server->mid, server_addr, server->kill_client_id, &h);
-    margo_forward(h, &arg);
+    margo_iforward(h, &arg, &req);
     margo_addr_free(server->mid, server_addr);
     margo_destroy(h);
 }
@@ -1287,7 +1289,7 @@ static void put_meta_rpc(hg_handle_t handle)
 DEFINE_MARGO_RPC_HANDLER(put_meta_rpc)
 
 static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
-                           int timeout, obj_descriptor **results)
+                           int timeout, obj_descriptor **results, int req_id)
 {
     struct sspace *ssd;
     struct dht_entry **de_tab;
@@ -1442,6 +1444,10 @@ static void query_rpc(hg_handle_t handle)
     int timeout;
     obj_descriptor *results;
     hg_return_t hret;
+    static int uid = 0;
+    int req_id;
+
+    req_id = __sync_fetch_and_add(&uid, 1);
 
     // unwrap context and input from margo
     mid = margo_hg_handle_get_instance(handle);
@@ -1465,7 +1471,8 @@ static void query_rpc(hg_handle_t handle)
     DEBUG_OUT("Received query for %s with timeout %d",
               obj_desc_sprint(&in_odsc), timeout);
 
-    out.odsc_list.size = get_query_odscs(server, &in, timeout, &results);
+    out.odsc_list.size =
+        get_query_odscs(server, &in, timeout, &results, req_id);
 
     out.odsc_list.raw_odsc = (char *)results;
     margo_respond(handle, &out);
@@ -1767,6 +1774,8 @@ static void ss_rpc(hg_handle_t handle)
     dspaces_provider_t server =
         (dspaces_provider_t)margo_registered_data(mid, info->id);
 
+    DEBUG_OUT("received ss_rpc\n");
+
     ss_info_hdr ss_data;
     ss_data.num_dims = ds_conf.ndim;
     ss_data.num_space_srv = server->dsg->size_sp;
@@ -1783,6 +1792,7 @@ static void ss_rpc(hg_handle_t handle)
     out.ss_buf.size = sizeof(ss_info_hdr);
     out.ss_buf.raw_odsc = (char *)(&ss_data);
     margo_respond(handle, &out);
+    DEBUG_OUT("responded in %s\n", __func__);
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(ss_rpc)
@@ -1792,11 +1802,12 @@ static void send_kill_rpc(dspaces_provider_t server, int target, int *rank)
     // TODO: error handling/reporting
     hg_addr_t server_addr;
     hg_handle_t h;
+    margo_request req;
 
     margo_addr_lookup(server->mid, server->server_address[target],
                       &server_addr);
     margo_create(server->mid, server_addr, server->kill_id, &h);
-    margo_forward(h, rank);
+    margo_iforward(h, rank, &req);
     margo_addr_free(server->mid, server_addr);
     margo_destroy(h);
 }
@@ -1867,7 +1878,11 @@ static void sub_rpc(hg_handle_t handle)
     struct global_dimension in_gdim;
     hg_addr_t client_addr;
     hg_handle_t notifyh;
+    margo_request req;
+    static int uid = 0;
+    int req_id;
 
+    req_id = __sync_fetch_and_add(&uid, 1L);
     margo_get_input(handle, &in);
 
     memcpy(&in_odsc, in.odsc_gdim.raw_odsc, sizeof(in_odsc));
@@ -1878,13 +1893,13 @@ static void sub_rpc(hg_handle_t handle)
               obj_desc_sprint(&in_odsc), sub_id, in_odsc.owner);
 
     in.param = -1; // this will be interpreted as timeout by any interal queries
-    notice.odsc_list.size = get_query_odscs(server, &in, -1, &results);
+    notice.odsc_list.size = get_query_odscs(server, &in, -1, &results, req_id);
     notice.odsc_list.raw_odsc = (char *)results;
     notice.param = sub_id;
 
     margo_addr_lookup(server->mid, in_odsc.owner, &client_addr);
     margo_create(server->mid, client_addr, server->notify_id, &notifyh);
-    margo_forward(notifyh, &notice);
+    margo_iforward(notifyh, &notice, &req);
     margo_addr_free(server->mid, client_addr);
     margo_destroy(notifyh);
 
