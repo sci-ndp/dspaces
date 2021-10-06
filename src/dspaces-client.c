@@ -841,6 +841,11 @@ static int finalize_req(struct dspaces_put_req *req)
     margo_bulk_free(req->in.handle);
     margo_destroy(req->handle);
 
+    if(req->buffer) {
+        free(req->buffer);
+        req->buffer = NULL;
+    }
+
     req->finalized = 1;
     req->ret = ret;
 
