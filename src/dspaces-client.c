@@ -832,7 +832,6 @@ struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
     struct dspaces_put_req *ds_req, **ds_req_p;
     int ret = dspaces_SUCCESS;
 
-
     ds_req = calloc(1, sizeof(*ds_req));
     obj_descriptor odsc = {.version = ver,
                            .owner = {0},
@@ -953,7 +952,7 @@ int dspaces_check_put(dspaces_client_t client, struct dspaces_put_req *req,
             } else {
                 ret = finalize_req(req);
                 *ds_req_p = req->next;
-                free(req); 
+                free(req);
                 return ret;
             }
         }
