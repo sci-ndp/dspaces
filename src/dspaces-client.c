@@ -61,6 +61,7 @@ struct dspaces_put_req {
     struct dspaces_put_req *next;
     bulk_gdim_t in;
     int finalized;
+    void *buffer;
     hg_return_t ret;
 };
 
@@ -822,6 +823,30 @@ int dspaces_put(dspaces_client_t client, const char *var_name, unsigned int ver,
     return ret;
 }
 
+static int finalize_req(struct dspaces_put_req *req)
+{
+    bulk_out_t out;
+    int ret;
+    hg_return_t hret;
+
+    hret = margo_get_output(req->handle, &out);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_get_output() failed\n", __func__);
+        margo_bulk_free(req->in.handle);
+        margo_destroy(req->handle);
+        return dspaces_ERR_MERCURY;
+    }
+    ret = out.ret;
+    margo_free_output(req->handle, &out);
+    margo_bulk_free(req->in.handle);
+    margo_destroy(req->handle);
+
+    req->finalized = 1;
+    req->ret = ret;
+
+    return ret;
+}
+
 struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
                                      const char *var_name, unsigned int ver,
                                      int elem_size, int ndim, uint64_t *lb,
@@ -831,6 +856,26 @@ struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
     hg_return_t hret;
     struct dspaces_put_req *ds_req, **ds_req_p;
     int ret = dspaces_SUCCESS;
+    const void *buffer;
+    int flag;
+
+    // Check for comleted iputs
+    ds_req_p = &client->put_reqs;
+    while(*ds_req_p) {
+        ds_req = *ds_req_p;
+        flag = 0;
+        if(!ds_req->finalized) {
+            margo_test(ds_req->req, &flag);
+            if(flag) {
+                finalize_req(ds_req);
+                *ds_req_p = ds_req->next;
+                // do not free ds_req yet - user might do a dspaces_check_put
+                // later
+            }
+        }
+
+        ds_req_p = &ds_req->next;
+    }
 
     ds_req = calloc(1, sizeof(*ds_req));
     obj_descriptor odsc = {.version = ver,
@@ -861,9 +906,17 @@ struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
     ds_req->in.odsc.raw_gdim = (char *)(&odsc_gdim);
     hg_size_t rdma_size = (elem_size)*bbox_volume(&odsc.bb);
 
+    if(alloc) {
+        ds_req->buffer = malloc(rdma_size);
+        memcpy(ds_req->buffer, data, rdma_size);
+        buffer = ds_req->buffer;
+    } else {
+        buffer = data;
+    }
+
     DEBUG_OUT("sending object %s \n", obj_desc_sprint(&odsc));
 
-    hret = margo_bulk_create(client->mid, 1, (void **)&data, &rdma_size,
+    hret = margo_bulk_create(client->mid, 1, (void **)&buffer, &rdma_size,
                              HG_BULK_READ_ONLY, &ds_req->in.handle);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s): margo_bulk_create() failed\n", __func__);
@@ -898,30 +951,6 @@ struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
     *ds_req_p = ds_req;
 
     return ds_req;
-}
-
-static int finalize_req(struct dspaces_put_req *req)
-{
-    bulk_out_t out;
-    int ret;
-    hg_return_t hret;
-
-    hret = margo_get_output(req->handle, &out);
-    if(hret != HG_SUCCESS) {
-        fprintf(stderr, "ERROR: (%s): margo_get_output() failed\n", __func__);
-        margo_bulk_free(req->in.handle);
-        margo_destroy(req->handle);
-        return dspaces_ERR_MERCURY;
-    }
-    ret = out.ret;
-    margo_free_output(req->handle, &out);
-    margo_bulk_free(req->in.handle);
-    margo_destroy(req->handle);
-
-    req->finalized = 1;
-    req->ret = ret;
-
-    return ret;
 }
 
 int dspaces_check_put(dspaces_client_t client, struct dspaces_put_req *req,
