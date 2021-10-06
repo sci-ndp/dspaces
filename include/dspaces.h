@@ -123,12 +123,15 @@ int dspaces_put(dspaces_client_t client, const char *var_name, unsigned int ver,
  *                  bounding box.
  * @param[in] data:     Pointer to user data buffer.
  *
+ * @param[in] allocate: allocate a buffer to enable immediate reuse of data
+ *
  * @return put handle
  */
 struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
                                      const char *var_name, unsigned int ver,
                                      int size, int ndim, uint64_t *lb,
-                                     uint64_t *ub, const void *data);
+                                     uint64_t *ub, const void *data,
+                                     int allocate);
 
 /**
  * @brief Check status of non-blocking put
