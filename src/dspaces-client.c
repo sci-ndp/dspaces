@@ -60,6 +60,8 @@ struct dspaces_put_req {
     margo_request req;
     struct dspaces_put_req *next;
     bulk_gdim_t in;
+    int finalized;
+    hg_return_t ret;
 };
 
 struct dspaces_client {
@@ -822,14 +824,15 @@ int dspaces_put(dspaces_client_t client, const char *var_name, unsigned int ver,
 struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
                                      const char *var_name, unsigned int ver,
                                      int elem_size, int ndim, uint64_t *lb,
-                                     uint64_t *ub, const void *data)
+                                     uint64_t *ub, const void *data, int alloc)
 {
     hg_addr_t server_addr;
     hg_return_t hret;
     struct dspaces_put_req *ds_req, **ds_req_p;
     int ret = dspaces_SUCCESS;
 
-    ds_req = malloc(sizeof(*ds_req));
+
+    ds_req = calloc(1, sizeof(*ds_req));
     obj_descriptor odsc = {.version = ver,
                            .owner = {0},
                            .st = st,
@@ -915,6 +918,9 @@ static int finalize_req(struct dspaces_put_req *req)
     margo_bulk_free(req->in.handle);
     margo_destroy(req->handle);
 
+    req->finalized = 1;
+    req->ret = ret;
+
     return ret;
 }
 
@@ -925,6 +931,12 @@ int dspaces_check_put(dspaces_client_t client, struct dspaces_put_req *req,
     struct dspaces_put_req **ds_req_p;
     int ret;
     hg_return_t hret;
+
+    if(req->finalized) {
+        ret = req->ret;
+        free(req);
+        return ret;
+    }
 
     if(wait) {
         hret = margo_wait(req->req);
@@ -940,7 +952,7 @@ int dspaces_check_put(dspaces_client_t client, struct dspaces_put_req *req,
             } else {
                 ret = finalize_req(req);
                 *ds_req_p = req->next;
-                free(req);
+                free(req); 
                 return ret;
             }
         }
