@@ -1,10 +1,3 @@
-cmake_policy(SET CMP0078 NEW)
-cmake_policy(SET CMP0086 NEW)
-include(UseSWIG)
-find_package(SWIG 3.0 COMPONENTS python REQUIRED)
-find_package(Python 3 COMPONENTS Interpreter Development NumPy)
-find_package(PythonLibs REQUIRED)
-
 string(REGEX REPLACE "^.*(lib/.*)$" "\\1" CMAKE_INSTALL_PYTHONDIR_DEFAULT "${Python_SITEARCH}")
 
 set(CMAKE_INSTALL_PYTHONDIR "${CMAKE_INSTALL_PYTHONDIR_DEFAULT}"
@@ -15,11 +8,11 @@ set(CMAKE_PYTHON_OUTPUT_DIRECTORY
   ${PROJECT_BINARY_DIR}/${CMAKE_INSTALL_PYTHONDIR}
 )
 
-include_directories(SYSTEM ${PYTHON_INCLUDE_PATH})
+include_directories(SYSTEM ${PYTHON_INCLUDE_PATH} ${_Python_NumPy_INCLUDE_DIR})
 include_directories($<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 
 if(SWIG_FOUND)
-  message("SWIG found: ${SWIG_EXECUTABLE}")
+  message("-- SWIG found: ${SWIG_EXECUTABLE}")
 endif()
 
 swig_add_library(dspaces_wrapper
