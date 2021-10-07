@@ -92,6 +92,7 @@ struct dspaces_client {
     int f_final;
     int listener_init;
     struct dspaces_put_req *put_reqs;
+    struct dspaces_put_req *put_reqs_end;
 
     int sub_serial;
     struct sub_list_node *sub_lists[SUB_HASH_SIZE];
@@ -855,31 +856,38 @@ static int finalize_req(struct dspaces_put_req *req)
 struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
                                      const char *var_name, unsigned int ver,
                                      int elem_size, int ndim, uint64_t *lb,
-                                     uint64_t *ub, const void *data, int alloc)
+                                     uint64_t *ub, const void *data, int alloc,
+                                     int check)
 {
     hg_addr_t server_addr;
     hg_return_t hret;
-    struct dspaces_put_req *ds_req, **ds_req_p;
+    struct dspaces_put_req *ds_req, *ds_req_prev, **ds_req_p;
     int ret = dspaces_SUCCESS;
     const void *buffer;
     int flag;
 
-    // Check for comleted iputs
-    ds_req_p = &client->put_reqs;
-    while(*ds_req_p) {
-        ds_req = *ds_req_p;
-        flag = 0;
-        if(!ds_req->finalized) {
-            margo_test(ds_req->req, &flag);
-            if(flag) {
-                finalize_req(ds_req);
-                *ds_req_p = ds_req->next;
-                // do not free ds_req yet - user might do a dspaces_check_put
-                // later
+    if(check) {
+        // Check for comleted iputs
+        ds_req_prev = NULL;
+        ds_req_p = &client->put_reqs;
+        while(*ds_req_p) {
+            ds_req = *ds_req_p;
+            flag = 0;
+            if(!ds_req->finalized) {
+                margo_test(ds_req->req, &flag);
+                if(flag) {
+                    finalize_req(ds_req);
+                    if(!ds_req->next) {
+                        client->put_reqs_end = ds_req_prev;
+                    }
+                    *ds_req_p = ds_req->next;
+                    // do not free ds_req yet - user might do a
+                    // dspaces_check_put later
+                }
             }
+            ds_req_prev = ds_req;
+            ds_req_p = &ds_req->next;
         }
-
-        ds_req_p = &ds_req->next;
     }
 
     ds_req = calloc(1, sizeof(*ds_req));
@@ -949,11 +957,12 @@ struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
     margo_addr_free(client->mid, server_addr);
 
     ds_req->next = NULL;
-    ds_req_p = &client->put_reqs;
-    while(*ds_req_p) {
-        ds_req_p = &((*ds_req_p)->next);
+    if(client->put_reqs_end) {
+        client->put_reqs_end->next = ds_req;
+        client->put_reqs_end = ds_req;
+    } else {
+        client->put_reqs = client->put_reqs_end = ds_req;
     }
-    *ds_req_p = ds_req;
 
     return ds_req;
 }
@@ -962,7 +971,7 @@ int dspaces_check_put(dspaces_client_t client, struct dspaces_put_req *req,
                       int wait)
 {
     int flag;
-    struct dspaces_put_req **ds_req_p;
+    struct dspaces_put_req **ds_req_p, *ds_req_prev;
     int ret;
     hg_return_t hret;
 
@@ -975,8 +984,10 @@ int dspaces_check_put(dspaces_client_t client, struct dspaces_put_req *req,
     if(wait) {
         hret = margo_wait(req->req);
         if(hret == HG_SUCCESS) {
+            ds_req_prev = NULL;
             ds_req_p = &client->put_reqs;
             while(*ds_req_p && *ds_req_p != req) {
+                ds_req_prev = *ds_req_p;
                 ds_req_p = &((*ds_req_p)->next);
             }
             if(!ds_req_p) {
@@ -985,6 +996,9 @@ int dspaces_check_put(dspaces_client_t client, struct dspaces_put_req *req,
                 return (-1);
             } else {
                 ret = finalize_req(req);
+                if(req->next == NULL) {
+                    client->put_reqs_end = ds_req_prev;
+                }
                 *ds_req_p = req->next;
                 free(req);
                 return ret;
@@ -993,8 +1007,10 @@ int dspaces_check_put(dspaces_client_t client, struct dspaces_put_req *req,
     } else {
         margo_test(req->req, &flag);
         if(flag) {
+            ds_req_prev = NULL;
             ds_req_p = &client->put_reqs;
             while(*ds_req_p && *ds_req_p != req) {
+                ds_req_prev = *ds_req_p;
                 ds_req_p = &((*ds_req_p)->next);
             }
             if(!ds_req_p) {
@@ -1003,6 +1019,9 @@ int dspaces_check_put(dspaces_client_t client, struct dspaces_put_req *req,
                 return (-1);
             } else {
                 ret = finalize_req(req);
+                if(req->next == NULL) {
+                    client->put_reqs_end = ds_req_prev;
+                }
                 *ds_req_p = req->next;
                 free(req);
             }
