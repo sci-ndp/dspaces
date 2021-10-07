@@ -122,7 +122,7 @@ static int couple_write_nd(dspaces_client_t ndph, unsigned int ts, int num_vars,
             } else {
                 dspaces_put_req_t ds_req;
                 ds_req = dspaces_iput(ndph, var_name, ts, elem_size, dims, lb,
-                                      ub, data_tab[i], 1);
+                                      ub, data_tab[i], 1, 1);
                 dspaces_check_put(ndph, ds_req, 1);
             }
         } else {
