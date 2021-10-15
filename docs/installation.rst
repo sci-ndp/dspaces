@@ -2,7 +2,7 @@ Installing
 ==========
 
 The easiest way to install DataSpaces is using `Spack <https://spack.readthedocs.io/en/latest/>`_. Spack is a package manager aimed at HPC and scientific computing.
- Using Spack simplifies the installation of DataSpaces and its dependencies.
+Using Spack simplifies the installation of DataSpaces and its dependencies.
 
 Installing Spack
 ----------------
