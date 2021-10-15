@@ -75,7 +75,7 @@ configure_file ("dspaces.pc.in" "dspaces.pc" @ONLY)
 install (TARGETS dspaces dspaces-server EXPORT dspaces-targets
          ARCHIVE DESTINATION lib
          LIBRARY DESTINATION lib)
-install (EXPORT dspaces-targets
+install (EXPORT dspaces-targets NAMESPACE dspaces::
          DESTINATION ${dspaces-pkg}
          FILE "dspaces-targets.cmake")
 install (FILES "${CMAKE_CURRENT_BINARY_DIR}/dspaces-config.cmake"

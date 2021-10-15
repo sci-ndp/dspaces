@@ -27,11 +27,8 @@ int main(int argc, char **argv)
     gcomm = MPI_COMM_WORLD;
 
     // Initalize DataSpaces
-    // # of Peers, Application ID, ptr MPI comm, additional parameters
-    // # Peers: Number of connecting clients to the DS server
-    // Application ID: Unique idenitifier (integer) for application
-    // Pointer to the MPI Communicator, allows DS Layer to use MPI barrier func
-    // Addt'l parameters: Placeholder for future arguments, currently NULL.
+    // # MPI communicator for collective bootstrapping
+    // # handle to initialize
     dspaces_init_mpi(gcomm, &client);
 
     // Timestep notation left in to demonstrate how this can be adjusted

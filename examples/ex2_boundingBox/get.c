@@ -20,9 +20,9 @@ int main(int argc, char **argv)
     MPI_Barrier(MPI_COMM_WORLD);
     gcomm = MPI_COMM_WORLD;
 
-    // DataSpaces: Initalize and identify application
-    // Usage: dspaces_init(num_peers, appid, Ptr to MPI comm, parameters)
-    // Note: appid for get.c is 2 [for put.c, it was 1]
+    // Initalize DataSpaces
+    // # MPI communicator for collective bootstrapping
+    // # handle to initialize
     dspaces_init_mpi(gcomm, &client);
 
     int timestep = 0;

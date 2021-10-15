@@ -1,4 +1,4 @@
-from dspaces_wrapper import *
+from dspaces.dspaces_wrapper import *
 import numpy as np
 
 class dspaces:

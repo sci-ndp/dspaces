@@ -15,12 +15,8 @@ int main(int argc, char **argv)
     dspaces_client_t client;
 
     // Initalize DataSpaces
-    // # of Peers, Application ID, ptr MPI comm, additional parameters
-    // # Peers: Number of connecting clients to the DS server
-    // Application ID: Unique idenitifier (integer) for application
-    // Pointer to the MPI Communicator:
-    //      when NOT NULL, allows DS Layer to use MPI barrier func
-    // Addt'l parameters: Placeholder for future arguments, currently NULL.
+    // # peer number (usually MPI rank)
+    // # handle to initialize  
     dspaces_init(0, &client);
 
     int timestep = 0;
