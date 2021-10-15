@@ -14,9 +14,9 @@ This makes it possible to share data between applications written in different p
 Building a C/C++ program with DataSpaces
 ----------------------------------------
 
-Flags necessary for compiling a program that uses DataSpaces can be found from the pkg-config file installed by DataSpaces in `<INSTALL_ROOT>/lib/pkgconfig`.
-If installing using spack, the appropriate directory will be added to `PGK_CONFIG_PATH` when the dataspaces module is loaded. 
-`pkg-config` can provide useful information that depends on which flag is provided:
+Flags necessary for compiling a program that uses DataSpaces can be found from the pkg-config file installed by DataSpaces in ``<INSTALL_ROOT>/lib/pkgconfig``.
+If installing using spack, the appropriate directory will be added to ``PGK_CONFIG_PATH`` when the dataspaces module is loaded. 
+``pkg-config`` can provide useful information that depends on which flag is provided:
 
     
 Provides compilation flags for building a program that uses the dataspaces API:
@@ -38,21 +38,21 @@ Provides the path to the dspaces_server binary:
     pkg-config --variable=exec_prefix dspaces
 
 Alternatively, dataspaces installs a CMake targets file that makes it easy to include dspaces in a CMake project. 
-If dataspaces was installed with Spack, `CMAKE_PREFIX_PATH` will be updated when the dataspaces package is loaded.
-Recent versions of cmake will also be able to find dspaces if `<INSTALL_ROOT>/bin` is in the users `PATH` environment variable. 
+If dataspaces was installed with Spack, ``CMAKE_PREFIX_PATH`` will be updated when the dataspaces package is loaded.
+Recent versions of cmake will also be able to find dspaces if ``<INSTALL_ROOT>/bin`` is in the users ``PATH`` environment variable. 
 
-To include dspaces in a CMake project, simply add `find_package(dspaces)` to the project's CMakeLists.txt file and include `dspaces::dspaces` 
+To include dspaces in a CMake project, simply add ``find_package(dspaces)`` to the project's CMakeLists.txt file and include ``dspaces::dspaces`` 
 in the target_link_libraries for whatever target is using dspaces.
 
 Building a Fortran program with DataSpaces
 ------------------------------------------
 
 Flags for Fortran compilation cannot be obtained through pkg-config. However, a CMake project can be configured to automatically configure 
-compilation for dataspaces with Fortran. To do this, add `find_package(dspaces)` to the project's CMakeLists.txt file and include `dspaces::fortran`
+compilation for dataspaces with Fortran. To do this, add ``find_package(dspaces)`` to the project's CMakeLists.txt file and include ``dspaces::fortran``
 in the target_link_libraries for whatever target is using dspaces.
 
 Using DataSpaces with Python
 ----------------------------
 
-In order to use the DataSpaces pythong bindings, `<INSTALL_ROOT>/lib/<PYTHONVER>/dist-packages` must be added to `PYTHONPATH`. 
-Spack will do this automatically when the dataspaces package is loaded. To use the Python bindings, import the `dspaces` module.`
+In order to use the DataSpaces pythong bindings, ``<INSTALL_ROOT>/lib/<PYTHONVER>/dist-packages`` must be added to ``PYTHONPATH``. 
+Spack will do this automatically when the dataspaces package is loaded. To use the Python bindings, import the ``dspaces`` module.`

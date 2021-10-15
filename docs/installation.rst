@@ -38,5 +38,5 @@ Once the package has been installed the command:
 
    spack load dataspaces
 
-Configures the environment to use DataSpaces, adding the server binary's directory to `PATH`, any shared library paths to `LD_LIBRARY_PATH`, etc. 
+Configures the environment to use DataSpaces, adding the server binary's directory to ``PATH``, any shared library paths to ``LD_LIBRARY_PATH``, etc. 
 This simplifies building and running programs that use DataSpaces.
