@@ -1,8 +1,8 @@
 # DataSpaces 2.0
 
 This package contains the source code and test applications for
-DataSpaces run-time library, which is a flexible interaction and
-coordination framework to support coupled applications.
+[DataSpaces](https://www.dataspaces.org) run-time library, which is a flexible interaction and
+coordination framework to support coupled applications. Documentation can be found [here](https://dspaces.readthedocs.io/en/latest/usage.html).
 
 DataSpaces is a distributed framework built on a dynamic set of nodes
 of a HPC cluster, which implements a virtual shared-space abstraction
