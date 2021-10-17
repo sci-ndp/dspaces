@@ -744,6 +744,7 @@ int dspaces_server_init(char *listen_addr_str, MPI_Comm comm,
     MPI_Comm_dup(comm, &server->comm);
     MPI_Comm_rank(comm, &server->rank);
 
+    margo_set_environment(NULL);
     ABT_init(0, NULL);
 
 #ifdef HAVE_DRC
