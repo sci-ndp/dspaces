@@ -414,6 +414,7 @@ static int dspaces_init_margo(dspaces_client_t client,
     hg_class_t *hg;
     int i;
 
+    margo_set_environment(NULL);
     ABT_init(0, NULL);
 
 #ifdef HAVE_DRC
