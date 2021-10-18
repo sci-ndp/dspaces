@@ -8,7 +8,7 @@
 #      -DCMAKE_PREFIX_PATH='/dir1;/dir2;/dir3'
 #
 
-cmake_minimum_required (VERSION 3.0)
+cmake_minimum_required (VERSION 3.14)
 project (dspaces VERSION 2.2.0 LANGUAGES C)
 
 cmake_policy(SET CMP0078 NEW)
