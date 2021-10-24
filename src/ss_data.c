@@ -412,7 +412,7 @@ static struct sspace *ssd_alloc_v1(const struct bbox *bb_domain, int num_nodes,
     if(max_dim == 0)
         max_dim = 1; // Note: max_dim as 0 would not work...
 
-    ssd->max_dim = next_pow_2_v2(max_dim);
+    ssd->max_dim = next_pow_2_v2(max_dim+1);
     ssd->bpd = compute_bits(ssd->max_dim);
 
     err = dht_construct_hash(ssd->dht, ssd);
