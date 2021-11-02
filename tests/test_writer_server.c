@@ -170,7 +170,7 @@ int main(int argc, char **argv)
         return (-1);
     }
 
-    ret = dspaces_server_init(listen_addr_str, gcomm, &s);
+    ret = dspaces_server_init(listen_addr_str, gcomm, "dataspaces.conf", &s);
     if(ret != 0)
         return ret;
 

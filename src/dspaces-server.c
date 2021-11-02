@@ -9,6 +9,7 @@
 #include "dspacesp.h"
 #include "gspace.h"
 #include "ss_data.h"
+#include "toml.h"
 #include <abt.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -121,8 +122,6 @@ static struct {
     int ndim;
     struct coord dims;
     int max_versions;
-    int max_readers;
-    int lock_type;    /* 1 - generic, 2 - custom */
     int hash_version; /* 1 - ssd_hash_version_v1, 2 - ssd_hash_version_v2 */
     int num_apps;
 } ds_conf;
@@ -133,8 +132,6 @@ static struct {
 } options[] = {{"ndim", &ds_conf.ndim},
                {"dims", (int *)&ds_conf.dims},
                {"max_versions", &ds_conf.max_versions},
-               {"max_readers", &ds_conf.max_readers},
-               {"lock_type", &ds_conf.lock_type},
                {"hash_version", &ds_conf.hash_version},
                {"num_apps", &ds_conf.num_apps}};
 
@@ -209,15 +206,18 @@ static int parse_line(int lineno, char *line)
     return 0;
 }
 
-static int parse_conf(char *fname)
+static int parse_conf(const char *fname)
 {
     FILE *fin;
     char buff[1024];
     int lineno = 1, err;
 
     fin = fopen(fname, "rt");
-    if(!fin)
+    if(!fin) {
+        fprintf(stderr, "ERROR: could not open configuration file '%s'.\n",
+                fname);
         return -errno;
+    }
 
     while(fgets(buff, sizeof(buff), fin) != NULL) {
         err = parse_line(lineno++, buff);
@@ -229,6 +229,68 @@ static int parse_conf(char *fname)
 
     fclose(fin);
     return 0;
+}
+
+static int parse_conf_toml(const char *fname)
+{
+    FILE *fin;
+    toml_table_t *conf;
+    toml_table_t *server;
+    toml_datum_t dat;
+    toml_array_t *arr;
+    char errbuf[200];
+    int ndim = 0;
+    int i, j, n;
+
+    fin = fopen(fname, "r");
+    if(!fin) {
+        fprintf(stderr, "ERROR: could not open configuration file '%s'.\n",
+                fname);
+        return -errno;
+    }
+
+    conf = toml_parse_file(fin, errbuf, sizeof(errbuf));
+    fclose(fin);
+
+    if(!conf) {
+        fprintf(stderr, "could not parse %s, %s.\n", fname, errbuf);
+        return -1;
+    }
+
+    server = toml_table_in(conf, "server");
+    if(!server) {
+        fprintf(stderr, "missing [server] block from %s\n", fname);
+        return -1;
+    }
+
+    n = sizeof(options) / sizeof(options[0]);
+    for(i = 0; i < n; i++) {
+        if(strcmp(options[i].opt, "dims") == 0) {
+            arr = toml_array_in(server, "dims");
+            if(arr) {
+                while(1) {
+                    dat = toml_int_at(arr, ndim);
+                    if(!dat.ok) {
+                        break;
+                    }
+                    ((struct coord *)options[i].pval)->c[ndim] = dat.u.i;
+                    ndim++;
+                }
+            }
+            for(j = 0; j < n; j++) {
+                if(strcmp(options[j].opt, "ndim") == 0) {
+                    *(int *)options[j].pval = ndim;
+                }
+            }
+        } else {
+            dat = toml_int_in(server, options[i].opt);
+            if(dat.ok) {
+                *(int *)options[i].pval = dat.u.i;
+            }
+        }
+    }
+
+    toml_free(conf);
 }
 
 static int init_sspace(struct bbox *default_domain, struct ds_gspace *dsg_l)
@@ -376,22 +438,44 @@ error:
     return (ret);
 }
 
-static int dsg_alloc(dspaces_provider_t server, char *conf_name, MPI_Comm comm)
+void print_conf()
+{
+    int i;
+
+    printf("DataSpaces server config:\n");
+    printf("=========================\n");
+    printf(" Default global dimensions: (");
+    printf("%" PRIu64, ds_conf.dims.c[0]);
+    for(i = 1; i < ds_conf.ndim; i++) {
+        printf(", %" PRIu64, ds_conf.dims.c[i]);
+    }
+    printf(")\n");
+    printf(" MAX STORED VERSIONS: %i\n", ds_conf.max_versions);
+    printf(" HASH TYPE: %s\n",
+           (ds_conf.hash_version == 1) ? "SFC" : "Bisection");
+    printf(" APPS EXPECTED: %i\n", ds_conf.num_apps);
+    printf("=========================\n");
+}
+
+static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
+                     MPI_Comm comm)
 {
     struct ds_gspace *dsg_l;
+    char *ext;
     int err = -ENOMEM;
 
     /* Default values */
     ds_conf.max_versions = 1;
-    ds_conf.max_readers = 1;
-    ds_conf.lock_type = 1;
     ds_conf.hash_version = ssd_hash_version_v1;
     ds_conf.num_apps = 1;
 
-    err = parse_conf(conf_name);
+    ext = strrchr(conf_name, '.');
+    if(!ext || strcmp(ext, ".toml") != 0) {
+        err = parse_conf(conf_name);
+    } else {
+        err = parse_conf_toml(conf_name);
+    }
     if(err < 0) {
-        fprintf(stderr, "%s(): ERROR failed to load config file '%s'.",
-                __func__, conf_name);
         goto err_out;
     }
 
@@ -431,6 +515,10 @@ static int dsg_alloc(dspaces_provider_t server, char *conf_name, MPI_Comm comm)
     MPI_Comm_size(comm, &(dsg_l->size_sp));
 
     MPI_Comm_rank(comm, &dsg_l->rank);
+
+    if(dsg_l->rank == 0) {
+        print_conf();
+    }
 
     write_conf(server, comm);
 
@@ -705,7 +793,7 @@ static void drain_thread(void *arg)
 }
 
 int dspaces_server_init(char *listen_addr_str, MPI_Comm comm,
-                        dspaces_provider_t *sv)
+                        const char *conf_file, dspaces_provider_t *sv)
 {
     const char *envdebug = getenv("DSPACES_DEBUG");
     const char *envnthreads = getenv("DSPACES_NUM_HANDLERS");
@@ -926,7 +1014,7 @@ int dspaces_server_init(char *listen_addr_str, MPI_Comm comm,
         margo_registered_disable_response(server->mid, server->notify_id,
                                           HG_TRUE);
     }
-    int err = dsg_alloc(server, "dataspaces.conf", comm);
+    int err = dsg_alloc(server, conf_file, comm);
     if(err) {
         fprintf(stderr,
                 "DATASPACES: ERROR: %s: could not allocate internal "

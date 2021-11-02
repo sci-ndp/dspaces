@@ -24,18 +24,18 @@ typedef struct dspaces_provider *dspaces_provider_t;
 /**
  * @brief Creates a MESSAGING server.
  *
- * @param[in] comm MPI Comminicator
- * @param[out] server MESSAGING server
- * @param[in] debug enable debugging
- * @return MESSAGING_SUCCESS or error code defined in messaging-common.h
+ * @param[in] listen_addr_str mercury-interpeted network string 
+ * @param[in] comm MPI Communicator
+ * @param[in] conf_file DataSpaces configuration file *.toml parsed as TOML, else legacy 
+ * @param[out] server DataSpaces server handle
  */
-int dspaces_server_init(char *listen_addr_str, MPI_Comm comm,
+int dspaces_server_init(char *listen_addr_str, MPI_Comm comm, const char *conf_file,
                         dspaces_provider_t *server);
 
 /**
  * @brief Waits for the dataspaces server to finish (be killed.)
  *
- * @param[in] server Messaging server
+ * @param[in] server server handle
  *
  */
 void dspaces_server_fini(dspaces_provider_t server);

@@ -13,24 +13,31 @@
 
 int main(int argc, char **argv)
 {
-    if(argc != 2) {
-        fprintf(stderr, "Usage: %s <listen-address>\n", argv[0]);
+    char *listen_addr_str, *conf_file;
+    dspaces_provider_t s = dspaces_PROVIDER_NULL;
+    int rank, color;
+    int ret;
+
+    if(argc < 2 || argc > 3) {
+        fprintf(stderr, "Usage: %s <listen-address> [<conffile>]\n", argv[0]);
         return -1;
     }
 
-    char *listen_addr_str = argv[1];
+    listen_addr_str = argv[1];
+    if(argc == 3) {
+        conf_file = argv[2];
+    } else {
+        conf_file = "dataspaces.conf";
+    }
 
-    dspaces_provider_t s = dspaces_PROVIDER_NULL;
-
-    int rank;
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm gcomm = MPI_COMM_WORLD;
 
-    int color = 1;
+    color = 1;
     MPI_Comm_split(MPI_COMM_WORLD, color, rank, &gcomm);
 
-    int ret = dspaces_server_init(listen_addr_str, gcomm, &s);
+    ret = dspaces_server_init(listen_addr_str, gcomm, conf_file, &s);
     if(ret != 0)
         return ret;
 

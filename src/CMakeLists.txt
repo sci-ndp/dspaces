@@ -33,7 +33,7 @@ set_target_properties (dspaces
     PROPERTIES VERSION ${dspaces_VERSION}
     SOVERSION ${dspaces_VERSION_MAJOR})
 
-set(dspaces-server-src util.c bbox.c ss_data.c dspaces-server.c)
+set(dspaces-server-src util.c bbox.c ss_data.c dspaces-server.c toml.c)
 
 add_library(dspaces-server ${dspaces-server-src})
 if(HAVE_DRC)

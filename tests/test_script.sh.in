@@ -10,10 +10,15 @@ echo "## Config file for DataSpaces
 ndim = 3
 dims = 256,256,256
 max_versions = 8
-max_readers = 8
-lock_type = 2
 num_apps = 2
 " > dataspaces.conf
+
+echo "## Config file for DataSpaces
+[server]
+dims = [ 256, 256, 256 ]
+max_versions = 8
+num_apps = 2
+" > dspaces.toml
 
 rm -rf conf.ds
 
@@ -29,7 +34,7 @@ if [ $1 -eq 1 ]; then
         wait $serverproc || exit 1
         wait $wproc
 elif [ $1 -eq 2 ]; then
-        @MPIEXEC_EXECUTABLE@ @MPIEXEC_NUMPROC_FLAG@ 2 dspaces_server sockets &
+        @MPIEXEC_EXECUTABLE@ @MPIEXEC_NUMPROC_FLAG@ 2 dspaces_server sockets dspaces.toml &
         serverproc=$!
         @MPIEXEC_EXECUTABLE@ @MPIEXEC_NUMPROC_FLAG@ 2 test_writer 1 2 64 5 -m $storage_mode -t &
         writerproc=$!
@@ -120,7 +125,7 @@ elif [ $1 -eq 10 ]; then
         fi
         wait $writerproc
 elif [ $1 -eq 11 ]; then
-        @MPIEXEC_EXECUTABLE@ @MPIEXEC_NUMPROC_FLAG@ 4 dspaces_server sockets &
+        @MPIEXEC_EXECUTABLE@ @MPIEXEC_NUMPROC_FLAG@ 4 dspaces_server sockets dspaces.toml &
         serverproc=$!
         @MPIEXEC_EXECUTABLE@ @MPIEXEC_NUMPROC_FLAG@ 4 test_writer 3 1 2 2 8 4 4 5 -m $storage_mode -t &
         writerproc=$!
