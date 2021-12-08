@@ -857,8 +857,8 @@ static int finalize_req(struct dspaces_put_req *req)
 struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
                                      const char *var_name, unsigned int ver,
                                      int elem_size, int ndim, uint64_t *lb,
-                                     uint64_t *ub, const void *data, int alloc,
-                                     int check)
+                                     uint64_t *ub, void *data, int alloc,
+                                     int check, int free)
 {
     hg_addr_t server_addr;
     hg_return_t hret;
@@ -926,6 +926,9 @@ struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
         buffer = ds_req->buffer;
     } else {
         buffer = data;
+        if(free) {
+            ds_req->buffer = data;
+        }
     }
 
     DEBUG_OUT("sending object %s \n", obj_desc_sprint(&odsc));
