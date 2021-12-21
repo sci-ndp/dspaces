@@ -1019,10 +1019,19 @@ struct obj_data *ls_find(ss_storage *ls, obj_descriptor *odsc)
 }
 
 /*
+ * Do two object descriptors have the same name and version?
+ */
+static int obj_desc_match(obj_descriptor *odsc1, obj_descriptor *odsc2)
+{
+    return (odsc1->version == odsc2->version &&
+            strcmp(odsc1->name, odsc2->name) == 0);
+}
+
+/*
   Find  list of object_desriptors  in the  local storage  that has  the same
-  name and version with the object descriptor 'odsc'.
+  name and version as the object descriptor 'odsc'.
 */
-int ls_find_ods(ss_storage *ls, obj_descriptor *odsc, struct obj_data **od_tab)
+int ls_find_ods(ss_storage *ls, obj_descriptor *odsc, obj_descriptor ***od_tab)
 {
     struct obj_data *od;
     struct list_head *list;
@@ -1033,8 +1042,16 @@ int ls_find_ods(ss_storage *ls, obj_descriptor *odsc, struct obj_data **od_tab)
     list = &ls->obj_hash[index];
     list_for_each_entry(od, list, struct obj_data, obj_entry)
     {
-        if(obj_desc_equals_intersect(odsc, &od->obj_desc)) {
-            od_tab[num_odsc++] = od;
+        if(obj_desc_match(odsc, &od->obj_desc)) {
+            num_odsc++;
+        }
+    }
+    *od_tab = malloc(sizeof(**od_tab) * num_odsc);
+    num_odsc = 0;
+    list_for_each_entry(od, list, struct obj_data, obj_entry)
+    {
+        if(obj_desc_match(odsc, &od->obj_desc)) {
+            (*od_tab)[num_odsc++] = &od->obj_desc;
         }
     }
     return num_odsc;

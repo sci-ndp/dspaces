@@ -1674,10 +1674,12 @@ static void get_rpc(hg_handle_t handle)
 
     struct obj_data *od, *from_obj;
 
+    ABT_mutex_lock(server->ls_mutex);
     from_obj = ls_find(server->dsg->ls, &in_odsc);
 
     od = obj_data_alloc(&in_odsc);
     ssd_copy(od, from_obj);
+    ABT_mutex_unlock(server->ls_mutex);
 
     hg_size_t size = (in_odsc.size) * bbox_volume(&(in_odsc.bb));
     void *buffer = (void *)od->data;
@@ -2003,4 +2005,78 @@ void dspaces_server_fini(dspaces_provider_t server)
 {
     margo_wait_for_finalize(server->mid);
     free(server);
+}
+
+int dspaces_server_find_objs(dspaces_provider_t server, const char *var_name,
+                             int version, struct dspaces_data_obj **objs)
+{
+    obj_descriptor odsc;
+    obj_descriptor **od_tab;
+    struct dspaces_data_obj *obj;
+    int num_obj = 0;
+    int i;
+    ;
+
+    strcpy(odsc.name, var_name);
+    odsc.version = version;
+    ABT_mutex_lock(server->ls_mutex);
+    num_obj = ls_find_ods(server->dsg->ls, &odsc, &od_tab);
+    ABT_mutex_unlock(server->ls_mutex);
+
+    if(num_obj) {
+        *objs = malloc(sizeof(**objs) * num_obj);
+        for(i = 0; i < num_obj; i++) {
+            obj = &(*objs)[i];
+            obj->var_name = var_name;
+            obj->version = version;
+            obj->ndim = od_tab[i]->bb.num_dims;
+            obj->size = od_tab[i]->size;
+            obj->lb = malloc(sizeof(*obj->lb) * obj->ndim);
+            obj->ub = malloc(sizeof(*obj->ub) * obj->ndim);
+            memcpy(obj->lb, od_tab[i]->bb.lb.c,
+                   sizeof(*obj->lb) * od_tab[i]->bb.num_dims);
+            memcpy(obj->ub, od_tab[i]->bb.ub.c,
+                   sizeof(*obj->ub) * od_tab[i]->bb.num_dims);
+        }
+        free(od_tab);
+    }
+
+    return (num_obj);
+}
+
+int dspaces_server_get_objdata(dspaces_provider_t server,
+                               struct dspaces_data_obj *obj, void *buffer)
+{
+    obj_descriptor odsc;
+    struct obj_data *od;
+    int i;
+
+    strcpy(odsc.name, obj->var_name);
+    odsc.version = obj->version;
+    odsc.bb.num_dims = obj->ndim;
+    memcpy(odsc.bb.lb.c, obj->lb, sizeof(*obj->lb) * obj->ndim);
+    memcpy(odsc.bb.ub.c, obj->ub, sizeof(*obj->ub) * obj->ndim);
+
+    ABT_mutex_lock(server->ls_mutex);
+    od = ls_find(server->dsg->ls, &odsc);
+    if(!od) {
+        fprintf(stderr, "WARNING: (%s): obj not found in local storage.\n",
+                __func__);
+        return (-1);
+    } else {
+        for(i = 0; i < obj->ndim; i++) {
+            if(od->obj_desc.bb.lb.c[i] != obj->lb[i] ||
+               od->obj_desc.bb.ub.c[i] != obj->ub[i]) {
+                fprintf(stderr,
+                        "WARNING: (%s): obj found, but not the right size.\n",
+                        __func__);
+                return (-2);
+            }
+        }
+    }
+
+    memcpy(buffer, od->data, obj->size * bbox_volume(&odsc.bb));
+    ABT_mutex_unlock(server->ls_mutex);
+
+    return (0);
 }
