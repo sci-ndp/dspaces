@@ -68,6 +68,7 @@ configure_file (dspaces-config.cmake.in dspaces-config.cmake @ONLY)
 set (DEST_DIR "${CMAKE_INSTALL_PREFIX}")
 set (PRIVATE_LIBS "-ldspaces -lpthread -lmargo -labt -lmercury -lm")
 configure_file ("dspaces.pc.in" "dspaces.pc" @ONLY)
+configure_file ("dspaces-server.pc.in" "dspaces-server.pc" @ONLY)
 
 #
 # "make install" rules
@@ -84,3 +85,5 @@ install (FILES "${CMAKE_CURRENT_BINARY_DIR}/dspaces-config.cmake"
          DESTINATION ${dspaces-pkg} )
 install (FILES "${CMAKE_CURRENT_BINARY_DIR}/dspaces.pc"
 		DESTINATION "lib/pkgconfig/")
+install (FILES "${CMAKE_CURRENT_BINARY_DIR}/dspaces-server.pc"
+        DESTINATION "lib/pkgconfig/")   

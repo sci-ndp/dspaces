@@ -1,0 +1,12 @@
+prefix=@DEST_DIR@
+exec_prefix=${prefix}/bin
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: dspaces 
+Description: Distributed N-Dimensional Object Store
+Version: @dspaces_VERSION@
+
+Requires: margo mercury argobots
+Libs: -L${libdir} -ldspaces-server
+Cflags: -I${includedir}
