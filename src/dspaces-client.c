@@ -1412,8 +1412,10 @@ int dspaces_get(dspaces_client_t client, const char *var_name, unsigned int ver,
     }
 
     // send request to get the obj_desc
-    if(num_odscs != 0)
+    if(num_odscs != 0) {
         get_data(client, num_odscs, odsc, odsc_tab, data);
+        free(odsc_tab);
+    }
 
     return (ret);
 }
