@@ -804,6 +804,7 @@ int dspaces_server_init(char *listen_addr_str, MPI_Comm comm,
     hg_bool_t flag;
     hg_id_t id;
     int num_handlers = DSPACES_DEFAULT_NUM_HANDLERS;
+    int ret;
 
     if(is_initialized) {
         fprintf(stderr,
