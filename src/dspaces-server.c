@@ -38,7 +38,7 @@
             snprintf(dbgstr, dbglen + 1,                                       \
                      "Rank %i: TID: %" PRIu64 " %s, line %i (%s): %s",         \
                      server->rank, tid, __FILE__, __LINE__, __func__, dstr);   \
-            fprintf(stderr, dbgstr __VA_OPT__(, ) __VA_ARGS__);                \
+            fprintf(stderr, dbgstr, ##__VA_ARGS__);                            \
         }                                                                      \
     } while(0);
 

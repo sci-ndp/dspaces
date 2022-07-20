@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -51,7 +52,7 @@
             snprintf(dbgstr, dbglen + 1,                                       \
                      "Rank %i: TID: %" PRIu64 " %s, line %i (%s): %s",         \
                      client->rank, tid, __FILE__, __LINE__, __func__, dstr);   \
-            fprintf(stderr, dbgstr __VA_OPT__(, ) __VA_ARGS__);                \
+            fprintf(stderr, dbgstr, ##__VA_ARGS__);                            \
         }                                                                      \
     } while(0);
 
@@ -1060,6 +1061,7 @@ static int get_data(dspaces_client_t client, int num_odscs,
                     obj_descriptor req_obj, obj_descriptor *odsc_tab,
                     void *data)
 {
+    struct timeval start, stop;
     bulk_in_t *in;
     in = (bulk_in_t *)malloc(sizeof(bulk_in_t) * num_odscs);
 
@@ -1070,6 +1072,8 @@ static int get_data(dspaces_client_t client, int num_odscs,
     hg_handle_t *hndl;
     hndl = (hg_handle_t *)malloc(sizeof(hg_handle_t) * num_odscs);
     serv_req = (margo_request *)malloc(sizeof(margo_request) * num_odscs);
+
+    gettimeofday(&start, NULL);
 
     for(int i = 0; i < num_odscs; ++i) {
         od[i] = obj_data_alloc(&odsc_tab[i]);
@@ -1118,6 +1122,16 @@ static int get_data(dspaces_client_t client, int num_odscs,
     free(serv_req);
     free(in);
     free(return_od);
+
+    gettimeofday(&stop, NULL);
+
+    if(client->f_debug) {
+        uint64_t req_size = obj_data_size(&req_obj);
+        long dsec = stop.tv_sec - start.tv_sec;
+        long dusec = stop.tv_usec - start.tv_usec;
+        float transfer_time = (float)dsec + (dusec / 1000000.0);
+        DEBUG_OUT("got %" PRIu64 " bytes in %f sec\n", req_size, transfer_time);
+    }
 
     return 0;
 }
@@ -1536,6 +1550,7 @@ static void get_local_rpc(hg_handle_t handle)
     bulk_out_t out;
     hg_bulk_t bulk_handle;
 
+    APEX_FUNC_TIMER_START(get_local_rpc);
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
 
     const struct hg_info *info = margo_get_info(handle);
@@ -1559,14 +1574,15 @@ static void get_local_rpc(hg_handle_t handle)
     DEBUG_OUT("%s\n", obj_desc_sprint(&in_odsc));
 
     struct obj_data *od, *from_obj;
-
+    APEX_NAME_TIMER_START(1, "get_local_ls_find");
     from_obj = ls_find(client->dcg->ls, &in_odsc);
     if(!from_obj)
         fprintf(stderr,
                 "DATASPACES: WARNING handling %s: Object not found in local "
                 "storage\n",
                 __func__);
-
+    APEX_TIMER_STOP(1);
+    APEX_NAME_TIMER_START(2, "get_local_obj_alloc");
     od = obj_data_alloc(&in_odsc);
     if(!od)
         fprintf(stderr,
@@ -1578,13 +1594,17 @@ static void get_local_rpc(hg_handle_t handle)
             stderr,
             "DATASPACES: ERROR handling %s: object data allocation failed\n",
             __func__);
-
+    APEX_TIMER_STOP(2);
+    APEX_NAME_TIMER_START(3, "get_local_ssd_copy");
     ssd_copy(od, from_obj);
+    APEX_TIMER_STOP(3);
     DEBUG_OUT("After ssd_copy\n");
 
     hg_size_t size = (in_odsc.size) * bbox_volume(&(in_odsc.bb));
     void *buffer = (void *)od->data;
 
+    DEBUG_OUT("creating buffer of size %zi\n", size);
+    APEX_NAME_TIMER_START(4, "get_local_bulk_create");
     hret = margo_bulk_create(mid, 1, (void **)&buffer, &size, HG_BULK_READ_ONLY,
                              &bulk_handle);
 
@@ -1598,7 +1618,9 @@ static void get_local_rpc(hg_handle_t handle)
         margo_destroy(handle);
         return;
     }
+    APEX_TIMER_STOP(4);
 
+    APEX_NAME_TIMER_START(5, "get_local_bulk_transfer");
     hret = margo_bulk_transfer(mid, HG_BULK_PUSH, info->addr, in.handle, 0,
                                bulk_handle, 0, size);
     if(hret != HG_SUCCESS) {
@@ -1613,12 +1635,15 @@ static void get_local_rpc(hg_handle_t handle)
         margo_destroy(handle);
         return;
     }
+    APEX_TIMER_STOP(5);
     margo_bulk_free(bulk_handle);
     out.ret = dspaces_SUCCESS;
     obj_data_free(od);
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
     margo_destroy(handle);
+
+    APEX_TIMER_STOP(0);
 }
 DEFINE_MARGO_RPC_HANDLER(get_local_rpc)
 
