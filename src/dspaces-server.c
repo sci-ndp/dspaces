@@ -24,12 +24,21 @@
 #include <rdmacred.h>
 #endif /* HAVE_DRC */
 
-#define DEBUG_OUT(...)                                                         \
+#define DEBUG_OUT(dstr, ...)                                                   \
     do {                                                                       \
         if(server->f_debug) {                                                  \
-            fprintf(stderr, "Rank %i: %s, line %i (%s): ", server->rank,       \
-                    __FILE__, __LINE__, __func__);                             \
-            fprintf(stderr, __VA_ARGS__);                                      \
+            ABT_unit_id tid;                                                   \
+            ABT_thread_self_id(&tid);                                          \
+            char *dbgstr;                                                      \
+            int dbglen;                                                        \
+            dbglen = snprintf(                                                 \
+                dbgstr, 0, "Rank %i: TID: %" PRIu64 " %s, line %i (%s): %s",   \
+                server->rank, tid, __FILE__, __LINE__, __func__, dstr);        \
+            dbgstr = malloc(dbglen + 1);                                       \
+            snprintf(dbgstr, dbglen + 1,                                       \
+                     "Rank %i: TID: %" PRIu64 " %s, line %i (%s): %s",         \
+                     server->rank, tid, __FILE__, __LINE__, __func__, dstr);   \
+            fprintf(stderr, dbgstr __VA_OPT__(, ) __VA_ARGS__);                \
         }                                                                      \
     } while(0);
 
@@ -638,8 +647,9 @@ static int obj_update_dht(dspaces_provider_t server, struct obj_data *od,
     /* Compute object distribution to nodes in the space. */
     num_de = ssd_hash(ssd, &odsc->bb, dht_tab);
     if(num_de == 0) {
-        fprintf(stderr, "'%s()': this should not happen, num_de == 0 ?!\n",
-                __func__);
+        fprintf(stderr,
+                "'%s()': this should not happen, num_de == 0 ?! od = \n",
+                __func__, obj_desc_sprint(odsc));
     }
     /* Update object descriptors on the corresponding nodes. */
     for(i = 0; i < num_de; i++) {
@@ -1436,7 +1446,7 @@ static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
 
     if(self_id_num > -1) {
         podsc = malloc(sizeof(*podsc) * ssd->ent_self->odsc_num);
-        DEBUG_OUT("finding local entries.\n");
+        DEBUG_OUT("finding local entries for req_id %i.\n", req_id);
         odsc_nums[self_id_num] =
             dht_find_entry_all(ssd->ent_self, q_odsc, &podsc, timeout);
         DEBUG_OUT("%d odscs found in %d\n", odsc_nums[self_id_num],
@@ -1462,12 +1472,13 @@ static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
         if(i == self_id_num) {
             continue;
         }
-        DEBUG_OUT("waiting for %d\n", i);
+        DEBUG_OUT("req_id %i waiting for %d\n", req_id, i);
         margo_wait(serv_reqs[i]);
         margo_get_output(hndls[i], &dht_resp);
         if(dht_resp.odsc_list.size != 0) {
             odsc_nums[i] = dht_resp.odsc_list.size / sizeof(obj_descriptor);
-            DEBUG_OUT("received %d odscs from peer %d\n", odsc_nums[i], i);
+            DEBUG_OUT("received %d odscs from peer %d for req_id %i\n",
+                      odsc_nums[i], i, req_id);
             total_odscs += odsc_nums[i];
             odsc_tabs[i] = malloc(sizeof(**odsc_tabs) * odsc_nums[i]);
             memcpy(odsc_tabs[i], dht_resp.odsc_list.raw_odsc,
@@ -1509,7 +1520,8 @@ static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
     }
 
     for(i = 0; i < total_odscs; i++) {
-        DEBUG_OUT("odscs in response: %s\n", obj_desc_sprint(&(*results)[i]));
+        DEBUG_OUT("odsc %i in response for req_id %i: %s\n", i, req_id,
+                  obj_desc_sprint(&(*results)[i]));
     }
 
     free(de_tab);
@@ -1991,6 +2003,7 @@ static void sub_rpc(hg_handle_t handle)
     margo_addr_lookup(server->mid, in_odsc.owner, &client_addr);
     margo_create(server->mid, client_addr, server->notify_id, &notifyh);
     margo_iforward(notifyh, &notice, &req);
+    DEBUG_OUT("send reply for req_id %i\n", req_id);
     margo_addr_free(server->mid, client_addr);
     margo_destroy(notifyh);
 

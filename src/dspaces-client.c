@@ -24,12 +24,34 @@
 
 #include <mpi.h>
 
-#define DEBUG_OUT(...)                                                         \
+#ifdef USE_APEX
+#include <apex.h>
+#define APEX_FUNC_TIMER_START(fn)                                              \
+    apex_profiler_handle profiler0 = apex_start(APEX_FUNCTION_ADDRESS, &fn);
+#define APEX_NAME_TIMER_START(num, name)                                       \
+    apex_profiler_handle profiler##num = apex_start(APEX_NAME_STRING, name);
+#define APEX_TIMER_STOP(num) apex_stop(profiler##num);
+#else
+#define APEX_FUNC_TIMER_START(fn) (void)0;
+#define APEX_NAME_TIMER_START(num, name) (void)0;
+#define APEX_TIMER_STOP(num) (void)0;
+#endif
+
+#define DEBUG_OUT(dstr, ...)                                                   \
     do {                                                                       \
         if(client->f_debug) {                                                  \
-            fprintf(stderr, "Rank %i: %s, line %i (%s): ", client->rank,       \
-                    __FILE__, __LINE__, __func__);                             \
-            fprintf(stderr, __VA_ARGS__);                                      \
+            ABT_unit_id tid;                                                   \
+            ABT_thread_self_id(&tid);                                          \
+            char *dbgstr;                                                      \
+            int dbglen;                                                        \
+            dbglen = snprintf(                                                 \
+                dbgstr, 0, "Rank %i: TID: %" PRIu64 " %s, line %i (%s): %s",   \
+                client->rank, tid, __FILE__, __LINE__, __func__, dstr);        \
+            dbgstr = malloc(dbglen + 1);                                       \
+            snprintf(dbgstr, dbglen + 1,                                       \
+                     "Rank %i: TID: %" PRIu64 " %s, line %i (%s): %s",         \
+                     client->rank, tid, __FILE__, __LINE__, __func__, dstr);   \
+            fprintf(stderr, dbgstr __VA_OPT__(, ) __VA_ARGS__);                \
         }                                                                      \
     } while(0);
 
