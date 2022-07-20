@@ -29,16 +29,10 @@
         if(server->f_debug) {                                                  \
             ABT_unit_id tid;                                                   \
             ABT_thread_self_id(&tid);                                          \
-            char *dbgstr;                                                      \
-            int dbglen;                                                        \
-            dbglen = snprintf(                                                 \
-                dbgstr, 0, "Rank %i: TID: %" PRIu64 " %s, line %i (%s): %s",   \
-                server->rank, tid, __FILE__, __LINE__, __func__, dstr);        \
-            dbgstr = malloc(dbglen + 1);                                       \
-            snprintf(dbgstr, dbglen + 1,                                       \
-                     "Rank %i: TID: %" PRIu64 " %s, line %i (%s): %s",         \
-                     server->rank, tid, __FILE__, __LINE__, __func__, dstr);   \
-            fprintf(stderr, dbgstr, ##__VA_ARGS__);                            \
+            fprintf(stderr,                                                    \
+                    "Rank %i: TID: %" PRIu64 " %s, line %i (%s): " dstr,       \
+                    server->rank, tid, __FILE__, __LINE__, __func__,           \
+                    ##__VA_ARGS__);                                            \
         }                                                                      \
     } while(0);
 
@@ -648,7 +642,7 @@ static int obj_update_dht(dspaces_provider_t server, struct obj_data *od,
     num_de = ssd_hash(ssd, &odsc->bb, dht_tab);
     if(num_de == 0) {
         fprintf(stderr,
-                "'%s()': this should not happen, num_de == 0 ?! od = \n",
+                "'%s()': this should not happen, num_de == 0 ?! od = %s\n",
                 __func__, obj_desc_sprint(odsc));
     }
     /* Update object descriptors on the corresponding nodes. */

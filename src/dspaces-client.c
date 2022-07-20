@@ -43,16 +43,10 @@
         if(client->f_debug) {                                                  \
             ABT_unit_id tid;                                                   \
             ABT_thread_self_id(&tid);                                          \
-            char *dbgstr;                                                      \
-            int dbglen;                                                        \
-            dbglen = snprintf(                                                 \
-                dbgstr, 0, "Rank %i: TID: %" PRIu64 " %s, line %i (%s): %s",   \
-                client->rank, tid, __FILE__, __LINE__, __func__, dstr);        \
-            dbgstr = malloc(dbglen + 1);                                       \
-            snprintf(dbgstr, dbglen + 1,                                       \
-                     "Rank %i: TID: %" PRIu64 " %s, line %i (%s): %s",         \
-                     client->rank, tid, __FILE__, __LINE__, __func__, dstr);   \
-            fprintf(stderr, dbgstr, ##__VA_ARGS__);                            \
+            fprintf(stderr,                                                    \
+                    "Rank %i: TID: %" PRIu64 " %s, line %i (%s): " dstr,       \
+                    client->rank, tid, __FILE__, __LINE__, __func__,           \
+                    ##__VA_ARGS__);                                            \
         }                                                                      \
     } while(0);
 
