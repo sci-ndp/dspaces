@@ -1775,7 +1775,7 @@ static void notify_rpc(hg_handle_t handle)
     subh = dspaces_get_sub(client, sub_id);
     if(subh->status == DSPACES_SUB_WAIT) {
         ABT_mutex_unlock(client->sub_mutex);
-
+        subh->status == DSPACES_SUB_TRANSFER;
         num_odscs = (in.odsc_list.size) / sizeof(obj_descriptor);
         odsc_tab = malloc(in.odsc_list.size);
         memcpy(odsc_tab, in.odsc_list.raw_odsc, in.odsc_list.size);
@@ -1810,7 +1810,7 @@ static void notify_rpc(hg_handle_t handle)
     margo_destroy(handle);
 
     ABT_mutex_lock(client->sub_mutex);
-    if(subh->status == DSPACES_SUB_WAIT) {
+    if(subh->status == DSPACES_SUB_TRANSFER) {
         subh->req->buf = data;
         subh->status = DSPACES_SUB_RUNNING;
     } else if(data) {
@@ -1969,12 +1969,15 @@ int dspaces_check_sub(dspaces_client_t client, dspaces_sub_t subh, int wait,
         DEBUG_OUT("blocking on notification for subscription %d.\n", subh->id);
         ABT_mutex_lock(client->sub_mutex);
         while(subh->status == DSPACES_SUB_WAIT ||
+              subh->status == DSPACES_SUB_TRANSFER ||
               subh->status == DSPACES_SUB_RUNNING) {
             ABT_cond_wait(client->sub_cond, client->sub_mutex);
         }
         ABT_mutex_unlock(client->sub_mutex);
     }
 
+    // This is a concurrency bug. The status could change to DONE with result
+    // unset.
     if(subh->status == DSPACES_SUB_DONE) {
         *result = subh->result;
     }
@@ -2006,7 +2009,8 @@ int dspaces_cancel_sub(dspaces_client_t client, dspaces_sub_t subh)
         return (DSPACES_SUB_INVALID);
     }
     ABT_mutex_lock(client->sub_mutex);
-    if(subh->status == DSPACES_SUB_WAIT) {
+    if(subh->status == DSPACES_SUB_WAIT ||
+       subh->status == DSPACES_SUB_TRANSFER) {
         subh->status = DSPACES_SUB_CANCELLED;
     }
     ABT_mutex_unlock(client->sub_mutex);
