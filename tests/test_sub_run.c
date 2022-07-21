@@ -254,8 +254,10 @@ int test_sub_run(int ndims, int *npdim, uint64_t *spdim, int timestep,
     for(ts = 1; (int)ts <= timesteps_; ts++) {
         err = dspaces_check_sub(ndcl, sub_handles[ts - 1], 1, &result);
         if((err != DSPACES_SUB_DONE) || result > 0) {
-            fprintf(stderr, "subscription tailed for ts %d with %d.\n", ts,
-                    err);
+            fprintf(stderr,
+                    "subscription failed for ts %d with %d (callback returned "
+                    "%i).\n",
+                    ts, err, result);
             ret = -1;
         }
     }
