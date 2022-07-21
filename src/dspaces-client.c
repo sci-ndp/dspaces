@@ -1816,7 +1816,7 @@ static void notify_rpc(hg_handle_t handle)
     subh = dspaces_get_sub(client, sub_id);
     if(subh->status == DSPACES_SUB_WAIT) {
         ABT_mutex_unlock(client->sub_mutex);
-        subh->status == DSPACES_SUB_TRANSFER;
+        subh->status = DSPACES_SUB_TRANSFER;
         num_odscs = (in.odsc_list.size) / sizeof(obj_descriptor);
         odsc_tab = malloc(in.odsc_list.size);
         memcpy(odsc_tab, in.odsc_list.raw_odsc, in.odsc_list.size);
