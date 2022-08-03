@@ -76,7 +76,7 @@ void bbox_divide(struct bbox *b0, struct bbox *b_tab)
 {
     int ndims = b0->num_dims;
     int num_subbox = 1 << ndims; // number of sub n-dimensions bbox
-    int i, j, n = 0;
+    long i, j, n = 0;
 
     for(i = 0; i < num_subbox; i++) {
         j = 0;
