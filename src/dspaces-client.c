@@ -1822,7 +1822,7 @@ static void notify_rpc(hg_handle_t handle)
     subh = dspaces_get_sub(client, sub_id);
     if(subh->status == DSPACES_SUB_WAIT) {
         ABT_mutex_unlock(client->sub_mutex);
-        subh->status == DSPACES_SUB_TRANSFER;
+        subh->status = DSPACES_SUB_TRANSFER;
         num_odscs = (in.odsc_list.size) / sizeof(obj_descriptor);
         odsc_tab = malloc(in.odsc_list.size);
         memcpy(odsc_tab, in.odsc_list.raw_odsc, in.odsc_list.size);
@@ -1843,6 +1843,9 @@ static void notify_rpc(hg_handle_t handle)
         if(num_odscs) {
             get_data(client, num_odscs, subh->q_odsc, odsc_tab, data);
         }
+        if(!data) {
+           fprintf(stderr, "ERROR: %s: data allocated, but is null.\n", __func__); 
+        }
     } else {
         fprintf(stderr,
                 "WARNING: got notification, but sub status was not "
@@ -1862,6 +1865,7 @@ static void notify_rpc(hg_handle_t handle)
         subh->status = DSPACES_SUB_RUNNING;
     } else if(data) {
         // subscription was cancelled
+        DEBUG_OUT("transfer complete, but sub was cancelled? (status %d)\n", subh->status);
         free(data);
         data = NULL;
     }
@@ -1869,6 +1873,8 @@ static void notify_rpc(hg_handle_t handle)
 
     if(data) {
         subh->result = subh->cb(client, subh->req, subh->arg);
+    } else {
+        DEBUG_OUT("no data, skipping callback.\n");
     }
 
     ABT_mutex_lock(client->sub_mutex);
@@ -1882,6 +1888,8 @@ static void notify_rpc(hg_handle_t handle)
         free(odsc_tab);
     }
     free_sub_req(subh->req);
+
+    DEBUG_OUT("finished notification handling.\n");
 }
 DEFINE_MARGO_RPC_HANDLER(notify_rpc)
 
