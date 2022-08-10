@@ -441,6 +441,12 @@ error:
     return (ret);
 }
 
+const char *hash_strings[] = {
+    "Dynamic",
+    "SFC",
+    "Bisection"
+};
+
 void print_conf()
 {
     int i;
@@ -454,8 +460,7 @@ void print_conf()
     }
     printf(")\n");
     printf(" MAX STORED VERSIONS: %i\n", ds_conf.max_versions);
-    printf(" HASH TYPE: %s\n",
-           (ds_conf.hash_version == 1) ? "SFC" : "Bisection");
+    printf(" HASH TYPE: %s\n", hash_strings[ds_conf.hash_version]);
     printf(" APPS EXPECTED: %i\n", ds_conf.num_apps);
     printf("=========================\n");
 }
@@ -469,7 +474,7 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
 
     /* Default values */
     ds_conf.max_versions = 1;
-    ds_conf.hash_version = ssd_hash_version_v1;
+    ds_conf.hash_version = ssd_hash_version_auto;
     ds_conf.num_apps = 1;
 
     ext = strrchr(conf_name, '.');
@@ -494,7 +499,7 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     }
 
     // Check hash version
-    if((ds_conf.hash_version < ssd_hash_version_v1) ||
+    if((ds_conf.hash_version < ssd_hash_version_auto) ||
        (ds_conf.hash_version >= _ssd_hash_version_count)) {
         fprintf(stderr, "%s(): ERROR unknown hash version %d in file '%s'\n",
                 __func__, ds_conf.hash_version, conf_name);

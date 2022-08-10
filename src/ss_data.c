@@ -1241,10 +1241,31 @@ int obj_desc_by_name_intersect(const obj_descriptor *odsc1,
 */
 
 /*
+ ssd hashing value auto: choose heurisitically based on domain dimensions
  ssd hashing function v1: uses Hilbert SFC to linearize the global data domain
     and bounding box passed by put()/get().
  ssd hashing function v2: NOT use Hilbert SFC for linearization.
 */
+
+/*
+  Choose a hash version heuristically
+*/
+int ssd_choose_hash(const struct bbox *bb_domain)
+{
+    uint64_t x;
+    int i;
+
+    for(i = 0; i < bb_domain->num_dims; i++) {
+        x = bb_domain->ub.c[i];
+        if(x & x + 1) {
+            // one of the dimensions is not a power of two
+            return(ssd_hash_version_v2);
+        }
+    }
+
+    // all dimensions are powers of two
+    return(ssd_hash_version_v2);
+}
 
 /*
   Allocate the shared space structure.
@@ -1267,6 +1288,10 @@ struct sspace *ssd_alloc(const struct bbox *bb_domain, int num_nodes,
     char *str = bbox_sprint(bb_domain);
     fprintf(stderr, "%s: allocating new shared space %s\n", __func__, str);
 #endif
+
+    if(hash_version == ssd_hash_version_auto) {
+        hash_version = ssd_choose_hash(bb_domain);
+    }
 
     switch(hash_version) {
     case ssd_hash_version_v1:
