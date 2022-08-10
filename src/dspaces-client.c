@@ -224,7 +224,7 @@ static int get_ss_info(dspaces_client_t client, ss_info_hdr *ss_data)
     margo_destroy(handle);
     margo_addr_free(client->mid, server_addr);
 
-    return(ret);
+    return (ret);
 }
 
 static void install_ss_info(dspaces_client_t client, ss_info_hdr *ss_data)
@@ -262,9 +262,8 @@ static int init_ss_info_mpi(dspaces_client_t client, MPI_Comm comm)
         MPI_Bcast(&ss_data, sizeof(ss_data), MPI_BYTE, 0, comm);
         install_ss_info(client, &ss_data);
     }
-    return(ret);
+    return (ret);
 }
-
 
 static struct dc_gspace *dcg_alloc(dspaces_client_t client)
 {

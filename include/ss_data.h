@@ -169,10 +169,10 @@ struct dht {
 
 enum sspace_hash_version {
     ssd_hash_version_auto = 0,
-    ssd_hash_version_v1,     //     decompose the global data domain
-                             //  using hilbert SFC
-    ssd_hash_version_v2,     // decompose the global data domain using
-                             // recursive bisection of the longest dimension
+    ssd_hash_version_v1, //     decompose the global data domain
+                         //  using hilbert SFC
+    ssd_hash_version_v2, // decompose the global data domain using
+                         // recursive bisection of the longest dimension
     _ssd_hash_version_count,
 };
 
