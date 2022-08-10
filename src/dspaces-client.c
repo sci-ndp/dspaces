@@ -187,7 +187,7 @@ static void choose_server(dspaces_client_t client)
     }
 }
 
-static int get_ss_info(dspaces_client_t client)
+static int get_ss_info(dspaces_client_t client, ss_info_hdr *ss_data)
 {
     hg_return_t hret;
     hg_handle_t handle;
@@ -218,23 +218,53 @@ static int get_ss_info(dspaces_client_t client)
         margo_destroy(handle);
         return dspaces_ERR_MERCURY;
     }
-    ss_info_hdr ss_data;
-    memcpy(&ss_data, out.ss_buf.raw_odsc, sizeof(ss_info_hdr));
-
-    client->dcg->ss_info.num_dims = ss_data.num_dims;
-    client->dcg->ss_info.num_space_srv = ss_data.num_space_srv;
-    memcpy(&(client->dcg->ss_domain), &(ss_data.ss_domain),
-           sizeof(struct bbox));
-    client->dcg->max_versions = ss_data.max_versions;
-    client->dcg->hash_version = ss_data.hash_version;
-    memcpy(&(client->dcg->default_gdim), &(ss_data.default_gdim),
-           sizeof(struct global_dimension));
+    memcpy(ss_data, out.ss_buf.raw_odsc, sizeof(ss_info_hdr));
 
     margo_free_output(handle, &out);
     margo_destroy(handle);
     margo_addr_free(client->mid, server_addr);
-    return ret;
+
+    return(ret);
 }
+
+static void install_ss_info(dspaces_client_t client, ss_info_hdr *ss_data)
+{
+    client->dcg->ss_info.num_dims = ss_data->num_dims;
+    client->dcg->ss_info.num_space_srv = ss_data->num_space_srv;
+    memcpy(&(client->dcg->ss_domain), &(ss_data->ss_domain),
+           sizeof(struct bbox));
+    client->dcg->max_versions = ss_data->max_versions;
+    client->dcg->hash_version = ss_data->hash_version;
+    memcpy(&(client->dcg->default_gdim), &(ss_data->default_gdim),
+           sizeof(struct global_dimension));
+}
+
+static int init_ss_info(dspaces_client_t client)
+{
+    ss_info_hdr ss_data;
+    int ret;
+
+    ret = get_ss_info(client, &ss_data);
+    install_ss_info(client, &ss_data);
+}
+
+static int init_ss_info_mpi(dspaces_client_t client, MPI_Comm comm)
+{
+    ss_info_hdr ss_data;
+    int rank, ret;
+
+    MPI_Comm_rank(comm, &rank);
+    if(!rank) {
+        ret = get_ss_info(client, &ss_data);
+    }
+    MPI_Bcast(&ret, 1, MPI_INT, 0, comm);
+    if(ret == dspaces_SUCCESS) {
+        MPI_Bcast(&ss_data, sizeof(ss_data), MPI_BYTE, 0, comm);
+        install_ss_info(client, &ss_data);
+    }
+    return(ret);
+}
+
 
 static struct dc_gspace *dcg_alloc(dspaces_client_t client)
 {
@@ -571,7 +601,6 @@ static int dspaces_post_init(dspaces_client_t client)
 {
     choose_server(client);
 
-    get_ss_info(client);
     DEBUG_OUT("Total max versions on the client side is %d\n",
               client->dcg->max_versions);
 
@@ -602,6 +631,8 @@ int dspaces_init(int rank, dspaces_client_t *c)
 
     free(listen_addr_str);
 
+    choose_server(client);
+    init_ss_info(client);
     dspaces_post_init(client);
 
     *c = client;
@@ -630,6 +661,8 @@ int dspaces_init_mpi(MPI_Comm comm, dspaces_client_t *c)
     dspaces_init_margo(client, listen_addr_str);
     free(listen_addr_str);
 
+    choose_server(client);
+    init_ss_info_mpi(client, comm);
     dspaces_post_init(client);
 
     *c = client;
