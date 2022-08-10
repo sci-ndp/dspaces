@@ -1288,6 +1288,7 @@ static void put_local_rpc(hg_handle_t handle)
     DEBUG_OUT("Finished obj_put_local_update in local_put\n");
 
     // add to the local list for marking as to be drained data
+/*
     struct obj_desc_list *odscl;
     odscl = malloc(sizeof(*odscl));
     memcpy(&odscl->odsc, &od->obj_desc, sizeof(obj_descriptor));
@@ -1296,7 +1297,7 @@ static void put_local_rpc(hg_handle_t handle)
     DEBUG_OUT("Adding drain list entry.\n");
     list_add_tail(&odscl->odsc_entry, &server->dsg->obj_desc_drain_list);
     ABT_mutex_unlock(server->odsc_mutex);
-
+*/
     // TODO: wake up thread to initiate draining
     out.ret = dspaces_SUCCESS;
     margo_respond(handle, &out);
