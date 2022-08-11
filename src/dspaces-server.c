@@ -832,6 +832,7 @@ int dspaces_server_init(char *listen_addr_str, MPI_Comm comm,
     }
 
     if(envdrain) {
+        DEBUG_OUT("enabling data draining.\n");
         server->f_drain = 1;
     }
 
