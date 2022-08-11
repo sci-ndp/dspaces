@@ -1267,8 +1267,7 @@ int dspaces_put_local(dspaces_client_t client, const char *var_name,
         }
     }
 
-    // disabling drain for now
-    // client->local_put_count++;
+    client->local_put_count++;
 
     obj_descriptor odsc = {.version = ver,
                            .st = st,
