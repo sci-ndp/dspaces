@@ -1264,7 +1264,7 @@ int ssd_choose_hash(const struct bbox *bb_domain)
     }
 
     // all dimensions are powers of two
-    return (ssd_hash_version_v2);
+    return (ssd_hash_version_v1);
 }
 
 /*
