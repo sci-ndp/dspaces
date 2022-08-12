@@ -296,7 +296,8 @@ static int parse_conf_toml(const char *fname)
     toml_free(conf);
 }
 
-static int init_sspace(dspaces_provider_t server, struct bbox *default_domain, struct ds_gspace *dsg_l)
+static int init_sspace(dspaces_provider_t server, struct bbox *default_domain,
+                       struct ds_gspace *dsg_l)
 {
     int err = -ENOMEM;
     dsg_l->ssd = ssd_alloc(default_domain, dsg_l->size_sp, ds_conf.max_versions,
@@ -305,7 +306,8 @@ static int init_sspace(dspaces_provider_t server, struct bbox *default_domain, s
         goto err_out;
 
     if(ds_conf.hash_version == ssd_hash_version_auto) {
-        DEBUG_OUT("server selected hash version %i for default space\n", dsg_l->ssd->hash_version);
+        DEBUG_OUT("server selected hash version %i for default space\n",
+                  dsg_l->ssd->hash_version);
     }
 
     err = ssd_init(dsg_l->ssd, dsg_l->rank);
@@ -497,7 +499,8 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
         err = -EINVAL;
         goto err_out;
     } else if(ds_conf.ndim == 0) {
-        DEBUG_OUT("no global coordinates provided. Setting trivial placeholder.\n");
+        DEBUG_OUT(
+            "no global coordinates provided. Setting trivial placeholder.\n");
         ds_conf.ndim = 1;
         ds_conf.dims.c[0] = 1;
     }
@@ -626,7 +629,8 @@ static struct sspace *lookup_sspace(dspaces_provider_t server,
     }
 
     if(ds_conf.hash_version == ssd_hash_version_auto) {
-        DEBUG_OUT("server selected hash version %i for var %s\n", ssd_entry->ssd->hash_version, var_name);
+        DEBUG_OUT("server selected hash version %i for var %s\n",
+                  ssd_entry->ssd->hash_version, var_name);
     }
 
     DEBUG_OUT("doing ssd init\n");
