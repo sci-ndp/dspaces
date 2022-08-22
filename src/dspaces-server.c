@@ -296,13 +296,19 @@ static int parse_conf_toml(const char *fname)
     toml_free(conf);
 }
 
-static int init_sspace(struct bbox *default_domain, struct ds_gspace *dsg_l)
+static int init_sspace(dspaces_provider_t server, struct bbox *default_domain,
+                       struct ds_gspace *dsg_l)
 {
     int err = -ENOMEM;
     dsg_l->ssd = ssd_alloc(default_domain, dsg_l->size_sp, ds_conf.max_versions,
                            ds_conf.hash_version);
     if(!dsg_l->ssd)
         goto err_out;
+
+    if(ds_conf.hash_version == ssd_hash_version_auto) {
+        DEBUG_OUT("server selected hash version %i for default space\n",
+                  dsg_l->ssd->hash_version);
+    }
 
     err = ssd_init(dsg_l->ssd, dsg_l->rank);
     if(err < 0)
@@ -441,6 +447,8 @@ error:
     return (ret);
 }
 
+const char *hash_strings[] = {"Dynamic", "SFC", "Bisection"};
+
 void print_conf()
 {
     int i;
@@ -454,8 +462,7 @@ void print_conf()
     }
     printf(")\n");
     printf(" MAX STORED VERSIONS: %i\n", ds_conf.max_versions);
-    printf(" HASH TYPE: %s\n",
-           (ds_conf.hash_version == 1) ? "SFC" : "Bisection");
+    printf(" HASH TYPE: %s\n", hash_strings[ds_conf.hash_version]);
     printf(" APPS EXPECTED: %i\n", ds_conf.num_apps);
     printf("=========================\n");
 }
@@ -469,7 +476,7 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
 
     /* Default values */
     ds_conf.max_versions = 1;
-    ds_conf.hash_version = ssd_hash_version_v1;
+    ds_conf.hash_version = ssd_hash_version_auto;
     ds_conf.num_apps = 1;
 
     ext = strrchr(conf_name, '.');
@@ -491,10 +498,15 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
             __func__, BBOX_MAX_NDIM, ds_conf.ndim, conf_name);
         err = -EINVAL;
         goto err_out;
+    } else if(ds_conf.ndim == 0) {
+        DEBUG_OUT(
+            "no global coordinates provided. Setting trivial placeholder.\n");
+        ds_conf.ndim = 1;
+        ds_conf.dims.c[0] = 1;
     }
 
     // Check hash version
-    if((ds_conf.hash_version < ssd_hash_version_v1) ||
+    if((ds_conf.hash_version < ssd_hash_version_auto) ||
        (ds_conf.hash_version >= _ssd_hash_version_count)) {
         fprintf(stderr, "%s(): ERROR unknown hash version %d in file '%s'\n",
                 __func__, ds_conf.hash_version, conf_name);
@@ -525,7 +537,7 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
 
     write_conf(server, comm);
 
-    err = init_sspace(&domain, dsg_l);
+    err = init_sspace(server, &domain, dsg_l);
     if(err < 0) {
         goto err_free;
     }
@@ -614,6 +626,11 @@ static struct sspace *lookup_sspace(dspaces_provider_t server,
         fprintf(stderr, "%s(): ssd_alloc failed for '%s'\n", __func__,
                 var_name);
         return dsg_l->ssd;
+    }
+
+    if(ds_conf.hash_version == ssd_hash_version_auto) {
+        DEBUG_OUT("server selected hash version %i for var %s\n",
+                  ssd_entry->ssd->hash_version, var_name);
     }
 
     DEBUG_OUT("doing ssd init\n");
@@ -831,6 +848,7 @@ int dspaces_server_init(char *listen_addr_str, MPI_Comm comm,
     }
 
     if(envdrain) {
+        DEBUG_OUT("enabling data draining.\n");
         server->f_drain = 1;
     }
 
