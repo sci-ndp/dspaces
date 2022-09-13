@@ -52,7 +52,7 @@
 
 #define SUB_HASH_SIZE 16
 
-// static int g_is_initialized = 0;
+static int g_is_initialized = 0;
 
 static enum storage_type st = column_major;
 
@@ -422,9 +422,8 @@ static int read_conf_mpi(dspaces_client_t client, MPI_Comm comm,
 static int dspaces_init_internal(int rank, dspaces_client_t *c)
 {
     const char *envdebug = getenv("DSPACES_DEBUG");
-    static int is_initialized = 0;
 
-    if(is_initialized) {
+    if(g_is_initialized) {
         fprintf(stderr,
                 "DATASPACES: WARNING: %s: multiple instantiations of the "
                 "dataspaces client are not supported.\n",
@@ -447,7 +446,7 @@ static int dspaces_init_internal(int rank, dspaces_client_t *c)
     if(!(client->dcg))
         return dspaces_ERR_ALLOCATION;
 
-    is_initialized = 1;
+    g_is_initialized = 1;
 
     *c = client;
 
@@ -722,6 +721,8 @@ int dspaces_fini(dspaces_client_t client)
     margo_finalize(client->mid);
 
     free(client);
+
+    g_is_initialized = 0;
 
     return dspaces_SUCCESS;
 }
