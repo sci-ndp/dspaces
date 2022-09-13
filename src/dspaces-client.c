@@ -722,7 +722,7 @@ int dspaces_fini(dspaces_client_t client)
 
     free(client);
 
-    g_is_initialized = 0; 
+    g_is_initialized = 0;
 
     return dspaces_SUCCESS;
 }
@@ -1871,7 +1871,8 @@ static void notify_rpc(hg_handle_t handle)
             get_data(client, num_odscs, subh->q_odsc, odsc_tab, data);
         }
         if(!data) {
-           fprintf(stderr, "ERROR: %s: data allocated, but is null.\n", __func__); 
+            fprintf(stderr, "ERROR: %s: data allocated, but is null.\n",
+                    __func__);
         }
     } else {
         fprintf(stderr,
@@ -1892,7 +1893,8 @@ static void notify_rpc(hg_handle_t handle)
         subh->status = DSPACES_SUB_RUNNING;
     } else if(data) {
         // subscription was cancelled
-        DEBUG_OUT("transfer complete, but sub was cancelled? (status %d)\n", subh->status);
+        DEBUG_OUT("transfer complete, but sub was cancelled? (status %d)\n",
+                  subh->status);
         free(data);
         data = NULL;
     }
