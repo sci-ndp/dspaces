@@ -722,7 +722,7 @@ int dspaces_fini(dspaces_client_t client)
 
     free(client);
 
-    g_is_initialized = 0;
+    g_is_initialized = 0; 
 
     return dspaces_SUCCESS;
 }
