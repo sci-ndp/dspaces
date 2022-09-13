@@ -1657,7 +1657,7 @@ int dht_add_entry(struct dht_entry *de, obj_descriptor *odsc)
   number and references .
 */
 int dht_find_entry_all(struct dht_entry *de, obj_descriptor *q_odsc,
-                       obj_descriptor **odsc_tab[], int timeout)
+                       obj_descriptor ***odsc_tab, int timeout)
 {
     int n, num_odsc = 0;
     long num_elem;
@@ -1670,6 +1670,7 @@ int dht_find_entry_all(struct dht_entry *de, obj_descriptor *q_odsc,
         num_elem = ssh_hash_elem_count(de->ss, &q_odsc->bb);
         ABT_mutex_lock(de->hash_mutex[n]);
     }
+    *odsc_tab = malloc(sizeof(**odsc_tab) * de->odsc_num);
     list_for_each_entry(odscl, &de->odsc_hash[n], struct obj_desc_list,
                         odsc_entry)
     {
