@@ -813,7 +813,7 @@ static void drain_thread(void *arg)
     }
 }
 
-int dspaces_server_init(char *listen_addr_str, MPI_Comm comm,
+int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                         const char *conf_file, dspaces_provider_t *sv)
 {
     const char *envdebug = getenv("DSPACES_DEBUG");
@@ -1155,7 +1155,7 @@ static int server_destroy(dspaces_provider_t server)
     MPI_Comm_free(&server->comm);
     DEBUG_OUT("finalizing server.\n");
     margo_finalize(server->mid);
-
+    DEBUG_OUT("finalized server.\n");
     return 0;
 }
 
