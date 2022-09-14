@@ -52,7 +52,7 @@
 
 #define SUB_HASH_SIZE 16
 
-// static int g_is_initialized = 0;
+static int g_is_initialized = 0;
 
 static enum storage_type st = column_major;
 
@@ -422,9 +422,8 @@ static int read_conf_mpi(dspaces_client_t client, MPI_Comm comm,
 static int dspaces_init_internal(int rank, dspaces_client_t *c)
 {
     const char *envdebug = getenv("DSPACES_DEBUG");
-    static int is_initialized = 0;
 
-    if(is_initialized) {
+    if(g_is_initialized) {
         fprintf(stderr,
                 "DATASPACES: WARNING: %s: multiple instantiations of the "
                 "dataspaces client are not supported.\n",
@@ -447,7 +446,7 @@ static int dspaces_init_internal(int rank, dspaces_client_t *c)
     if(!(client->dcg))
         return dspaces_ERR_ALLOCATION;
 
-    is_initialized = 1;
+    g_is_initialized = 1;
 
     *c = client;
 
@@ -722,6 +721,8 @@ int dspaces_fini(dspaces_client_t client)
     margo_finalize(client->mid);
 
     free(client);
+
+    g_is_initialized = 0;
 
     return dspaces_SUCCESS;
 }
@@ -1869,6 +1870,10 @@ static void notify_rpc(hg_handle_t handle)
         if(num_odscs) {
             get_data(client, num_odscs, subh->q_odsc, odsc_tab, data);
         }
+        if(!data) {
+            fprintf(stderr, "ERROR: %s: data allocated, but is null.\n",
+                    __func__);
+        }
     } else {
         fprintf(stderr,
                 "WARNING: got notification, but sub status was not "
@@ -1888,6 +1893,8 @@ static void notify_rpc(hg_handle_t handle)
         subh->status = DSPACES_SUB_RUNNING;
     } else if(data) {
         // subscription was cancelled
+        DEBUG_OUT("transfer complete, but sub was cancelled? (status %d)\n",
+                  subh->status);
         free(data);
         data = NULL;
     }
@@ -1895,6 +1902,8 @@ static void notify_rpc(hg_handle_t handle)
 
     if(data) {
         subh->result = subh->cb(client, subh->req, subh->arg);
+    } else {
+        DEBUG_OUT("no data, skipping callback.\n");
     }
 
     ABT_mutex_lock(client->sub_mutex);
@@ -1908,6 +1917,8 @@ static void notify_rpc(hg_handle_t handle)
         free(odsc_tab);
     }
     free_sub_req(subh->req);
+
+    DEBUG_OUT("finished notification handling.\n");
 }
 DEFINE_MARGO_RPC_HANDLER(notify_rpc)
 

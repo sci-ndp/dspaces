@@ -1458,7 +1458,6 @@ static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
     }
 
     if(self_id_num > -1) {
-        podsc = malloc(sizeof(*podsc) * ssd->ent_self->odsc_num);
         DEBUG_OUT("finding local entries for req_id %i.\n", req_id);
         odsc_nums[self_id_num] =
             dht_find_entry_all(ssd->ent_self, q_odsc, &podsc, timeout);
