@@ -1161,7 +1161,7 @@ static int server_destroy(dspaces_provider_t server)
     MPI_Comm_free(&server->comm);
     DEBUG_OUT("finalizing server.\n");
     margo_finalize(server->mid);
-
+    DEBUG_OUT("finalized server.\n");
     return 0;
 }
 
