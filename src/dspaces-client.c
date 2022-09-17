@@ -668,6 +668,11 @@ int dspaces_init_mpi(MPI_Comm comm, dspaces_client_t *c)
     return (dspaces_SUCCESS);
 }
 
+int dspaces_server_count(dspaces_client_t client)
+{
+    return(client->size_sp);
+}
+
 static void free_done_list(dspaces_client_t client)
 {
     struct sub_list_node *node;

@@ -45,7 +45,7 @@ int main(int argc, char **argv)
     dspaces_server_fini(s);
 
     if(rank == 0) {
-        fprintf(stderr, "Server is all done!\n");
+        fprintf(stdout, "Server is all done!\n");
     }
 
     MPI_Finalize();

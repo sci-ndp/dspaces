@@ -1976,6 +1976,7 @@ static void kill_rpc(hg_handle_t handle)
     if(do_kill) {
         server_destroy(server);
     }
+    DEBUG_OUT("finished with kill handling.\n");
 }
 DEFINE_MARGO_RPC_HANDLER(kill_rpc)
 
@@ -2028,6 +2029,7 @@ DEFINE_MARGO_RPC_HANDLER(sub_rpc)
 
 void dspaces_server_fini(dspaces_provider_t server)
 {
+    DEBUG_OUT("waiting for finalize to occur\n");
     margo_wait_for_finalize(server->mid);
     free(server);
 }
