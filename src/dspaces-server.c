@@ -825,6 +825,9 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     hg_bool_t flag;
     hg_id_t id;
     int num_handlers = DSPACES_DEFAULT_NUM_HANDLERS;
+    struct hg_init_info hii = {0};
+    char margo_conf[1024];
+    struct margo_init_info mii = {0};
     int ret;
 
     if(is_initialized) {
@@ -856,6 +859,10 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     MPI_Comm_rank(comm, &server->rank);
 
     margo_set_environment(NULL);
+    sprintf(margo_conf, "{ \"use_progress_thread\" : true, \"rpc_thread_count\" : %d }", num_handlers);
+    hii.request_post_init = 1024;
+    mii.hg_init_info = &hii;
+    mii.json_config = margo_conf;
     ABT_init(0, NULL);
 
 #ifdef HAVE_DRC
@@ -905,19 +912,18 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
 
     server->mid = margo_init_opt(listen_addr_str, MARGO_SERVER_MODE, &hii, 1,
                                  num_handlers);
-
+ 
 #else
 
     server->mid =
-        margo_init(listen_addr_str, MARGO_SERVER_MODE, 1, num_handlers);
+        margo_init_ext(listen_addr_str, MARGO_SERVER_MODE, &mii);
 
 #endif /* HAVE_DRC */
-
+    DEBUG_OUT("did margo init\n");
     if(!server->mid) {
         fprintf(stderr, "ERROR: %s: margo_init() failed.\n", __func__);
         return (dspaces_ERR_MERCURY);
     }
-
     server->listen_addr_str = strdup(listen_addr_str);
 
     ABT_mutex_create(&server->odsc_mutex);
