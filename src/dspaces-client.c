@@ -51,6 +51,8 @@
     } while(0);
 
 #define SUB_HASH_SIZE 16
+#define MB (1024*1024)
+#define BULK_TRANSFER_MAX (128*MB)
 
 static int g_is_initialized = 0;
 
@@ -1580,7 +1582,10 @@ static void get_local_rpc(hg_handle_t handle)
     hg_return_t hret;
     bulk_in_t in;
     bulk_out_t out;
+    hg_size_t remaining, xfer_size;
+    margo_request *reqs;
     hg_bulk_t bulk_handle;
+    int i;
 
     APEX_FUNC_TIMER_START(get_local_rpc);
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
@@ -1653,8 +1658,38 @@ static void get_local_rpc(hg_handle_t handle)
     APEX_TIMER_STOP(4);
 
     APEX_NAME_TIMER_START(5, "get_local_bulk_transfer");
-    hret = margo_bulk_transfer(mid, HG_BULK_PUSH, info->addr, in.handle, 0,
+    if(size <= BULK_TRANSFER_MAX) {
+        hret = margo_bulk_transfer(mid, HG_BULK_PUSH, info->addr, in.handle, 0,
                                bulk_handle, 0, size);
+    } else {
+        remaining = size;
+        int num_reqs = (size + BULK_TRANSFER_MAX - 1) / BULK_TRANSFER_MAX;
+        DEBUG_OUT("transferring in %i steps\n", num_reqs);
+        reqs = malloc(sizeof(*reqs) * num_reqs);
+        int req_id = 0;
+        size_t offset = 0;
+        while(remaining) {
+            DEBUG_OUT("%li bytes left to transfer\n", remaining);
+            offset = size - remaining;
+            xfer_size = (remaining > BULK_TRANSFER_MAX) ? BULK_TRANSFER_MAX : remaining;        
+            hret = margo_bulk_itransfer(mid, HG_BULK_PUSH, info->addr, in.handle, offset, bulk_handle, offset, xfer_size, &reqs[req_id++]);
+            if(hret != HG_SUCCESS) {
+                fprintf(stderr, "margo_bulk_itransfer %i failed!\n", req_id - 1);
+                break;
+            }
+            remaining -= xfer_size; 
+        }
+        // if anything is left, we bailed with an error
+        if(!remaining) {
+            for(i = 0; i < num_reqs; i++) {
+                hret = margo_wait(reqs[i]);
+                if(hret != HG_SUCCESS) {
+                    fprintf(stderr, "margo_wait %i failed\n", i);
+                    break;
+                }   
+            }
+        }
+    }
     if(hret != HG_SUCCESS) {
         fprintf(stderr,
                 "DATASPACES: ERROR handling %s: margo_bulk_transfer() failed "
