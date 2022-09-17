@@ -40,7 +40,7 @@ struct dspaces_data_obj {
  * else legacy
  * @param[out] server DataSpaces server handle
  */
-int dspaces_server_init(char *listen_addr_str, MPI_Comm comm,
+int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                         const char *conf_file, dspaces_provider_t *server);
 
 /**

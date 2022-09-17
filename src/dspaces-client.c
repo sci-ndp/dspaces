@@ -1669,7 +1669,7 @@ static void get_local_rpc(hg_handle_t handle)
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
     margo_destroy(handle);
-
+    DEBUG_OUT("complete\n");
     APEX_TIMER_STOP(0);
 }
 DEFINE_MARGO_RPC_HANDLER(get_local_rpc)
