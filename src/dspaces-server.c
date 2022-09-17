@@ -1148,7 +1148,7 @@ static int server_destroy(dspaces_provider_t server)
 
     // Hack to avoid possible argobots race condition. Need to track this down
     // at some point.
-    sleep(1);
+    sleep(5);
 
     free_sspace(server->dsg);
     ls_free(server->dsg->ls);
@@ -1415,7 +1415,7 @@ static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
     int self_id_num = -1;
     int total_odscs = 0;
     int *odsc_nums;
-    obj_descriptor **odsc_tabs, **podsc;
+    obj_descriptor **odsc_tabs, **podsc = NULL;
     obj_descriptor *odsc_curr;
     margo_request *serv_reqs;
     hg_handle_t *hndls;
@@ -1753,8 +1753,9 @@ static void odsc_internal_rpc(hg_handle_t handle)
     odsc_gdim_t in;
     int timeout;
     odsc_list_t out;
-    obj_descriptor **podsc;
+    obj_descriptor **podsc = NULL;
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    margo_request req;
 
     const struct hg_info *info = margo_get_info(handle);
     dspaces_provider_t server =
@@ -1784,7 +1785,6 @@ static void odsc_internal_rpc(hg_handle_t handle)
     ABT_mutex_lock(server->sspace_mutex);
     struct sspace *ssd = lookup_sspace(server, in_odsc.name, &od_gdim);
     ABT_mutex_unlock(server->sspace_mutex);
-    podsc = malloc(sizeof(*podsc) * ssd->ent_self->odsc_num);
     int num_odsc;
     num_odsc = dht_find_entry_all(ssd->ent_self, &in_odsc, &podsc, timeout);
     DEBUG_OUT("found %d DHT entries.\n", num_odsc);
@@ -1809,13 +1809,14 @@ static void odsc_internal_rpc(hg_handle_t handle)
         }
         out.odsc_list.size = num_odsc * sizeof(obj_descriptor);
         out.odsc_list.raw_odsc = (char *)odsc_tab;
-        margo_respond(handle, &out);
+        margo_irespond(handle, &out, &req);
+        DEBUG_OUT("sent response...waiting on request handle\n");
         margo_free_input(handle, &in);
+        margo_wait(req);
+        DEBUG_OUT("request handle complete.\n");
         margo_destroy(handle);
     }
-    for(int i = 0; i < num_odsc; ++i) {
-        DEBUG_OUT("send odsc: %s\n", obj_desc_sprint(&odsc_tab[i]));
-    }
+    DEBUG_OUT("complete\n");
 
     free(podsc);
 }
