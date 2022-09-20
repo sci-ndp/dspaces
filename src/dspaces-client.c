@@ -1530,9 +1530,10 @@ int dspaces_get_meta(dspaces_client_t client, const char *name, int mode,
 
     DEBUG_OUT("Replied with version %d.\n", out.version);
 
-    if(out.size) {
-        DEBUG_OUT("fetching %zi bytes.\n", out.size);
-        *data = malloc(out.size);
+    if(out.mdata.len) {
+        DEBUG_OUT("fetching %zi bytes.\n", out.mdata.len);
+        *data = malloc(out.mdata.len);
+        /*
         hret = margo_bulk_create(client->mid, 1, data, &out.size,
                                  HG_BULK_WRITE_ONLY, &bulk_handle);
         if(hret != HG_SUCCESS) {
@@ -1548,6 +1549,8 @@ int dspaces_get_meta(dspaces_client_t client, const char *name, int mode,
                     __func__, hret);
             goto err_bulk;
         }
+        */
+        memcpy(*data, out.mdata.buf, out.mdata.len);
         DEBUG_OUT("metadata for '%s', version %d retrieved successfully.\n",
                   name, out.version);
     } else {
@@ -1555,10 +1558,10 @@ int dspaces_get_meta(dspaces_client_t client, const char *name, int mode,
         *data = NULL;
     }
 
-    *len = out.size;
+    *len = out.mdata.len;
     *version = out.version;
 
-    margo_bulk_free(bulk_handle);
+    //margo_bulk_free(bulk_handle);
     margo_free_output(handle, &out);
     margo_destroy(handle);
 

@@ -1658,18 +1658,25 @@ static void query_meta_rpc(hg_handle_t handle)
     if(mdata) {
         DEBUG_OUT("found version %d, length %d.", mdata->version,
                   mdata->length);
-        out.size = mdata->length;
+        out.mdata.len = mdata->length;
+        out.mdata.buf = malloc(mdata->length);
+        memcpy(out.mdata.buf, mdata->data, mdata->length);
+        /*
         hret = margo_bulk_create(mid, 1, (void **)&mdata->data, &out.size,
                                  HG_BULK_READ_ONLY, &out.handle);
+        if(hret != HG_SUCCESS) {
+            fprintf(stderr, "margo_bulk_create failed with %d\n", hret);
+        }
+        */
         out.version = mdata->version;
     } else {
-        out.size = 0;
+        out.mdata.len = 0;
         out.version = -1;
     }
 
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
-    margo_bulk_free(out.handle);
+    //margo_bulk_free(out.handle);
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(query_meta_rpc)

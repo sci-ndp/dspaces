@@ -1,5 +1,4 @@
 /*
-p
  * Copyright (c) 2009, NSF Cloud and Autonomic Computing Center, Rutgers
  * University All rights reserved.
  *
