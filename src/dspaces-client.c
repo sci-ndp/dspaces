@@ -459,9 +459,18 @@ static int dspaces_init_margo(dspaces_client_t client,
                               const char *listen_addr_str)
 {
     hg_class_t *hg;
+    struct hg_init_info hii = {0};
+    char margo_conf[1024];
+    struct margo_init_info mii = {0};
+
     int i;
 
     margo_set_environment(NULL);
+    sprintf(margo_conf, "{ \"use_progress_thread\" : false, \"rpc_thread_count\" : 0}");
+    hii.request_post_init = 1024;
+    hii.auto_sm = 0;
+    mii.hg_init_info = &hii;
+    mii.json_config = margo_conf;
     ABT_init(0, NULL);
 
 #ifdef HAVE_DRC
@@ -479,8 +488,6 @@ static int dspaces_init_margo(dspaces_client_t client,
     drc_cookie = drc_get_first_cookie(drc_credential_info);
     sprintf(drc_key_str, "%u", drc_cookie);
 
-    struct hg_init_info hii;
-    memset(&hii, 0, sizeof(hii));
     hii.na_init_info.auth_key = drc_key_str;
 
     client->mid =
@@ -488,7 +495,16 @@ static int dspaces_init_margo(dspaces_client_t client,
 
 #else
 
-    client->mid = margo_init(listen_addr_str, MARGO_SERVER_MODE, 0, 0);
+    client->mid =
+        margo_init_ext(listen_addr_str, MARGO_SERVER_MODE, &mii);
+    if(client->f_debug) {
+        if(!client->rank) {
+            char *margo_json = margo_get_config(client->mid);
+            fprintf(stderr, "%s", margo_json);
+            free(margo_json);
+        }
+        margo_set_log_level(client->mid, MARGO_LOG_TRACE);
+    }
 
 #endif /* HAVE_DRC */
 

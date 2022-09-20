@@ -861,6 +861,7 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     margo_set_environment(NULL);
     sprintf(margo_conf, "{ \"use_progress_thread\" : true, \"rpc_thread_count\" : %d }", num_handlers);
     hii.request_post_init = 1024;
+    hii.auto_sm = 0;
     mii.hg_init_info = &hii;
     mii.json_config = margo_conf;
     ABT_init(0, NULL);
@@ -917,6 +918,15 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
 
     server->mid =
         margo_init_ext(listen_addr_str, MARGO_SERVER_MODE, &mii);
+    if(server->f_debug) {
+        if(!server->rank) {
+            char *margo_json = margo_get_config(server->mid);
+            fprintf(stderr, "%s", margo_json);
+            free(margo_json);
+        }
+        margo_set_log_level(server->mid, MARGO_LOG_TRACE);
+    }
+    MPI_Barrier(comm);
 
 #endif /* HAVE_DRC */
     DEBUG_OUT("did margo init\n");
