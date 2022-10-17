@@ -51,8 +51,8 @@
     } while(0);
 
 #define SUB_HASH_SIZE 16
-#define MB (1024*1024)
-#define BULK_TRANSFER_MAX (128*MB)
+#define MB (1024 * 1024)
+#define BULK_TRANSFER_MAX (128 * MB)
 
 static int g_is_initialized = 0;
 
@@ -466,7 +466,8 @@ static int dspaces_init_margo(dspaces_client_t client,
     int i;
 
     margo_set_environment(NULL);
-    sprintf(margo_conf, "{ \"use_progress_thread\" : false, \"rpc_thread_count\" : 0}");
+    sprintf(margo_conf,
+            "{ \"use_progress_thread\" : false, \"rpc_thread_count\" : 0}");
     hii.request_post_init = 1024;
     hii.auto_sm = 0;
     mii.hg_init_info = &hii;
@@ -495,8 +496,7 @@ static int dspaces_init_margo(dspaces_client_t client,
 
 #else
 
-    client->mid =
-        margo_init_ext(listen_addr_str, MARGO_SERVER_MODE, &mii);
+    client->mid = margo_init_ext(listen_addr_str, MARGO_SERVER_MODE, &mii);
     if(client->f_debug) {
         if(!client->rank) {
             char *margo_json = margo_get_config(client->mid);
@@ -686,10 +686,7 @@ int dspaces_init_mpi(MPI_Comm comm, dspaces_client_t *c)
     return (dspaces_SUCCESS);
 }
 
-int dspaces_server_count(dspaces_client_t client)
-{
-    return(client->size_sp);
-}
+int dspaces_server_count(dspaces_client_t client) { return (client->size_sp); }
 
 static void free_done_list(dspaces_client_t client)
 {
@@ -1577,7 +1574,7 @@ int dspaces_get_meta(dspaces_client_t client, const char *name, int mode,
     *len = out.mdata.len;
     *version = out.version;
 
-    //margo_bulk_free(bulk_handle);
+    // margo_bulk_free(bulk_handle);
     margo_free_output(handle, &out);
     margo_destroy(handle);
 
@@ -1679,7 +1676,7 @@ static void get_local_rpc(hg_handle_t handle)
     APEX_NAME_TIMER_START(5, "get_local_bulk_transfer");
     if(size <= BULK_TRANSFER_MAX) {
         hret = margo_bulk_transfer(mid, HG_BULK_PUSH, info->addr, in.handle, 0,
-                               bulk_handle, 0, size);
+                                   bulk_handle, 0, size);
     } else {
         remaining = size;
         int num_reqs = (size + BULK_TRANSFER_MAX - 1) / BULK_TRANSFER_MAX;
@@ -1690,13 +1687,17 @@ static void get_local_rpc(hg_handle_t handle)
         while(remaining) {
             DEBUG_OUT("%li bytes left to transfer\n", remaining);
             offset = size - remaining;
-            xfer_size = (remaining > BULK_TRANSFER_MAX) ? BULK_TRANSFER_MAX : remaining;        
-            hret = margo_bulk_itransfer(mid, HG_BULK_PUSH, info->addr, in.handle, offset, bulk_handle, offset, xfer_size, &reqs[req_id++]);
+            xfer_size =
+                (remaining > BULK_TRANSFER_MAX) ? BULK_TRANSFER_MAX : remaining;
+            hret = margo_bulk_itransfer(mid, HG_BULK_PUSH, info->addr,
+                                        in.handle, offset, bulk_handle, offset,
+                                        xfer_size, &reqs[req_id++]);
             if(hret != HG_SUCCESS) {
-                fprintf(stderr, "margo_bulk_itransfer %i failed!\n", req_id - 1);
+                fprintf(stderr, "margo_bulk_itransfer %i failed!\n",
+                        req_id - 1);
                 break;
             }
-            remaining -= xfer_size; 
+            remaining -= xfer_size;
         }
         // if anything is left, we bailed with an error
         if(!remaining) {
@@ -1705,7 +1706,7 @@ static void get_local_rpc(hg_handle_t handle)
                 if(hret != HG_SUCCESS) {
                     fprintf(stderr, "margo_wait %i failed\n", i);
                     break;
-                }   
+                }
             }
         }
     }

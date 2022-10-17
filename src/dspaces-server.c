@@ -859,7 +859,9 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     MPI_Comm_rank(comm, &server->rank);
 
     margo_set_environment(NULL);
-    sprintf(margo_conf, "{ \"use_progress_thread\" : true, \"rpc_thread_count\" : %d }", num_handlers);
+    sprintf(margo_conf,
+            "{ \"use_progress_thread\" : true, \"rpc_thread_count\" : %d }",
+            num_handlers);
     hii.request_post_init = 1024;
     hii.auto_sm = 0;
     mii.hg_init_info = &hii;
@@ -913,11 +915,10 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
 
     server->mid = margo_init_opt(listen_addr_str, MARGO_SERVER_MODE, &hii, 1,
                                  num_handlers);
- 
+
 #else
 
-    server->mid =
-        margo_init_ext(listen_addr_str, MARGO_SERVER_MODE, &mii);
+    server->mid = margo_init_ext(listen_addr_str, MARGO_SERVER_MODE, &mii);
     if(server->f_debug) {
         if(!server->rank) {
             char *margo_json = margo_get_config(server->mid);
@@ -1686,7 +1687,7 @@ static void query_meta_rpc(hg_handle_t handle)
 
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
-    //margo_bulk_free(out.handle);
+    // margo_bulk_free(out.handle);
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(query_meta_rpc)
