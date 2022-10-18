@@ -54,6 +54,12 @@ DataSpaces no longer requires an MPI communicator or appid be passed to `dspaces
 
 (*NEW in 2.1*): `dspaces_aget()` allocates the data buffer instead of requiring a properly sized buffer be allocated.
 
+(*NEW in 2.2*): hybrid client/server operation, with a server-side data access API. Access API calls:
+  - `dspaces_server_find_objs()`: retrieve a list of locally-stored objects of a given variable version
+  - `dspaces_server_get_objdata()`: retrieve a local data object into a buffer
+
+(*NEW in 2.2*): Non-blocking put with `dspaces_iput()`
+
 ## DataSpaces usage
 
 Setting the `DSPACES_DEBUG` environment variable generates debugging output.
@@ -84,7 +90,13 @@ The DataSpaces server expects to find the `dataspaces.conf` file in the working 
 
 `max_versions`: maximum number of versions of a data object to be cached in DataSpaces servers.
 
+`hash_version`: indexing hash to use. A value of 1 means Hilbert SFC ; 2 means recursive bisection
 
+- (*NEW in 2.2*) `hash_version` will be assigned per-variable by heuristic if not set in conf file (recommended!)
+
+
+#### dataspaces.toml
+DataSpaces supports configuration in the TOML format. If `dataspaces.conf` is not found by the server binary, it will search for `dataspaces.toml`. All configuration variables are the same.
 
 ### The terminator utility
 
