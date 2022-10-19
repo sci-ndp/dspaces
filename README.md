@@ -1,4 +1,4 @@
-# DataSpaces 2.0
+# DataSpaces 2
 
 This package contains the source code and test applications for
 [DataSpaces](https://www.dataspaces.org) run-time library, which is a flexible interaction and
