@@ -14,4 +14,11 @@ make
 make install
 
 cd -
-${install_dir}/bin/dspaces_server sockets
+${install_dir}/bin/dspaces_server sockets &
+while [ -f conf.ds ] ; do
+    sleep 1
+done
+sleep 2
+cat conf.ds
+
+wait
