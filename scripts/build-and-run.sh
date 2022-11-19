@@ -6,6 +6,7 @@ build_dir=$3
 install_dir=$4
 compiler=$5
 fcompiler=$6
+ofi_str=$7
 
 git checkout ${branch}
 cd ${build_dir}
@@ -16,7 +17,7 @@ make install
 fi_info
 
 cd -
-${install_dir}/bin/dspaces_server sockets &
+${install_dir}/bin/dspaces_server ${ofi_str} &
 while [ -f conf.ds ] ; do
     sleep 1
 done
