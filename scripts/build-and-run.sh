@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 branch=$1
 src_dir=$2
