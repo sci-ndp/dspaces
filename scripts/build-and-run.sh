@@ -13,6 +13,8 @@ cmake ${src_dir} -DCMAKE_INSTALL_PREFIX=${install_dir} -DENABLE_TESTS=True -DCMA
 make
 make install
 
+fi_info
+
 cd -
 ${install_dir}/bin/dspaces_server sockets &
 while [ -f conf.ds ] ; do
