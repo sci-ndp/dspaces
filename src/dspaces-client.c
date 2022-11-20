@@ -216,7 +216,7 @@ static int get_ss_info(dspaces_client_t client, ss_info_hdr *ss_data)
     DEBUG_OUT("Got ss_rpc reply\n");
     hret = margo_get_output(handle, &out);
     if(hret != HG_SUCCESS) {
-        fprintf(stderr, "ERROR: (%s): margo_get_output() failed\n", __func__);
+        fprintf(stderr, "ERROR: (%s): margo_get_output() failed with %i\n", __func__, hret);
         margo_destroy(handle);
         return dspaces_ERR_MERCURY;
     }
@@ -503,7 +503,7 @@ static int dspaces_init_margo(dspaces_client_t client,
             fprintf(stderr, "%s", margo_json);
             free(margo_json);
         }
-        margo_set_log_level(client->mid, MARGO_LOG_TRACE);
+        margo_set_log_level(client->mid, MARGO_LOG_WARNING);
     }
 
 #endif /* HAVE_DRC */

@@ -925,7 +925,7 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
             fprintf(stderr, "%s", margo_json);
             free(margo_json);
         }
-        margo_set_log_level(server->mid, MARGO_LOG_TRACE);
+        margo_set_log_level(server->mid, MARGO_LOG_WARNING);
     }
     MPI_Barrier(comm);
 
