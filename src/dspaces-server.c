@@ -1931,6 +1931,7 @@ static void ss_rpc(hg_handle_t handle)
 
     out.ss_buf.size = sizeof(ss_info_hdr);
     out.ss_buf.raw_odsc = (char *)(&ss_data);
+    out.chk_str = strdup("chkstr");
     margo_respond(handle, &out);
     DEBUG_OUT("responded in %s\n", __func__);
     margo_destroy(handle);

@@ -331,7 +331,7 @@ MERCURY_GEN_PROC(query_meta_out_t,
 MERCURY_GEN_PROC(odsc_gdim_t,
                  ((odsc_hdr_with_gdim)(odsc_gdim))((int32_t)(param)))
 MERCURY_GEN_PROC(odsc_list_t, ((odsc_hdr)(odsc_list))((int32_t)(param)))
-MERCURY_GEN_PROC(ss_information, ((odsc_hdr)(ss_buf)))
+MERCURY_GEN_PROC(ss_information, ((odsc_hdr)(ss_buf))((hg_string_t)(chk_str)))
 
 char *obj_desc_sprint(obj_descriptor *);
 //
