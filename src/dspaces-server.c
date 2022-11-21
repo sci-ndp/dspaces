@@ -479,7 +479,7 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     int err = -ENOMEM;
 
     /* Default values */
-    ds_conf.max_versions = 1;
+    ds_conf.max_versions = 255;
     ds_conf.hash_version = ssd_hash_version_auto;
     ds_conf.num_apps = -1;
 
