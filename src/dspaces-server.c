@@ -463,7 +463,11 @@ void print_conf()
     printf(")\n");
     printf(" MAX STORED VERSIONS: %i\n", ds_conf.max_versions);
     printf(" HASH TYPE: %s\n", hash_strings[ds_conf.hash_version]);
-    printf(" APPS EXPECTED: %i\n", ds_conf.num_apps);
+    if(num_apps >= 0) {
+        printf(" APPS EXPECTED: %i\n", ds_conf.num_apps);
+    } else {
+        printf(" RUN UNTIL KILLED\n");
+    }
     printf("=========================\n");
 }
 
@@ -477,7 +481,7 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     /* Default values */
     ds_conf.max_versions = 1;
     ds_conf.hash_version = ssd_hash_version_auto;
-    ds_conf.num_apps = 1;
+    ds_conf.num_apps = -1;
 
     ext = strrchr(conf_name, '.');
     if(!ext || strcmp(ext, ".toml") != 0) {
@@ -770,7 +774,7 @@ static void drain_thread(void *arg)
 {
     dspaces_provider_t server = arg;
 
-    while(server->f_kill > 0) {
+    while(server->f_kill != 0) {
         int counter = 0;
         DEBUG_OUT("Thread WOKEUP\n");
         do {
@@ -1064,6 +1068,11 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     }
 
     server->f_kill = server->dsg->num_apps;
+    if(server->f_kill > 0) {
+        DEBUG_OUT("Server will wait for %i kill tokens before halting.\n", server->f_kil);
+    } else {
+        DEBUG_OUT("Server will run indefinitely.\n");
+    }
 
     if(server->f_drain) {
         // thread to drain the data
