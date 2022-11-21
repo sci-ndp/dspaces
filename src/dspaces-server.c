@@ -463,7 +463,7 @@ void print_conf()
     printf(")\n");
     printf(" MAX STORED VERSIONS: %i\n", ds_conf.max_versions);
     printf(" HASH TYPE: %s\n", hash_strings[ds_conf.hash_version]);
-    if(num_apps >= 0) {
+    if(ds_conf.num_apps >= 0) {
         printf(" APPS EXPECTED: %i\n", ds_conf.num_apps);
     } else {
         printf(" RUN UNTIL KILLED\n");
@@ -1069,7 +1069,7 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
 
     server->f_kill = server->dsg->num_apps;
     if(server->f_kill > 0) {
-        DEBUG_OUT("Server will wait for %i kill tokens before halting.\n", server->f_kil);
+        DEBUG_OUT("Server will wait for %i kill tokens before halting.\n", server->f_kill);
     } else {
         DEBUG_OUT("Server will run indefinitely.\n");
     }
