@@ -1273,6 +1273,8 @@ static void put_rpc(hg_handle_t handle)
 
     hg_size_t size = (in_odsc.size) * bbox_volume(&(in_odsc.bb));
 
+    DEBUG_OUT("Creating a bulk transfer buffer of size %li\n", size);
+
     hret = margo_bulk_create(mid, 1, (void **)&(od->data), &size,
                              HG_BULK_WRITE_ONLY, &bulk_handle);
 
