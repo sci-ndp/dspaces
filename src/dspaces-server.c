@@ -92,6 +92,9 @@ struct dspaces_provider {
     ABT_xstream drain_xstream;
     ABT_pool drain_pool;
     ABT_thread drain_t;
+
+    const char *pub_ip;
+    const char *priv_ip;
 };
 
 DECLARE_MARGO_RPC_HANDLER(put_rpc)
@@ -1083,6 +1086,17 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                           ABT_THREAD_ATTR_NULL, &server->drain_t);
     }
 
+    server->pub_ip = getenv("DSPACES_PUBLIC_IP");
+    server->priv_ip = getenv("DSPACES_PRIVATE_IP");
+
+    if(server->pub_ip) {
+        DEBUG_OUT("public IP is %s\n", server->pub_ip);
+    }
+
+    if(server->priv_ip) {
+        DEBUG_OUT("private IP is %s\n", server->priv_ip);
+    }
+
     *sv = server;
 
     is_initialized = 1;
@@ -1185,6 +1199,26 @@ static int server_destroy(dspaces_provider_t server)
     return 0;
 }
 
+static void address_translate(dspaces_provider_t server, char *addr_str)
+{
+    char *addr_loc = strstr(addr_str, server->priv_ip);
+    char *addr_tail;
+    int publen, privlen;
+
+    if(addr_loc) {
+        DEBUG_OUT("translating %s.\n", addr_str);
+        publen = strlen(server->pub_ip);
+        privlen = strlen(server->priv_ip);
+        addr_tail = strdup(addr_loc + privlen);
+        strcpy(addr_loc, server->pub_ip);
+        strcat(addr_str, addr_tail);
+        free(addr_tail);
+        DEBUG_OUT("translated address: %s\n", addr_str);
+    } else {
+        DEBUG_OUT("no translation needed.\n");
+    }
+} 
+
 static void put_rpc(hg_handle_t handle)
 {
     hg_return_t hret;
@@ -1223,6 +1257,10 @@ static void put_rpc(hg_handle_t handle)
     margo_addr_to_string(server->mid, in_odsc.owner, &owner_addr_size,
                          owner_addr);
     margo_addr_free(server->mid, owner_addr);
+    if(server->pub_ip && server->priv_ip) {
+        address_translate(server, in_odsc.owner);
+    }
+
 
     struct obj_data *od;
     od = obj_data_alloc(&in_odsc);
