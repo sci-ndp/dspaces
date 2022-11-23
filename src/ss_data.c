@@ -1595,6 +1595,9 @@ int dht_add_entry(struct dht_entry *de, obj_descriptor *odsc)
     int sub_complete = 0;
     int n, err = -ENOMEM;
 
+    n = odsc->version % de->odsc_size;
+   
+    ABT_mutex_lock(de->hash_mutex[n]); 
     odscl = dht_find_match(de, odsc);
     if(odscl) {
         /* There  is allready  a descriptor  with  a different
@@ -1609,19 +1612,16 @@ int dht_add_entry(struct dht_entry *de, obj_descriptor *odsc)
             fprintf(stderr, " But found existing: \n%s\n",
                     obj_desc_sprint(&odscl->odsc));
         }
-        memcpy(&odscl->odsc, odsc, sizeof(*odsc));
-        return 0;
+    } else {
+        odscl = malloc(sizeof(*odscl));
+        if(!odscl)
+            return err;
+        list_add(&odscl->odsc_entry, &de->odsc_hash[n]);
+        de->odsc_num++;
     }
 
-    n = odsc->version % de->odsc_size;
-    odscl = malloc(sizeof(*odscl));
-    if(!odscl)
-        return err;
     memcpy(&odscl->odsc, odsc, sizeof(*odsc));
 
-    ABT_mutex_lock(de->hash_mutex[n]);
-    list_add(&odscl->odsc_entry, &de->odsc_hash[n]);
-    de->odsc_num++;
 
     list_for_each_entry_safe(sub, tmp, &de->dht_subs[n],
                              struct dht_sub_list_entry, entry)
