@@ -1596,8 +1596,8 @@ int dht_add_entry(struct dht_entry *de, obj_descriptor *odsc)
     int n, err = -ENOMEM;
 
     n = odsc->version % de->odsc_size;
-
-    ABT_mutex_lock(de->hash_mutex[n]);
+   
+    ABT_mutex_lock(de->hash_mutex[n]); 
     odscl = dht_find_match(de, odsc);
     if(odscl) {
         /* There  is allready  a descriptor  with  a different
