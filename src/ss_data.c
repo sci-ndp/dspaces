@@ -1596,8 +1596,8 @@ int dht_add_entry(struct dht_entry *de, obj_descriptor *odsc)
     int n, err = -ENOMEM;
 
     n = odsc->version % de->odsc_size;
-   
-    ABT_mutex_lock(de->hash_mutex[n]); 
+
+    ABT_mutex_lock(de->hash_mutex[n]);
     odscl = dht_find_match(de, odsc);
     if(odscl) {
         /* There  is allready  a descriptor  with  a different
@@ -1621,7 +1621,6 @@ int dht_add_entry(struct dht_entry *de, obj_descriptor *odsc)
     }
 
     memcpy(&odscl->odsc, odsc, sizeof(*odsc));
-
 
     list_for_each_entry_safe(sub, tmp, &de->dht_subs[n],
                              struct dht_sub_list_entry, entry)
@@ -1687,6 +1686,12 @@ int dht_find_entry_all(struct dht_entry *de, obj_descriptor *q_odsc,
                                 timeout);
         }
         ABT_mutex_unlock(de->hash_mutex[n]);
+    } else {
+        if(num_elem > 0) {
+            num_odsc = 0;
+            free(*odsc_tab);
+            *odsc_tab = NULL;
+        }
     }
 
     return num_odsc;

@@ -35,7 +35,7 @@ set_target_properties (dspaces
 
 set(dspaces-server-src util.c bbox.c ss_data.c dspaces-server.c toml.c)
 
-add_library(dspaces-server ${dspaces-server-src})
+add_library(dspaces-server ${dspaces-server-src} ${dspaces-src})
 if(HAVE_DRC)
     target_link_libraries (dspaces-server margo m pthread ${DRC_LIBRARIES})
     target_include_directories (dspaces-server BEFORE PUBLIC

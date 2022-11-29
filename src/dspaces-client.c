@@ -216,7 +216,8 @@ static int get_ss_info(dspaces_client_t client, ss_info_hdr *ss_data)
     DEBUG_OUT("Got ss_rpc reply\n");
     hret = margo_get_output(handle, &out);
     if(hret != HG_SUCCESS) {
-        fprintf(stderr, "ERROR: (%s): margo_get_output() failed with %i\n", __func__, hret);
+        fprintf(stderr, "ERROR: (%s): margo_get_output() failed with %i\n",
+                __func__, hret);
         margo_destroy(handle);
         return dspaces_ERR_MERCURY;
     }
@@ -679,6 +680,43 @@ int dspaces_init_mpi(MPI_Comm comm, dspaces_client_t *c)
 
     choose_server(client);
     init_ss_info_mpi(client, comm);
+    dspaces_post_init(client);
+
+    *c = client;
+
+    return (dspaces_SUCCESS);
+}
+
+static int arg_conf(dspaces_client_t client, const char *conn_str)
+{
+    client->size_sp = 1;
+    client->server_address = malloc(sizeof(*client->server_address));
+    client->node_names = malloc(sizeof(*client->node_names));
+    client->node_names[0] = strdup("remote");
+    client->server_address[0] = strdup(conn_str);
+
+    return (0);
+}
+
+int dspaces_init_wan(dspaces_client_t *c, const char *listen_addr_str,
+                     const char *conn_str)
+{
+    dspaces_client_t client;
+    int ret;
+
+    ret = dspaces_init_internal(0, &client);
+    if(ret != dspaces_SUCCESS) {
+        return (ret);
+    }
+
+    ret = arg_conf(client, conn_str);
+    if(ret != 0) {
+        return (ret);
+    }
+    dspaces_init_margo(client, listen_addr_str);
+
+    choose_server(client);
+    init_ss_info(client);
     dspaces_post_init(client);
 
     *c = client;
@@ -1498,6 +1536,8 @@ int dspaces_get(dspaces_client_t client, const char *var_name, unsigned int ver,
     if(num_odscs != 0) {
         get_data(client, num_odscs, odsc, odsc_tab, data);
         free(odsc_tab);
+    } else {
+        return (-1);
     }
 
     return (ret);

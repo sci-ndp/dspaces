@@ -45,6 +45,9 @@ int dspaces_init(int rank, dspaces_client_t *client);
  */
 int dspaces_init_mpi(MPI_Comm comm, dspaces_client_t *c);
 
+int dspaces_init_wan(dspaces_client_t *c, const char *listen_addr_str,
+                     const char *conn_str);
+
 int dspaces_server_count(dspaces_client_t client);
 
 void dspaces_define_gdim(dspaces_client_t client, const char *var_name,
@@ -133,8 +136,8 @@ int dspaces_put(dspaces_client_t client, const char *var_name, unsigned int ver,
 struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
                                      const char *var_name, unsigned int ver,
                                      int size, int ndim, uint64_t *lb,
-                                     uint64_t *ub, void *data,
-                                     int allocate, int check, int free);
+                                     uint64_t *ub, void *data, int allocate,
+                                     int check, int free);
 
 /**
  * @brief Check status of non-blocking put

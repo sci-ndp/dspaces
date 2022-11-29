@@ -50,6 +50,12 @@ struct addr_list_entry {
     char *addr;
 };
 
+struct remote {
+    char *name;
+    char addr_str[128];
+    dspaces_client_t conn;
+};
+
 struct dspaces_provider {
     margo_instance_id mid;
     hg_id_t put_id;
@@ -95,6 +101,9 @@ struct dspaces_provider {
 
     const char *pub_ip;
     const char *priv_ip;
+
+    struct remote *remotes;
+    int nremote;
 };
 
 DECLARE_MARGO_RPC_HANDLER(put_rpc)
@@ -237,14 +246,19 @@ static int parse_conf(const char *fname)
     return 0;
 }
 
-static int parse_conf_toml(const char *fname)
+static int parse_conf_toml(const char *fname, struct remote **rem_array,
+                           int *nremote)
 {
     FILE *fin;
     toml_table_t *conf;
     toml_table_t *server;
+    toml_table_t *remotes;
+    toml_table_t *remote;
     toml_datum_t dat;
     toml_array_t *arr;
     char errbuf[200];
+    char *ip;
+    int port;
     int ndim = 0;
     int i, j, n;
 
@@ -294,6 +308,31 @@ static int parse_conf_toml(const char *fname)
                 *(int *)options[i].pval = dat.u.i;
             }
         }
+    }
+
+    remotes = toml_table_in(conf, "remotes");
+    if(remotes) {
+        fprintf(stderr, "parsing remotes\n");
+        *nremote = toml_table_ntab(remotes);
+        *rem_array = malloc(sizeof(**rem_array) * *nremote);
+        fprintf(stderr, "%i remotes\n", *nremote);
+        for(i = 0; i < *nremote; i++) {
+            // remote = toml_table_at(remotes, i);
+            (*rem_array)[i].name = strdup(toml_key_in(remotes, i));
+            remote = toml_table_in(remotes, (*rem_array)[i].name);
+            fprintf(stderr, "remote %s\n", toml_key_in(remotes, i));
+            dat = toml_string_in(remote, "ip");
+            ip = dat.u.s;
+            fprintf(stderr, "ip: %s\n", ip);
+            dat = toml_int_in(remote, "port");
+            port = dat.u.i;
+            sprintf((*rem_array)[i].addr_str, "sockets://%s:%i", ip, port);
+            fprintf(stderr, "%s address string: %s\n", (*rem_array)[i].name,
+                    (*rem_array)[i].addr_str);
+            free(ip);
+        }
+    } else {
+        fprintf(stderr, "no remotes\n");
     }
 
     toml_free(conf);
@@ -490,7 +529,7 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     if(!ext || strcmp(ext, ".toml") != 0) {
         err = parse_conf(conf_name);
     } else {
-        err = parse_conf_toml(conf_name);
+        err = parse_conf_toml(conf_name, &server->remotes, &server->nremote);
     }
     if(err < 0) {
         goto err_out;
@@ -550,6 +589,13 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     }
     dsg_l->ls = ls_alloc(ds_conf.max_versions);
     if(!dsg_l->ls) {
+        fprintf(stderr, "%s(): ERROR ls_alloc() failed\n", __func__);
+        goto err_free;
+    }
+
+    // proxy storage
+    dsg_l->ps = ls_alloc(ds_conf.max_versions);
+    if(!dsg_l->ps) {
         fprintf(stderr, "%s(): ERROR ls_alloc() failed\n", __func__);
         goto err_free;
     }
@@ -835,7 +881,7 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     struct hg_init_info hii = {0};
     char margo_conf[1024];
     struct margo_init_info mii = {0};
-    int ret;
+    int i, ret;
 
     if(is_initialized) {
         fprintf(stderr,
@@ -1069,10 +1115,17 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                 __func__, err);
         return (dspaces_ERR_ALLOCATION);
     }
+    for(i = 0; i < server->nremote; i++) {
+        DEBUG_OUT("initializing client connection to %s\n",
+                  server->remotes[i].name);
+        dspaces_init_wan(&server->remotes[i].conn, listen_addr_str,
+                         server->remotes[i].addr_str);
+    }
 
     server->f_kill = server->dsg->num_apps;
     if(server->f_kill > 0) {
-        DEBUG_OUT("Server will wait for %i kill tokens before halting.\n", server->f_kill);
+        DEBUG_OUT("Server will wait for %i kill tokens before halting.\n",
+                  server->f_kill);
     } else {
         DEBUG_OUT("Server will run indefinitely.\n");
     }
@@ -1168,6 +1221,7 @@ static void kill_local_clients(dspaces_provider_t server)
 
 static int server_destroy(dspaces_provider_t server)
 {
+    int i;
     MPI_Barrier(server->comm);
     DEBUG_OUT("Finishing up, waiting for asynchronous jobs to finish...\n");
 
@@ -1183,6 +1237,10 @@ static int server_destroy(dspaces_provider_t server)
     // Hack to avoid possible argobots race condition. Need to track this down
     // at some point.
     sleep(5);
+
+    for(i = 0; i < server->nremote; i++) {
+        dspaces_fini(server->remotes[i].conn);
+    }
 
     free_sspace(server->dsg);
     ls_free(server->dsg->ls);
@@ -1217,7 +1275,7 @@ static void address_translate(dspaces_provider_t server, char *addr_str)
     } else {
         DEBUG_OUT("no translation needed.\n");
     }
-} 
+}
 
 static void put_rpc(hg_handle_t handle)
 {
@@ -1260,7 +1318,6 @@ static void put_rpc(hg_handle_t handle)
     if(server->pub_ip && server->priv_ip) {
         address_translate(server, in_odsc.owner);
     }
-
 
     struct obj_data *od;
     od = obj_data_alloc(&in_odsc);
@@ -1466,6 +1523,66 @@ static void put_meta_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(put_meta_rpc)
 
+static int query_remotes(dspaces_provider_t server, odsc_gdim_t *query,
+                         int timeout, obj_descriptor **results, int req_id)
+{
+    obj_descriptor *q_odsc = (obj_descriptor *)query->odsc_gdim.raw_odsc;
+    struct global_dimension *q_gdim =
+        (struct global_dimension *)query->odsc_gdim.raw_gdim;
+    uint64_t buf_size;
+    void *buffer = NULL;
+    int found = 0;
+    obj_descriptor *odsc;
+    struct obj_data *od;
+    hg_addr_t owner_addr;
+    size_t owner_addr_size = 128;
+    int i;
+
+    buf_size = obj_data_size(q_odsc);
+    buffer = malloc(buf_size);
+
+    DEBUG_OUT("%i remotes to query\n", server->nremote);
+    for(i = 0; i < server->nremote; i++) {
+        DEBUG_OUT("req %i: querying remote %s\n", req_id,
+                  server->remotes[i].name);
+        dspaces_define_gdim(server->remotes[i].conn, q_odsc->name, q_gdim->ndim,
+                            q_gdim->sizes.c);
+        if(dspaces_get(server->remotes[i].conn, q_odsc->name, q_odsc->version,
+                       q_odsc->size, q_odsc->bb.num_dims, q_odsc->bb.lb.c,
+                       q_odsc->bb.ub.c, buffer, 0) == 0) {
+            DEBUG_OUT("found data\n");
+            found = 1;
+            break;
+        }
+    }
+
+    if(found) {
+        odsc = calloc(1, sizeof(*odsc));
+        odsc->version = q_odsc->version;
+        margo_addr_self(server->mid, &owner_addr);
+        margo_addr_to_string(server->mid, odsc->owner, &owner_addr_size,
+                             owner_addr);
+        margo_addr_free(server->mid, owner_addr);
+        // Selectively translate address?
+        odsc->st = q_odsc->st;
+        odsc->size = q_odsc->size;
+        memcpy(&odsc->bb, &q_odsc->bb, sizeof(odsc->bb));
+        od = obj_data_alloc_no_data(odsc, buffer);
+        *results = odsc;
+        if(server->f_debug) {
+            DEBUG_OUT("created local object %s\n", obj_desc_sprint(odsc));
+        }
+        ABT_mutex_lock(server->ls_mutex);
+        ls_add_obj(server->dsg->ps, od);
+        ABT_mutex_unlock(server->ls_mutex);
+        return (sizeof(obj_descriptor));
+    } else {
+        DEBUG_OUT("req %i: not found on any remotes.\n", req_id);
+        *results = NULL;
+        return (0);
+    }
+}
+
 static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
                            int timeout, obj_descriptor **results, int req_id)
 {
@@ -1488,6 +1605,12 @@ static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
 
     q_odsc = (obj_descriptor *)query->odsc_gdim.raw_odsc;
     q_gdim = (struct global_dimension *)query->odsc_gdim.raw_gdim;
+
+    if(server->remotes && !ls_lookup(server->dsg->ls, q_odsc->name)) {
+        DEBUG_OUT("req %i: no local objects with name %s. Checking remotes.\n",
+                  req_id, q_odsc->name);
+        return (query_remotes(server, query, timeout, results, req_id));
+    }
 
     DEBUG_OUT("getting sspace lock.\n");
     ABT_mutex_lock(server->sspace_mutex);
@@ -1772,8 +1895,11 @@ static void get_rpc(hg_handle_t handle)
     struct obj_data *od, *from_obj;
 
     ABT_mutex_lock(server->ls_mutex);
-    from_obj = ls_find(server->dsg->ls, &in_odsc);
-
+    if(server->remotes && ls_lookup(server->dsg->ps, in_odsc.name)) {
+        from_obj = ls_find(server->dsg->ps, &in_odsc);
+    } else {
+        from_obj = ls_find(server->dsg->ls, &in_odsc);
+    }
     od = obj_data_alloc(&in_odsc);
     ssd_copy(od, from_obj);
     ABT_mutex_unlock(server->ls_mutex);
