@@ -321,13 +321,12 @@ static inline hg_return_t hg_proc_dsp_buf_t(hg_proc_t proc, void *data)
 
 MERCURY_GEN_PROC(bulk_gdim_t, ((odsc_hdr_with_gdim)(odsc))((hg_bulk_t)(handle)))
 MERCURY_GEN_PROC(bulk_in_t, ((odsc_hdr)(odsc))((hg_bulk_t)(handle)))
-MERCURY_GEN_PROC(bulk_out_t, ((int32_t)(ret)))
+MERCURY_GEN_PROC(bulk_out_t, ((int32_t)(ret))((hg_size_t)(len)))
 MERCURY_GEN_PROC(put_meta_in_t, ((hg_string_t)(name))((int32_t)(length))(
                                     (int32_t)(version))((hg_bulk_t)(handle)))
 MERCURY_GEN_PROC(query_meta_in_t,
                  ((hg_string_t)(name))((int32_t)(version))((uint8_t)(mode)))
-MERCURY_GEN_PROC(query_meta_out_t,
-                 ((dsp_buf_t)(mdata))((int32_t)(version)))
+MERCURY_GEN_PROC(query_meta_out_t, ((dsp_buf_t)(mdata))((int32_t)(version)))
 MERCURY_GEN_PROC(odsc_gdim_t,
                  ((odsc_hdr_with_gdim)(odsc_gdim))((int32_t)(param)))
 MERCURY_GEN_PROC(odsc_list_t, ((odsc_hdr)(odsc_list))((int32_t)(param)))

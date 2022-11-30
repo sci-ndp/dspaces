@@ -13,6 +13,7 @@
 #include <abt.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <lz4.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1870,6 +1871,8 @@ static void get_rpc(hg_handle_t handle)
     bulk_in_t in;
     bulk_out_t out;
     hg_bulk_t bulk_handle;
+    int csize;
+    void *cbuffer;
 
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
 
@@ -1906,8 +1909,9 @@ static void get_rpc(hg_handle_t handle)
 
     hg_size_t size = (in_odsc.size) * bbox_volume(&(in_odsc.bb));
     void *buffer = (void *)od->data;
-    hret = margo_bulk_create(mid, 1, (void **)&buffer, &size, HG_BULK_READ_ONLY,
-                             &bulk_handle);
+    cbuffer = malloc(size);
+    hret = margo_bulk_create(mid, 1, (void **)&cbuffer, &size,
+                             HG_BULK_READ_ONLY, &bulk_handle);
 
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s): margo_bulk_create() failure\n", __func__);
@@ -1918,8 +1922,20 @@ static void get_rpc(hg_handle_t handle)
         return;
     }
 
+    csize = LZ4_compress_default(od->data, cbuffer, size, size);
+    DEBUG_OUT("compressed result from %li to %i bytes.\n", size, csize);
+    if(!csize) {
+        fprintf(stderr, "ERROR (%s): LZ4 compression failed.\n", __func__);
+        out.ret = -1;
+        margo_respond(handle, &out);
+        free(cbuffer);
+        margo_free_input(handle, &in);
+        margo_destroy(handle);
+        return;
+    }
+
     hret = margo_bulk_transfer(mid, HG_BULK_PUSH, info->addr, in.handle, 0,
-                               bulk_handle, 0, size);
+                               bulk_handle, 0, csize);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s): margo_bulk_transfer() failure (%d)\n",
                 __func__, hret);
@@ -1932,7 +1948,7 @@ static void get_rpc(hg_handle_t handle)
     }
     margo_bulk_free(bulk_handle);
     out.ret = dspaces_SUCCESS;
-    out.ret = dspaces_SUCCESS;
+    out.len = csize;
     obj_data_free(od);
     margo_respond(handle, &out);
     margo_free_input(handle, &in);

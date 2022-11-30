@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <lz4.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1148,15 +1149,19 @@ static int get_data(dspaces_client_t client, int num_odscs,
 {
     struct timeval start, stop;
     bulk_in_t *in;
-    in = (bulk_in_t *)malloc(sizeof(bulk_in_t) * num_odscs);
-
     struct obj_data **od;
-    od = malloc(num_odscs * sizeof(struct obj_data *));
-
     margo_request *serv_req;
     hg_handle_t *hndl;
+    hg_size_t *rdma_size;
+    size_t max_size = 0;
+    void *ucbuffer;
+    int ret;
+
+    in = (bulk_in_t *)malloc(sizeof(bulk_in_t) * num_odscs);
+    od = malloc(num_odscs * sizeof(struct obj_data *));
     hndl = (hg_handle_t *)malloc(sizeof(hg_handle_t) * num_odscs);
     serv_req = (margo_request *)malloc(sizeof(margo_request) * num_odscs);
+    rdma_size = (hg_size_t *)malloc(sizeof(*rdma_size) * num_odscs);
 
     gettimeofday(&start, NULL);
 
@@ -1165,10 +1170,13 @@ static int get_data(dspaces_client_t client, int num_odscs,
         in[i].odsc.size = sizeof(obj_descriptor);
         in[i].odsc.raw_odsc = (char *)(&odsc_tab[i]);
 
-        hg_size_t rdma_size = (req_obj.size) * bbox_volume(&odsc_tab[i].bb);
+        rdma_size[i] = (req_obj.size) * bbox_volume(&odsc_tab[i].bb);
 
-        margo_bulk_create(client->mid, 1, (void **)(&(od[i]->data)), &rdma_size,
-                          HG_BULK_WRITE_ONLY, &in[i].handle);
+        margo_bulk_create(client->mid, 1, (void **)(&(od[i]->data)),
+                          &rdma_size[i], HG_BULK_WRITE_ONLY, &in[i].handle);
+        if(rdma_size[i] > max_size) {
+            max_size = rdma_size[i];
+        }
 
         hg_addr_t server_addr;
         margo_addr_lookup(client->mid, odsc_tab[i].owner, &server_addr);
@@ -1191,6 +1199,7 @@ static int get_data(dspaces_client_t client, int num_odscs,
     }
 
     struct obj_data *return_od = obj_data_alloc_no_data(&req_obj, data);
+    ucbuffer = malloc(max_size);
 
     // TODO: rewrite with margo_wait_any()
     for(int i = 0; i < num_odscs; ++i) {
@@ -1199,6 +1208,18 @@ static int get_data(dspaces_client_t client, int num_odscs,
         margo_get_output(hndl[i], &resp);
         margo_free_output(hndl[i], &resp);
         margo_destroy(hndl[i]);
+
+        if(!(odsc_tab[i].flags & DS_CLIENT_STORAGE)) {
+            // decompress into buffer and copy back
+            ret = LZ4_decompress_safe(od[i]->data, ucbuffer, resp.len,
+                                      rdma_size[i]);
+            DEBUG_OUT("decompressed from %li to %i bytes\n", resp.len, ret);
+            if(ret != rdma_size[i]) {
+                fprintf(stderr, "LZ4 decompression failed with %i.\n", ret);
+            }
+            memcpy(od[i]->data, ucbuffer, rdma_size[i]);
+        }
+
         // copy received data into user return buffer
         ssd_copy(return_od, od[i]);
         obj_data_free(od[i]);
@@ -1207,6 +1228,8 @@ static int get_data(dspaces_client_t client, int num_odscs,
     free(serv_req);
     free(in);
     free(return_od);
+    free(rdma_size);
+    free(ucbuffer);
 
     gettimeofday(&stop, NULL);
 
