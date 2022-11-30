@@ -60,6 +60,7 @@ set (BUILD_SHARED_LIBS "OFF" CACHE BOOL "Build a shared library")
 # packages we depend on
 include (xpkg-import)
 xpkg_import_module (margo REQUIRED margo)
+xpkg_import_module (liblz4 REQUIRED liblz4)
 
 include(python_bindings)
 
