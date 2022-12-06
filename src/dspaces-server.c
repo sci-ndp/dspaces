@@ -1820,14 +1820,14 @@ static int peek_meta_remotes(dspaces_provider_t server, peek_meta_in_t *in)
         hret = margo_create(server->mid, addr, server->peek_meta_id,
                             &peek_hndls[i]);
         fprintf(stderr, "margo_create hret = %i\n", hret);
-        hret = margo_forward(peek_hndls[i], in);
-        fprintf(stderr, "margo_forward hret = %i\n", hret);
+        hret = margo_iforward(peek_hndls[i], in, &reqs[i]);
+        fprintf(stderr, "margo_iforward hret = %i\n", hret);
         margo_addr_free(server->mid, addr);
     }
 
     for(i = 0; i < server->nremote; i++) {
-        // hret = margo_wait_any(server->nremote, reqs, &index);
-        // fprintf(stderr, "margo_wait_any hret = %i\n", hret);
+        hret = margo_wait_any(server->nremote, reqs, &index);
+        fprintf(stderr, "margo_wait_any hret = %i\n", hret);
         margo_get_output(peek_hndls[index], &resps[index]);
         fprintf(stderr, "margo_get_output hret = %i\n", hret);
         DEBUG_OUT("%s replied with %i\n", server->remotes[index].name,
