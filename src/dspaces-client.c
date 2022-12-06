@@ -1209,7 +1209,7 @@ static int get_data(dspaces_client_t client, int num_odscs,
         margo_free_output(hndl[i], &resp);
         margo_destroy(hndl[i]);
 
-        if(!(odsc_tab[i].flags & DS_CLIENT_STORAGE)) {
+        if((!(odsc_tab[i].flags & DS_CLIENT_STORAGE)) && resp.len) {
             // decompress into buffer and copy back
             ret = LZ4_decompress_safe(od[i]->data, ucbuffer, resp.len,
                                       rdma_size[i]);
@@ -1218,6 +1218,8 @@ static int get_data(dspaces_client_t client, int num_odscs,
                 fprintf(stderr, "LZ4 decompression failed with %i.\n", ret);
             }
             memcpy(od[i]->data, ucbuffer, rdma_size[i]);
+        } else if(!resp.len) {
+            DEBUG_OUT("receive bbuffer is not compressed.\n");
         }
 
         // copy received data into user return buffer

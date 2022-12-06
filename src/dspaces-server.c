@@ -1814,9 +1814,11 @@ static int peek_meta_remotes(dspaces_provider_t server, peek_meta_in_t *in)
 
     DEBUG_OUT("sending peek request to remotes for metadata '%s'\n", in->name);
     for(i = 0; i < server->nremote; i++) {
-        DEBUG_OUT("querying %s at %s\n", server->remotes[i].name, server->remotes[i].addr_str);
+        DEBUG_OUT("querying %s at %s\n", server->remotes[i].name,
+                  server->remotes[i].addr_str);
         margo_addr_lookup(server->mid, server->remotes[i].addr_str, &addr);
-        hret = margo_create(server->mid, addr, server->peek_meta_id, &peek_hndls[i]);
+        hret = margo_create(server->mid, addr, server->peek_meta_id,
+                            &peek_hndls[i]);
         fprintf(stderr, "margo_create hret = %i\n", hret);
         hret = margo_forward(peek_hndls[i], in);
         fprintf(stderr, "margo_forward hret = %i\n", hret);
@@ -1824,11 +1826,12 @@ static int peek_meta_remotes(dspaces_provider_t server, peek_meta_in_t *in)
     }
 
     for(i = 0; i < server->nremote; i++) {
-        //hret = margo_wait_any(server->nremote, reqs, &index);
-        //fprintf(stderr, "margo_wait_any hret = %i\n", hret);
+        // hret = margo_wait_any(server->nremote, reqs, &index);
+        // fprintf(stderr, "margo_wait_any hret = %i\n", hret);
         margo_get_output(peek_hndls[index], &resps[index]);
         fprintf(stderr, "margo_get_output hret = %i\n", hret);
-        DEBUG_OUT("%s replied with %i\n", server->remotes[index].name, resps[index].res);
+        DEBUG_OUT("%s replied with %i\n", server->remotes[index].name,
+                  resps[index].res);
         if(resps[index].res == 1) {
             ret = i;
         }
@@ -2054,19 +2057,16 @@ static void get_rpc(hg_handle_t handle)
     }
 
     csize = LZ4_compress_default(od->data, cbuffer, size, size);
+
     DEBUG_OUT("compressed result from %li to %i bytes.\n", size, csize);
     if(!csize) {
-        fprintf(stderr, "ERROR (%s): LZ4 compression failed.\n", __func__);
-        out.ret = -1;
-        margo_respond(handle, &out);
-        free(cbuffer);
-        margo_free_input(handle, &in);
-        margo_destroy(handle);
-        return;
+        DEBUG_OUT("compressed result could not fit in dst buffer - longer than "
+                  "original! Sending uncompressed.\n");
+        memcpy(cbuffer, od->data, size);
     }
 
     hret = margo_bulk_transfer(mid, HG_BULK_PUSH, info->addr, in.handle, 0,
-                               bulk_handle, 0, csize);
+                               bulk_handle, 0, (csize ? csize : size));
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s): margo_bulk_transfer() failure (%d)\n",
                 __func__, hret);
@@ -2084,6 +2084,7 @@ static void get_rpc(hg_handle_t handle)
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
     margo_destroy(handle);
+    free(cbuffer);
 }
 DEFINE_MARGO_RPC_HANDLER(get_rpc)
 
