@@ -1871,7 +1871,7 @@ static void peek_meta_rpc(hg_handle_t handle)
 
     out.res = 0;
 
-    if(meta_find_entry(server->dsg->ls, in.name, -1, 0)) {
+    if(meta_find_next_entry(server->dsg->ls, in.name, -1, 0)) {
         DEBUG_OUT("found the metadata\n");
         out.res = 1;
     } else if(server->nremote) {
