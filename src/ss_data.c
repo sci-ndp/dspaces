@@ -1662,12 +1662,9 @@ int dht_find_entry_all(struct dht_entry *de, obj_descriptor *q_odsc,
     struct obj_desc_list *odscl;
     struct bbox isect;
     int sub = timeout != 0 && de == de->ss->ent_self;
-    fprintf(stderr, "%s: sub = %i\n", __func__, sub);
 
     n = q_odsc->version % de->odsc_size;
-    fprintf(stderr, "%s: n = %i\n", __func__, n);
     num_elem = ssh_hash_elem_count(de->ss, &q_odsc->bb);
-    fprintf(stderr, "%s: num_elem = %li\n", __func__, num_elem);
     if(sub) {
         ABT_mutex_lock(de->hash_mutex[n]);
     }
@@ -1675,13 +1672,10 @@ int dht_find_entry_all(struct dht_entry *de, obj_descriptor *q_odsc,
     list_for_each_entry(odscl, &de->odsc_hash[n], struct obj_desc_list,
                         odsc_entry)
     {
-        fprintf(stderr, "%s: checking hashed object\n", __func__);
         if(obj_desc_equals_intersect(&odscl->odsc, q_odsc)) {
             (*odsc_tab)[num_odsc++] = &odscl->odsc;
             bbox_intersect(&q_odsc->bb, &odscl->odsc.bb, &isect);
             num_elem -= ssh_hash_elem_count(de->ss, &isect);
-            fprintf(stderr, "%s: hashed object matches, num_elem now %li\n",
-                    __func__, num_elem);
         }
     }
     if(sub) {
