@@ -63,6 +63,7 @@ struct dspaces_provider {
     hg_id_t put_local_id;
     hg_id_t put_meta_id;
     hg_id_t query_id;
+    hg_id_t peek_meta_id;
     hg_id_t query_meta_id;
     hg_id_t get_id;
     hg_id_t get_local_id;
@@ -112,6 +113,7 @@ DECLARE_MARGO_RPC_HANDLER(put_local_rpc)
 DECLARE_MARGO_RPC_HANDLER(put_meta_rpc)
 DECLARE_MARGO_RPC_HANDLER(get_rpc)
 DECLARE_MARGO_RPC_HANDLER(query_rpc)
+DECLARE_MARGO_RPC_HANDLER(peek_meta_rpc)
 DECLARE_MARGO_RPC_HANDLER(query_meta_rpc)
 DECLARE_MARGO_RPC_HANDLER(obj_update_rpc)
 DECLARE_MARGO_RPC_HANDLER(odsc_internal_rpc)
@@ -1021,6 +1023,10 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                               &flag);
         DS_HG_REGISTER(hg, server->query_id, odsc_gdim_t, odsc_list_t,
                        query_rpc);
+        margo_registered_name(server->mid, "peek_meta_rpc",
+                              &server->peek_meta_id, &flag);
+        DS_HG_REGISTER(hg, server->peek_meta_id, peek_meta_in_t,
+                       peek_meta_out_t, peek_meta_rpc);
         margo_registered_name(server->mid, "query_meta_rpc",
                               &server->query_meta_id, &flag);
         DS_HG_REGISTER(hg, server->query_meta_id, query_meta_in_t,
@@ -1067,6 +1073,11 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
         server->query_id = MARGO_REGISTER(server->mid, "query_rpc", odsc_gdim_t,
                                           odsc_list_t, query_rpc);
         margo_register_data(server->mid, server->query_id, (void *)server,
+                            NULL);
+        server->peek_meta_id =
+            MARGO_REGISTER(server->mid, "peek_meta_rpc", peek_meta_in_t,
+                           peek_meta_out_t, peek_meta_rpc);
+        margo_register_data(server->mid, server->peek_meta_id, (void *)server,
                             NULL);
         server->query_meta_id =
             MARGO_REGISTER(server->mid, "query_meta_rpc", query_meta_in_t,
@@ -1786,14 +1797,105 @@ static void query_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(query_rpc)
 
+static int peek_meta_remotes(dspaces_provider_t server, peek_meta_in_t *in)
+{
+    margo_request *reqs;
+    hg_handle_t *peek_hndls;
+    peek_meta_out_t *resps;
+    hg_addr_t addr;
+    int i;
+    int ret = -1;
+    size_t index;
+    hg_return_t hret;
+
+    reqs = malloc(sizeof(*reqs) * server->nremote);
+    resps = malloc(sizeof(*resps) * server->nremote);
+    peek_hndls = malloc(sizeof(*peek_hndls) * server->nremote);
+
+    DEBUG_OUT("sending peek request to remotes for metadata '%s'\n", in->name);
+    for(i = 0; i < server->nremote; i++) {
+        DEBUG_OUT("querying %s at %s\n", server->remotes[i].name, server->remotes[i].addr_str);
+        margo_addr_lookup(server->mid, server->remotes[i].addr_str, &addr);
+        hret = margo_create(server->mid, addr, server->peek_meta_id, &peek_hndls[i]);
+        fprintf(stderr, "margo_create hret = %i\n", hret);
+        hret = margo_forward(peek_hndls[i], in);
+        fprintf(stderr, "margo_forward hret = %i\n", hret);
+        margo_addr_free(server->mid, addr);
+    }
+
+    for(i = 0; i < server->nremote; i++) {
+        //hret = margo_wait_any(server->nremote, reqs, &index);
+        //fprintf(stderr, "margo_wait_any hret = %i\n", hret);
+        margo_get_output(peek_hndls[index], &resps[index]);
+        fprintf(stderr, "margo_get_output hret = %i\n", hret);
+        DEBUG_OUT("%s replied with %i\n", server->remotes[index].name, resps[index].res);
+        if(resps[index].res == 1) {
+            ret = i;
+        }
+        margo_free_output(peek_hndls[index], &resps[index]);
+        margo_destroy(peek_hndls[index]);
+    }
+
+    free(reqs);
+    free(resps);
+    free(peek_hndls);
+
+    return (ret);
+}
+
+static void peek_meta_rpc(hg_handle_t handle)
+{
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    const struct hg_info *info = margo_get_info(handle);
+    dspaces_provider_t server =
+        (dspaces_provider_t)margo_registered_data(mid, info->id);
+    peek_meta_in_t in;
+    peek_meta_out_t out;
+    hg_return_t hret;
+    hg_addr_t addr;
+
+    hret = margo_get_input(handle, &in);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr,
+                "DATASPACES: ERROR handling %s: margo_get_input() failed with "
+                "%d.\n",
+                __func__, hret);
+        margo_destroy(handle);
+        return;
+    }
+
+    DEBUG_OUT("received peek request for metadata '%s'\n", in.name);
+
+    out.res = 0;
+
+    if(meta_find_entry(server->dsg->ls, in.name, -1, 0)) {
+        DEBUG_OUT("found the metadata\n");
+        out.res = 1;
+    } else if(server->nremote) {
+        DEBUG_OUT("no such metadata in local storage.\n");
+        if(peek_meta_remotes(server, &in) > -1) {
+            out.res = 1;
+        }
+    }
+
+    margo_respond(handle, &out);
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(peek_meta_rpc)
+
 static void query_meta_rpc(hg_handle_t handle)
 {
     margo_instance_id mid;
     const struct hg_info *info;
     dspaces_provider_t server;
     query_meta_in_t in;
-    query_meta_out_t out;
+    query_meta_out_t rem_out, out;
+    peek_meta_in_t rem_in;
     struct meta_data *mdata, *mdlatest;
+    int remote, found_remote;
+    hg_handle_t rem_hndl;
+    hg_addr_t rem_addr;
     hg_return_t hret;
 
     mid = margo_hg_handle_get_instance(handle);
@@ -1812,55 +1914,84 @@ static void query_meta_rpc(hg_handle_t handle)
     DEBUG_OUT("received metadata query for version %d of '%s', mode %d.\n",
               in.version, in.name, in.mode);
 
-    switch(in.mode) {
-    case META_MODE_SPEC:
-        DEBUG_OUT("spec query - searching without waiting...\n");
-        mdata = meta_find_entry(server->dsg->ls, in.name, in.version, 0);
-        break;
-    case META_MODE_NEXT:
-        DEBUG_OUT("find next query...\n");
-        mdata = meta_find_next_entry(server->dsg->ls, in.name, in.version, 1);
-        break;
-    case META_MODE_LAST:
-        DEBUG_OUT("find last query...\n");
-        mdata = meta_find_next_entry(server->dsg->ls, in.name, in.version, 1);
-        mdlatest = mdata;
-        do {
-            mdata = mdlatest;
-            DEBUG_OUT("found version %d. Checking for newer...\n",
-                      mdata->version);
-            mdlatest = meta_find_next_entry(server->dsg->ls, in.name,
-                                            mdlatest->version, 0);
-        } while(mdlatest);
-        break;
-    default:
-        fprintf(stderr,
-                "ERROR: unkown mode %d while processing metadata query.\n",
-                in.mode);
-    }
-
-    if(mdata) {
-        DEBUG_OUT("found version %d, length %d.", mdata->version,
-                  mdata->length);
-        out.mdata.len = mdata->length;
-        out.mdata.buf = malloc(mdata->length);
-        memcpy(out.mdata.buf, mdata->data, mdata->length);
-        /*
-        hret = margo_bulk_create(mid, 1, (void **)&mdata->data, &out.size,
-                                 HG_BULK_READ_ONLY, &out.handle);
-        if(hret != HG_SUCCESS) {
-            fprintf(stderr, "margo_bulk_create failed with %d\n", hret);
+    found_remote = 0;
+    if(server->nremote) {
+        rem_in.name = in.name;
+        remote = peek_meta_remotes(server, &rem_in);
+        if(remote > -1) {
+            DEBUG_OUT("remote %s has %s metadata\n",
+                      server->remotes[remote].name, in.name);
+            margo_addr_lookup(server->mid, server->remotes[remote].addr_str,
+                              &rem_addr);
+            hret = margo_create(server->mid, rem_addr, server->query_meta_id,
+                                &rem_hndl);
+            if(hret != HG_SUCCESS) {
+                fprintf(stderr, "ERROR: (%s): margo_create() failed\n",
+                        __func__);
+                margo_addr_free(server->mid, rem_addr);
+            } else {
+                margo_forward(rem_hndl, &in);
+                hret = margo_get_output(rem_hndl, &out);
+                if(hret != HG_SUCCESS) {
+                    fprintf(stderr,
+                            "ERROR: %s: margo_get_output() failed with %d.\n",
+                            __func__, hret);
+                } else {
+                    DEBUG_OUT("retreived metadata from %s\n",
+                              server->remotes[remote].name);
+                    found_remote = 1;
+                }
+            }
         }
-        */
-        out.version = mdata->version;
-    } else {
-        out.mdata.len = 0;
-        out.version = -1;
     }
+    if(!found_remote) {
+        switch(in.mode) {
+        case META_MODE_SPEC:
+            DEBUG_OUT("spec query - searching without waiting...\n");
+            mdata = meta_find_entry(server->dsg->ls, in.name, in.version, 0);
+            break;
+        case META_MODE_NEXT:
+            DEBUG_OUT("find next query...\n");
+            mdata =
+                meta_find_next_entry(server->dsg->ls, in.name, in.version, 1);
+            break;
+        case META_MODE_LAST:
+            DEBUG_OUT("find last query...\n");
+            mdata =
+                meta_find_next_entry(server->dsg->ls, in.name, in.version, 1);
+            mdlatest = mdata;
+            do {
+                mdata = mdlatest;
+                DEBUG_OUT("found version %d. Checking for newer...\n",
+                          mdata->version);
+                mdlatest = meta_find_next_entry(server->dsg->ls, in.name,
+                                                mdlatest->version, 0);
+            } while(mdlatest);
+            break;
+        default:
+            fprintf(stderr,
+                    "ERROR: unkown mode %d while processing metadata query.\n",
+                    in.mode);
+        }
 
+        if(mdata) {
+            DEBUG_OUT("found version %d, length %d.", mdata->version,
+                      mdata->length);
+            out.mdata.len = mdata->length;
+            out.mdata.buf = malloc(mdata->length);
+            memcpy(out.mdata.buf, mdata->data, mdata->length);
+            out.version = mdata->version;
+        } else {
+            out.mdata.len = 0;
+            out.version = -1;
+        }
+    }
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
-    // margo_bulk_free(out.handle);
+    if(found_remote) {
+        margo_free_output(rem_hndl, &out);
+        margo_destroy(rem_hndl);
+    }
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(query_meta_rpc)

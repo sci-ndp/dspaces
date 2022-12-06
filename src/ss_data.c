@@ -1785,7 +1785,7 @@ struct meta_data *meta_find_next_entry(ss_storage *ls, const char *name,
 {
     int i, index;
     struct list_head *list;
-    struct meta_data *mdata, *mdres;
+    struct meta_data *mdata, *mdres = NULL;
 
     for(index = 0; index <= ls->size_hash; index++) {
         ABT_mutex_lock(ls->meta_mutex[index]);
