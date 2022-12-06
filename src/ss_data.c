@@ -1664,8 +1664,8 @@ int dht_find_entry_all(struct dht_entry *de, obj_descriptor *q_odsc,
     int sub = timeout != 0 && de == de->ss->ent_self;
 
     n = q_odsc->version % de->odsc_size;
+    num_elem = ssh_hash_elem_count(de->ss, &q_odsc->bb);
     if(sub) {
-        num_elem = ssh_hash_elem_count(de->ss, &q_odsc->bb);
         ABT_mutex_lock(de->hash_mutex[n]);
     }
     *odsc_tab = malloc(sizeof(**odsc_tab) * de->odsc_num);
