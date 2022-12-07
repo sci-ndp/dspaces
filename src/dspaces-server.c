@@ -315,27 +315,19 @@ static int parse_conf_toml(const char *fname, struct remote **rem_array,
 
     remotes = toml_table_in(conf, "remotes");
     if(remotes) {
-        fprintf(stderr, "parsing remotes\n");
         *nremote = toml_table_ntab(remotes);
         *rem_array = malloc(sizeof(**rem_array) * *nremote);
-        fprintf(stderr, "%i remotes\n", *nremote);
         for(i = 0; i < *nremote; i++) {
             // remote = toml_table_at(remotes, i);
             (*rem_array)[i].name = strdup(toml_key_in(remotes, i));
             remote = toml_table_in(remotes, (*rem_array)[i].name);
-            fprintf(stderr, "remote %s\n", toml_key_in(remotes, i));
             dat = toml_string_in(remote, "ip");
             ip = dat.u.s;
-            fprintf(stderr, "ip: %s\n", ip);
             dat = toml_int_in(remote, "port");
             port = dat.u.i;
             sprintf((*rem_array)[i].addr_str, "sockets://%s:%i", ip, port);
-            fprintf(stderr, "%s address string: %s\n", (*rem_array)[i].name,
-                    (*rem_array)[i].addr_str);
             free(ip);
         }
-    } else {
-        fprintf(stderr, "no remotes\n");
     }
 
     toml_free(conf);
@@ -1819,17 +1811,13 @@ static int peek_meta_remotes(dspaces_provider_t server, peek_meta_in_t *in)
         margo_addr_lookup(server->mid, server->remotes[i].addr_str, &addr);
         hret = margo_create(server->mid, addr, server->peek_meta_id,
                             &peek_hndls[i]);
-        fprintf(stderr, "margo_create hret = %i\n", hret);
         hret = margo_iforward(peek_hndls[i], in, &reqs[i]);
-        fprintf(stderr, "margo_iforward hret = %i\n", hret);
         margo_addr_free(server->mid, addr);
     }
 
     for(i = 0; i < server->nremote; i++) {
         hret = margo_wait_any(server->nremote, reqs, &index);
-        fprintf(stderr, "margo_wait_any hret = %i\n", hret);
         margo_get_output(peek_hndls[index], &resps[index]);
-        fprintf(stderr, "margo_get_output hret = %i\n", hret);
         DEBUG_OUT("%s replied with %i\n", server->remotes[index].name,
                   resps[index].res);
         if(resps[index].res == 1) {
