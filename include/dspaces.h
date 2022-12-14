@@ -8,6 +8,7 @@
 #ifndef __DSPACES_CLIENT_H
 #define __DSPACES_CLIENT_H
 
+#include <dspaces-ops.h>
 #include <dspaces-common.h>
 #include <mpi.h>
 #include <stdint.h>

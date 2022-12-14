@@ -5,7 +5,7 @@ if(HAVE_DRC)
 endif()
 
 # list of source files
-set(dspaces-src util.c bbox.c ss_data.c dspaces-client.c)
+set(dspaces-src util.c bbox.c ss_data.c dspaces-client.c dspaces-ops.c)
 
 # load package helper for generating cmake CONFIG packages
 include (CMakePackageConfigHelpers)
