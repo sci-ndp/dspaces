@@ -492,7 +492,7 @@ static int dspaces_init_margo(dspaces_client_t client,
     hii.na_init_info.auth_key = drc_key_str;
 
     client->mid =
-        margo_init_opt(listen_addr_str, MARGO_SERVER_MODE, &hii, 0, 0);
+        margo_init_ext(listen_addr_str, MARGO_SERVER_MODE, &mii);
 
 #else
 
