@@ -948,7 +948,6 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     drc_cookie = drc_get_first_cookie(drc_credential_info);
     sprintf(drc_key_str, "%u", drc_cookie);
 
-    struct hg_init_info hii;
     memset(&hii, 0, sizeof(hii));
     hii.na_init_info.auth_key = drc_key_str;
 
@@ -963,8 +962,7 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
         }
     }
 
-    server->mid = margo_init_opt(listen_addr_str, MARGO_SERVER_MODE, &hii, 1,
-                                 num_handlers);
+    server->mid = margo_init_ext(listen_addr_str, MARGO_SERVER_MODE, &mii);
 
 #else
 
