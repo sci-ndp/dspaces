@@ -3,6 +3,7 @@
 #include <dspaces.h>
 #include <list.h>
 #include <ss_data.h>
+#include <math.h>
 
 struct ds_data_expr *dspaces_op_new_obj(dspaces_client_t client,
                                         const char *var_name, unsigned int ver,
@@ -89,12 +90,36 @@ struct ds_data_expr *dspaces_op_new_add(struct ds_data_expr *expr1,
     return (dspaces_op_new_2arg(DS_OP_ADD, expr1, expr2));
 }
 
+struct ds_data_expr *dspaces_op_new_sub(struct ds_data_expr *expr1,
+                                        struct ds_data_expr *expr2)
+{
+    return (dspaces_op_new_2arg(DS_OP_SUB, expr1, expr2));
+}
+
+struct ds_data_expr *dspaces_op_new_mult(struct ds_data_expr *expr1,
+                                        struct ds_data_expr *expr2)
+{
+    return (dspaces_op_new_2arg(DS_OP_MULT, expr1, expr2));
+}
+
+struct ds_data_expr *dspaces_op_new_div(struct ds_data_expr *expr1,
+                                        struct ds_data_expr *expr2)
+{
+    return (dspaces_op_new_2arg(DS_OP_DIV, expr1, expr2));
+}
+
+struct ds_data_expr *dspaces_op_new_pow(struct ds_data_expr *expr1,
+                                        struct ds_data_expr *expr2)
+{
+    return (dspaces_op_new_2arg(DS_OP_POW, expr1, expr2));
+}
+
 struct ds_data_expr *dspaces_op_new_2arg(ds_op_t op, struct ds_data_expr *expr1,
                                          struct ds_data_expr *expr2)
 {
     struct ds_data_expr *expr;
 
-    if(op != DS_OP_ADD) {
+    if(op < DS_OP_ADD || op > DS_OP_POW) {
         fprintf(stderr, "ERROR: %s: unkown opcode %i.\n", __func__, op);
         return (NULL);
     }
@@ -148,6 +173,10 @@ double ds_op_calc_rval(struct ds_data_expr *expr, long pos, int *res)
     case DS_OP_RCONST:
         return (expr->rval);
     case DS_OP_ADD:
+    case DS_OP_SUB:
+    case DS_OP_MULT:
+    case DS_OP_DIV:
+    case DS_OP_POW:
         if(expr->sub_expr[0]->type == DS_VAL_REAL) {
             subval1 = ds_op_calc_rval(expr->sub_expr[0], pos, &err);
         } else if(expr->sub_expr[0]->type == DS_VAL_INT) {
@@ -176,6 +205,14 @@ double ds_op_calc_rval(struct ds_data_expr *expr, long pos, int *res)
     switch(expr->op) {
     case DS_OP_ADD:
         return (subval1 + subval2);
+    case DS_OP_SUB:
+        return(subval1 - subval2);
+    case DS_OP_MULT:
+        return(subval1 * subval2);
+    case DS_OP_DIV:
+        return(subval1 / subval2);
+    case DS_OP_POW:
+        return(pow(subval1, subval2));
     default:
         fprintf(stderr,
                 "ERROR: %s: no way to handle unknown op %i (corruption?)\n",
@@ -217,6 +254,10 @@ int ds_op_calc_ival(struct ds_data_expr *expr, long pos, int *res)
     case DS_OP_ICONST:
         return (expr->ival);
     case DS_OP_ADD:
+    case DS_OP_SUB:
+    case DS_OP_MULT:
+    case DS_OP_DIV:
+    case DS_OP_POW:
         if(expr->sub_expr[0]->type == DS_VAL_REAL) {
             subval1 = ds_op_calc_rval(expr->sub_expr[0], pos, &err);
         } else if(expr->sub_expr[0]->type == DS_VAL_INT) {
@@ -246,6 +287,15 @@ int ds_op_calc_ival(struct ds_data_expr *expr, long pos, int *res)
     switch(expr->op) {
     case DS_OP_ADD:
         return (subval1 + subval2);
+    case DS_OP_SUB:
+        return(subval1 - subval2);
+    case DS_OP_MULT:
+        return(subval1 * subval2);
+    case DS_OP_DIV:
+        return(subval1 / subval2);
+    case DS_OP_POW:
+        return(pow(subval1, subval2));
+
     default:
         fprintf(stderr,
                 "ERROR: %s: no way to handle unknown op %i (corruption?)\n",

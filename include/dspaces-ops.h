@@ -8,7 +8,11 @@ typedef enum ds_operator {
     DS_OP_OBJ,
     DS_OP_ICONST,
     DS_OP_RCONST,
-    DS_OP_ADD
+    DS_OP_ADD,
+    DS_OP_SUB,
+    DS_OP_MULT,
+    DS_OP_DIV,
+    DS_OP_POW
 } ds_op_t;
 
 typedef enum ds_val_type {
@@ -57,6 +61,10 @@ static inline hg_return_t hg_proc_ds_expr_t(hg_proc_t proc, void *data)
                 ret = HG_SUCCESS;
                 break;
             case DS_OP_ADD:
+            case DS_OP_SUB:
+            case DS_OP_MULT:
+            case DS_OP_DIV:
+            case DS_OP_POW:
                 byte = 2;
                 hg_proc_uint8_t(proc, &byte);
                 hg_proc_ds_expr_t(proc, &buf->sub_expr[0]);
@@ -64,8 +72,6 @@ static inline hg_return_t hg_proc_ds_expr_t(hg_proc_t proc, void *data)
                 ret = HG_SUCCESS;
                 break;
             default:
-                int *a = NULL;
-                int b = *a;
                 ret = HG_INVALID_PARAM;
         }
         break;
@@ -93,6 +99,10 @@ static inline hg_return_t hg_proc_ds_expr_t(hg_proc_t proc, void *data)
                 ret = HG_SUCCESS;
                 break;
             case DS_OP_ADD:
+            case DS_OP_SUB:
+            case DS_OP_MULT:
+            case DS_OP_DIV:
+            case DS_OP_POW:
                 hg_proc_uint8_t(proc, &byte);
                 buf->sub_expr = malloc(byte * sizeof(*buf->sub_expr));
                 for(i = 0; i < byte; i++) {
@@ -116,6 +126,10 @@ static inline hg_return_t hg_proc_ds_expr_t(hg_proc_t proc, void *data)
                 ret = HG_SUCCESS;
                 break;
             case DS_OP_ADD:
+            case DS_OP_SUB:
+            case DS_OP_MULT:
+            case DS_OP_DIV:
+            case DS_OP_POW:
                 free(buf->sub_expr[0]);
                 free(buf->sub_expr[1]);
                 free(buf->sub_expr);
@@ -139,6 +153,14 @@ struct ds_data_expr *dspaces_op_new_iconst(int val);
 struct ds_data_expr *dspaces_op_new_rconst(double val);
 
 struct ds_data_expr *dspaces_op_new_add(struct ds_data_expr *expr1, struct ds_data_expr *expr2);
+
+struct ds_data_expr *dspaces_op_new_sub(struct ds_data_expr *expr1, struct ds_data_expr *expr2);
+
+struct ds_data_expr *dspaces_op_new_mult(struct ds_data_expr *expr1, struct ds_data_expr *expr2);
+
+struct ds_data_expr *dspaces_op_new_div(struct ds_data_expr *expr1, struct ds_data_expr *expr2);
+
+struct ds_data_expr *dspaces_op_new_pow(struct ds_data_expr *expr1, struct ds_data_expr *expr2);
 
 struct ds_data_expr *dspaces_op_new_2arg(ds_op_t op, struct ds_data_expr *expr1, struct ds_data_expr *expr2);
 
