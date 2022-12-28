@@ -8,6 +8,7 @@
 #include "dspacesp.h"
 #include "gspace.h"
 #include "ss_data.h"
+#include "dspaces-ops.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -100,6 +101,7 @@ struct dspaces_client {
     hg_id_t kill_client_id;
     hg_id_t sub_id;
     hg_id_t notify_id;
+    hg_id_t do_ops_id;
     struct dc_gspace *dcg;
     char **server_address;
     char **node_names;
@@ -563,6 +565,7 @@ static int dspaces_init_margo(dspaces_client_t client,
         DS_HG_REGISTER(hg, client->notify_id, odsc_list_t, void, notify_rpc);
         margo_registered_name(client->mid, "query_meta_rpc",
                               &client->query_meta_id, &flag);
+        margo_registered_name(client->mid, "do_ops_rpc", &client->do_ops_id, &flag);
     } else {
         client->put_id = MARGO_REGISTER(client->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, NULL);
@@ -610,6 +613,7 @@ static int dspaces_init_margo(dspaces_client_t client,
                             NULL);
         margo_registered_disable_response(client->mid, client->notify_id,
                                           HG_TRUE);
+        client->do_ops_id = MARGO_REGISTER(client->mid, "do_ops_rpc", do_ops_in_t, bulk_out_t, NULL);
     }
 
     return (dspaces_SUCCESS);
@@ -795,6 +799,15 @@ void dspaces_define_gdim(dspaces_client_t client, const char *var_name,
     } else {
         update_gdim_list(&(client->dcg->gdim_list), var_name, ndim, gdim);
     }
+}
+
+void dspaces_get_gdim(dspaces_client_t client, const char *var_name, int *ndim, uint64_t *gdims)
+{
+    struct global_dimension gdim;
+    
+    set_global_dimension(&(client->dcg->gdim_list), var_name,
+                           &(client->dcg->default_gdim), &gdim);
+    get_global_dimensions(&gdim, ndim, gdims);
 }
 
 static int setup_put(dspaces_client_t client, const char *var_name,
@@ -1206,8 +1219,6 @@ static int get_data(dspaces_client_t client, int num_odscs,
         margo_wait(serv_req[i]);
         bulk_out_t resp;
         margo_get_output(hndl[i], &resp);
-        margo_free_output(hndl[i], &resp);
-        margo_destroy(hndl[i]);
 
         if((!(odsc_tab[i].flags & DS_CLIENT_STORAGE)) && resp.len) {
             // decompress into buffer and copy back
@@ -1225,6 +1236,8 @@ static int get_data(dspaces_client_t client, int num_odscs,
         // copy received data into user return buffer
         ssd_copy(return_od, od[i]);
         obj_data_free(od[i]);
+        margo_free_output(hndl[i], &resp);
+        margo_destroy(hndl[i]);
     }
     free(hndl);
     free(serv_req);
@@ -2253,3 +2266,52 @@ void dspaces_kill(dspaces_client_t client)
     margo_addr_free(client->mid, server_addr);
     margo_destroy(h);
 }
+
+int dspaces_op_calc(dspaces_client_t client, struct ds_data_expr *expr, void **buf)
+{
+    hg_handle_t handle;
+    do_ops_in_t in;
+    bulk_out_t out;
+    hg_addr_t server_addr;
+    hg_size_t rdma_size = expr->size;
+    void *cbuf;
+    hg_return_t hret;
+    int ret;
+
+    in.expr = expr;
+    cbuf = malloc(expr->size);
+    
+    get_server_address(client, &server_addr);
+    
+    margo_bulk_create(client->mid, 1, &cbuf, &rdma_size, HG_BULK_WRITE_ONLY, &in.handle);
+    hret = margo_create(client->mid, server_addr, client->do_ops_id, &handle);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: %s: margo_create() failed with %d.\n", __func__, hret);
+        return(dspaces_ERR_MERCURY);
+    }
+    hret = margo_forward(handle, &in);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: %s: margo_forward() failed with %d.\n",
+                __func__, hret);
+        margo_destroy(handle);
+        return(dspaces_ERR_MERCURY);
+    }
+    hret = margo_get_output(handle, &out);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: %s: margo_get_output() failed with %d.\n",
+                __func__, hret);
+        margo_destroy(handle);
+        return(dspaces_ERR_MERCURY);
+    }
+
+    if(out.len) {
+        *buf = malloc(rdma_size);
+        ret = LZ4_decompress_safe(cbuf, *buf, out.len, rdma_size);
+        free(cbuf);
+    } else {
+        *buf = cbuf;
+    }
+
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+} 

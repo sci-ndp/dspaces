@@ -4,6 +4,7 @@
  *
  * See COPYRIGHT in top-level directory.
  */
+#include "dspaces-ops.h"
 #include "dspaces-server.h"
 #include "dspaces.h"
 #include "dspacesp.h"
@@ -75,6 +76,7 @@ struct dspaces_provider {
     hg_id_t kill_client_id;
     hg_id_t sub_id;
     hg_id_t notify_id;
+    hg_id_t do_ops_id;
     struct ds_gspace *dsg;
     char **server_address;
     char **node_names;
@@ -120,6 +122,7 @@ DECLARE_MARGO_RPC_HANDLER(odsc_internal_rpc)
 DECLARE_MARGO_RPC_HANDLER(ss_rpc)
 DECLARE_MARGO_RPC_HANDLER(kill_rpc)
 DECLARE_MARGO_RPC_HANDLER(sub_rpc)
+DECLARE_MARGO_RPC_HANDLER(do_ops_rpc)
 
 static void put_rpc(hg_handle_t h);
 static void put_local_rpc(hg_handle_t h);
@@ -132,8 +135,7 @@ static void odsc_internal_rpc(hg_handle_t h);
 static void ss_rpc(hg_handle_t h);
 static void kill_rpc(hg_handle_t h);
 static void sub_rpc(hg_handle_t h);
-// static void write_lock_rpc(hg_handle_t h);
-// static void read_lock_rpc(hg_handle_t h);
+static void do_ops_rpc(hg_handle_t h);
 
 /* Server configuration parameters */
 static struct {
@@ -1043,6 +1045,8 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
         DS_HG_REGISTER(hg, server->sub_id, odsc_gdim_t, void, sub_rpc);
         margo_registered_name(server->mid, "notify_rpc", &server->notify_id,
                               &flag);
+        margo_registered_name(server->mid, "do_ops_rpc", &server->do_ops_id, &flag);
+        DS_HG_REGISTER(hg, server->do_ops_id, do_ops_in_t, bulk_out_t, do_ops_rpc);
     } else {
         server->put_id = MARGO_REGISTER(server->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, put_rpc);
@@ -1101,7 +1105,6 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
             MARGO_REGISTER(server->mid, "kill_client_rpc", int32_t, void, NULL);
         margo_registered_disable_response(server->mid, server->kill_client_id,
                                           HG_TRUE);
-
         server->sub_id =
             MARGO_REGISTER(server->mid, "sub_rpc", odsc_gdim_t, void, sub_rpc);
         margo_register_data(server->mid, server->sub_id, (void *)server, NULL);
@@ -1110,6 +1113,9 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
             MARGO_REGISTER(server->mid, "notify_rpc", odsc_list_t, void, NULL);
         margo_registered_disable_response(server->mid, server->notify_id,
                                           HG_TRUE);
+        server->do_ops_id =
+            MARGO_REGISTER(server->mid, "do_ops_rpc", do_ops_in_t, bulk_out_t, do_ops_rpc);
+        margo_register_data(server->mid, server->do_ops_id, (void *)server, NULL);
     }
     int err = dsg_alloc(server, conf_file, comm);
     if(err) {
@@ -1527,12 +1533,9 @@ static void put_meta_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(put_meta_rpc)
 
-static int query_remotes(dspaces_provider_t server, odsc_gdim_t *query,
+static int query_remotes(dspaces_provider_t server, obj_descriptor *q_odsc, struct global_dimension *q_gdim, 
                          int timeout, obj_descriptor **results, int req_id)
 {
-    obj_descriptor *q_odsc = (obj_descriptor *)query->odsc_gdim.raw_odsc;
-    struct global_dimension *q_gdim =
-        (struct global_dimension *)query->odsc_gdim.raw_gdim;
     uint64_t buf_size;
     void *buffer = NULL;
     int found = 0;
@@ -1613,7 +1616,7 @@ static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
     if(server->remotes && !ls_lookup(server->dsg->ls, q_odsc->name)) {
         DEBUG_OUT("req %i: no local objects with name %s. Checking remotes.\n",
                   req_id, q_odsc->name);
-        return (query_remotes(server, query, timeout, results, req_id));
+        return (query_remotes(server, (obj_descriptor *)query->odsc_gdim.raw_odsc, (struct global_dimension *)query->odsc_gdim.raw_gdim, timeout, results, req_id));
     }
 
     DEBUG_OUT("getting sspace lock.\n");
@@ -2364,6 +2367,130 @@ static void sub_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(sub_rpc)
 
+static void do_ops_rpc(hg_handle_t handle)
+{
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    const struct hg_info *info = margo_get_info(handle);
+    dspaces_provider_t server =
+        (dspaces_provider_t)margo_registered_data(mid, info->id);
+    do_ops_in_t in;
+    bulk_out_t out;
+    struct obj_data *od, *stage_od, *res_od;
+    struct list_head odl;
+    struct ds_data_expr *expr;
+    struct global_dimension *gdim;
+    obj_descriptor *odsc;
+    int res_size;
+    int num_odscs;
+    obj_descriptor *q_results;
+    uint64_t res_buf_size;
+    odsc_gdim_t query;
+    hg_return_t hret;
+    void *buffer, *cbuffer;
+    hg_bulk_t bulk_handle;
+    hg_size_t size;
+    int err;
+    int csize;
+    long i;
+
+    hret = margo_get_input(handle, &in);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: %s: margo_get_input() failed with %d.\n", __func__, hret);
+        margo_destroy(handle);
+        return;
+    }
+    expr = in.expr;
+    DEBUG_OUT("doing expression type %i\n", expr->type);
+
+    INIT_LIST_HEAD(&odl);
+    gather_op_ods(expr, &odl);
+    list_for_each_entry(od, &odl, struct obj_data, obj_entry)
+    {
+        odsc = &od->obj_desc;
+        DEBUG_OUT("Finding data for '%s'\n", odsc->name);
+        res_od = obj_data_alloc(odsc);
+        stage_od = ls_find(server->dsg->ls, odsc);
+        if(!stage_od) {
+            DEBUG_OUT("not stored locally.\n");
+            // size is currently not used`
+            query.odsc_gdim.size = sizeof(*odsc);
+            query.odsc_gdim.raw_odsc = (char *)odsc;
+            query.odsc_gdim.gdim_size = sizeof(od->gdim);
+            query.odsc_gdim.raw_gdim = (char *)&od->gdim;
+
+            // TODO: assumes data is either local or on a remote
+            res_size = get_query_odscs(server, &query, -1, &q_results, -1);
+            if(res_size != sizeof(odsc)) {
+                fprintf(stderr, "WARNING: %s: multiple odscs for query.\n", __func__);        
+            }
+            stage_od = ls_find(server->dsg->ps, odsc);
+            if(!stage_od) {
+                fprintf(stderr, "ERROR: %s: nothing in the proxy cache for query.\n", __func__);
+            }
+        }
+        ssd_copy(res_od, stage_od);
+        // update any obj in expression to use res_od
+        DEBUG_OUT("updating expression data with variable data.\n");
+        update_expr_objs(expr, res_od);
+    }
+  
+    res_buf_size = expr->size;
+    buffer = malloc(res_buf_size);
+    cbuffer = malloc(res_buf_size);
+    if(expr->type == DS_VAL_INT) {
+        for(i = 0; i < res_buf_size / sizeof(int); i++) {
+            ((int *)buffer)[i] = ds_op_calc_ival(expr, i, &err);
+        }
+    } else if(expr->type == DS_VAL_REAL) {
+        for(i = 0; i < res_buf_size / sizeof(double); i++) {
+            ((double *)buffer)[i] = ds_op_calc_rval(expr, i, &err);
+        }
+    } else {
+        fprintf(stderr, "ERROR: %s: invalid expressiond data type.\n", __func__);
+        goto cleanup;
+    }
+
+    size = res_buf_size;
+    hret = margo_bulk_create(mid, 1, (void **)&cbuffer, &size,
+                             HG_BULK_READ_ONLY, &bulk_handle);
+
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_bulk_create() failure\n", __func__);
+        out.ret = dspaces_ERR_MERCURY;
+        margo_respond(handle, &out);
+    }
+
+    csize = LZ4_compress_default(buffer, cbuffer, size, size);
+
+    DEBUG_OUT("compressed result from %li to %i bytes.\n", size, csize);
+    if(!csize) {
+        DEBUG_OUT("compressed result could not fit in dst buffer - longer than "
+                  "original! Sending uncompressed.\n");
+        memcpy(cbuffer, buffer, size);
+    }
+
+    hret = margo_bulk_transfer(mid, HG_BULK_PUSH, info->addr, in.handle, 0,
+                               bulk_handle, 0, (csize ? csize : size));
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_bulk_transfer() failure (%d)\n",
+                __func__, hret);
+        out.ret = dspaces_ERR_MERCURY;
+        margo_respond(handle, &out);
+        margo_bulk_free(bulk_handle);
+        goto cleanup;
+    }
+    margo_bulk_free(bulk_handle);
+    out.ret = dspaces_SUCCESS;
+    out.len = csize;
+    margo_respond(handle, &out);
+cleanup:
+    free(buffer);
+    free(cbuffer);
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(do_ops_rpc)
+
 void dspaces_server_fini(dspaces_provider_t server)
 {
     DEBUG_OUT("waiting for finalize to occur\n");
@@ -2404,7 +2531,6 @@ int dspaces_server_find_objs(dspaces_provider_t server, const char *var_name,
         }
         free(od_tab);
     }
-
     return (num_obj);
 }
 

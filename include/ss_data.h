@@ -128,6 +128,7 @@ typedef struct {
 
 } odsc_hdr_with_gdim;
 
+
 struct dht_sub_list_entry {
     obj_descriptor *odsc; // subbed object
     long remaining;
@@ -406,6 +407,8 @@ void free_gdim_list(struct list_head *gdim_list);
 void set_global_dimension(struct list_head *gdim_list, const char *var_name,
                           const struct global_dimension *default_gdim,
                           struct global_dimension *gdim);
+void get_global_dimensions(struct global_dimension *l, int *ndim, uint64_t *gdim);
+void get_gdims(struct list_head *gdim_list, const char *var_name, int *ndim, uint64_t **gdim);
 
 struct lock_data *get_lock(struct list_head *list, char *name);
 struct lock_data *create_lock(struct list_head *list, char *name);

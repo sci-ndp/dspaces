@@ -8,7 +8,6 @@
 #ifndef __DSPACES_CLIENT_H
 #define __DSPACES_CLIENT_H
 
-#include <dspaces-ops.h>
 #include <dspaces-common.h>
 #include <mpi.h>
 #include <stdint.h>
@@ -22,6 +21,8 @@ typedef struct dspaces_client *dspaces_client_t;
 
 typedef struct dspaces_put_req *dspaces_put_req_t;
 #define dspaces_PUT_NULL ((dspaces_put_req_t)NULL)
+
+struct ds_data_expr;
 
 #define META_MODE_SPEC 1
 #define META_MODE_NEXT 2
@@ -53,6 +54,8 @@ int dspaces_server_count(dspaces_client_t client);
 
 void dspaces_define_gdim(dspaces_client_t client, const char *var_name,
                          int ndim, uint64_t *gdim);
+
+void dspaces_get_gdim(dspaces_client_t client, const char *var_name, int *ndim, uint64_t *gdim);
 
 /**
  * @brief Finalizes a dspaces client.
@@ -383,6 +386,8 @@ int dspaces_put_meta(dspaces_client_t client, const char *name, int version,
  */
 int dspaces_get_meta(dspaces_client_t client, const char *name, int mode,
                      int current, int *version, void **data, unsigned int *len);
+
+int dspaces_op_calc(dspaces_client_t client, struct ds_data_expr *expr, void **buf);
 
 #if defined(__cplusplus)
 }

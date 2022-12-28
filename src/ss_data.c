@@ -1817,6 +1817,17 @@ struct meta_data *meta_find_next_entry(ss_storage *ls, const char *name,
     return (mdres);
 }
 
+void get_global_dimensions(struct global_dimension *l, int *ndim,
+                           uint64_t *gdim)
+{
+    int i;
+
+    *ndim = l->ndim;
+    for(i = 0; i < l->ndim; i++) {
+        gdim[i] = l->sizes.c[i];
+    }
+}
+
 void copy_global_dimension(struct global_dimension *l, int ndim,
                            const uint64_t *gdim)
 {
@@ -1867,6 +1878,21 @@ struct gdim_list_entry *lookup_gdim_list(struct list_head *gdim_list,
             return e;
     }
     return NULL;
+}
+
+void get_gdims(struct list_head *gdim_list, const char *var_name, int *ndim, uint64_t **gdim)
+{
+    struct gdim_list_entry *e = lookup_gdim_list(gdim_list, var_name);
+    int i;
+
+    if(!e) {
+        *ndim = -1;   
+    } else {
+        *ndim = e->gdim.ndim;
+        for(i = 0; i < *ndim; i++) {
+           (*gdim)[i] = e->gdim.sizes.c[i];
+        }
+    }
 }
 
 void update_gdim_list(struct list_head *gdim_list, const char *var_name,

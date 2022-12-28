@@ -76,7 +76,7 @@ if(CMAKE_Fortran_COMPILER_LOADED)
     set(DSPACES_HAVE_FORTRAN TRUE)
     check_fortran_compiler_flag("-fallow-argument-mismatch" FORTRAN_HAS_ARG_MISMATCH_FLAG)
     if(FORTRAN_HAS_ARG_MISMATCH_FLAG)
-        SET(CMAKE_Fortran_FLAGS "${CMAKE_CXX_FLAGS} -fallow-argument-mismatch")
+        SET(CMAKE_Fortran_FLAGS "${CMAKE_CXX_FLAGS} -fallow-argument-mismatch -Wno-lto-type-mismatch")
     endif()
 endif()
 

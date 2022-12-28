@@ -24,6 +24,9 @@ target_link_libraries(test_sub dspaces)
 add_executable(test_writer_server test_writer_server.c test_put_run.c timer.c)
 target_link_libraries(test_writer_server dspaces dspaces-server)
 
+add_executable(test_calc test_calc.c)
+target_link_libraries(test_calc dspaces)
+
 install(TARGETS dspaces_server terminator
   DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
@@ -77,4 +80,6 @@ endif()
   set_tests_properties(Test_read_server_local PROPERTIES TIMEOUT 30)
   add_test (Test_read_multi_dht ${BASH_PROGRAM} test_script.sh 11)
   set_tests_properties(Test_read_multi_dht PROPERTIES TIMEOUT 30)
+  add_test (Test_calc  ${BASH_PROGRAM} test_script.sh 12)
+  set_tests_properties(Test_calc PROPERTIES TIMEOUT 30)
 endif (BASH_PROGRAM)
