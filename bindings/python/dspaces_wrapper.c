@@ -1,10 +1,12 @@
 #include <Python.h>
+#include <mpi4py/mpi4py.h>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #define PY_ARRAY_UNIQUE_SYMBOL ds
 #include <numpy/ndarrayobject.h>
 #include <numpy/ndarraytypes.h>
 
 #include <dspaces.h>
+#include <dspaces-server.h>
 
 #include <stdio.h>
 
@@ -13,6 +15,7 @@ PyObject *wrapper_dspaces_init(int rank)
     dspaces_client_t *clientp;
 
     import_array();
+    import_mpi4py();
 
     clientp = malloc(sizeof(*clientp));
 
@@ -23,6 +26,49 @@ PyObject *wrapper_dspaces_init(int rank)
     return (client);
 }
 
+PyObject *wrapper_dspaces_init_mpi(PyObject *commpy)
+{
+    MPI_Comm *comm_p = NULL;
+    dspaces_client_t *clientp;
+
+    import_array();
+    import_mpi4py();
+
+    comm_p = PyMPIComm_Get(commpy);
+    if(!comm_p) {
+        return(NULL);
+    }
+    clientp = malloc(sizeof(*clientp));
+
+    dspaces_init_mpi(*comm_p, clientp);
+
+    PyObject *client = PyLong_FromVoidPtr((void *)clientp);
+
+    return (client);
+}
+
+PyObject *wrapper_dspaces_server_init(const char *listen_str, PyObject *commpy,
+                                const char *conf)
+{
+    MPI_Comm *comm_p = NULL;
+    dspaces_provider_t *serverp;
+
+    import_array();
+    import_mpi4py();
+
+    comm_p = PyMPIComm_Get(commpy);
+    if(!comm_p) {
+        return(NULL);
+    }
+    serverp = malloc(sizeof(*serverp));
+
+    dspaces_server_init(listen_str, *comm_p, conf, serverp);
+
+    PyObject *server = PyLong_FromVoidPtr((void *)serverp);
+
+    return (server);
+}
+
 void wrapper_dspaces_fini(PyObject *clientppy)
 {
     dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
@@ -30,6 +76,15 @@ void wrapper_dspaces_fini(PyObject *clientppy)
     dspaces_fini(*clientp);
 
     free(clientp);
+}
+
+void wrapper_dspaces_server_fini(PyObject *serverppy)
+{
+    dspaces_provider_t *serverp = PyLong_AsVoidPtr(serverppy);
+
+    dspaces_server_fini(*serverp);
+
+    free(serverp);
 }
 
 void wrapper_dspaces_kill(PyObject *clientppy)

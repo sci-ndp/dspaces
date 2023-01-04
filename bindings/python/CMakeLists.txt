@@ -8,7 +8,7 @@ set(CMAKE_PYTHON_OUTPUT_DIRECTORY
   ${PROJECT_BINARY_DIR}/${CMAKE_INSTALL_PYTHONDIR}
 )
 
-include_directories(SYSTEM ${PYTHON_INCLUDE_PATH} ${_Python_NumPy_INCLUDE_DIR})
+include_directories(SYSTEM ${PYTHON_INCLUDE_PATH} ${_Python_NumPy_INCLUDE_DIR} ${MPI4Py_INCLUDE_DIR})
 include_directories($<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 
 if(SWIG_FOUND)
@@ -21,7 +21,7 @@ swig_add_library(dspaces_wrapper
                 )
 set_target_properties(dspaces_wrapper PROPERTIES
     SWIG_USE_TARGET_INCLUDE_DIRECTORIES TRUE)
-swig_link_libraries(dspaces_wrapper dspaces)
+swig_link_libraries(dspaces_wrapper dspaces dspaces-server)
 
 set(CMAKE_PYTHON_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bindings/python")
 
