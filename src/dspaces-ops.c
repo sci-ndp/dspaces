@@ -231,10 +231,10 @@ int ds_op_calc_ival(struct ds_data_expr *expr, long pos, int *res)
     int err = 0;
     *res = 0;
 
-    if(expr->type != DS_VAL_REAL) {
+    if(expr->type != DS_VAL_INT) {
         *res = -1;
         fprintf(stderr,
-                "ERROR: %s: attempted to calculate a real result of a non-real "
+                "ERROR: %s: attempted to calculate an integer result of a non-integer "
                 "expression.\n",
                 __func__);
         return (0);
@@ -328,6 +328,10 @@ void gather_op_ods(struct ds_data_expr *expr, struct list_head *expr_odl)
         }
         break;
     case DS_OP_ADD:
+    case DS_OP_SUB:
+    case DS_OP_MULT:
+    case DS_OP_DIV:
+    case DS_OP_POW:
         gather_op_ods(expr->sub_expr[0], expr_odl);
         gather_op_ods(expr->sub_expr[1], expr_odl);
         break;
@@ -349,6 +353,10 @@ void update_expr_objs(struct ds_data_expr *expr, struct obj_data *od)
         }
         break;
     case DS_OP_ADD:
+    case DS_OP_SUB:
+    case DS_OP_MULT:
+    case DS_OP_DIV:
+    case DS_OP_POW:
         update_expr_objs(expr->sub_expr[0], od);
         update_expr_objs(expr->sub_expr[1], od);
         break;

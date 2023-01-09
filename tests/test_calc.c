@@ -23,7 +23,9 @@ int main(int argc, char **argv)
     double *result;
     ds_expr_t var_a;
     ds_expr_t var_b;
+    ds_expr_t const_1;
     ds_expr_t a_plus_b;
+    ds_expr_t one_minus_a_plus_b;
     int i, j;
 
     MPI_Init(&argc, &argv);
@@ -46,12 +48,15 @@ int main(int argc, char **argv)
 
     var_a = dspaces_op_new_obj(client, "var_a", 0, DS_VAL_REAL, 2, lb, ub);
     var_b = dspaces_op_new_obj(client, "var_b", 0, DS_VAL_REAL, 2, lb, ub);
-    a_plus_b = dspaces_op_new_2arg(DS_OP_ADD, var_a, var_b);
-    dspaces_op_calc(client, a_plus_b, (void **)&result);
+    const_1 = dspaces_op_new_iconst(1);
+    a_plus_b = dspaces_op_new_add(var_a, var_b);
+    one_minus_a_plus_b = dspaces_op_new_sub(const_1, a_plus_b);
+    dspaces_op_calc(client, one_minus_a_plus_b, (void **)&result);
     for(i = 0; i < gdim[0]; i++) {
          for(j = 0; j < gdim[1]; j++) {
-            if(result[(i * gdim[1]) + j] != (a[(i * gdim[1]) + j] + b[(i * gdim[1]) + j])) {
+            if(result[(i * gdim[1]) + j] != 1 - (a[(i * gdim[1]) + j] + b[(i * gdim[1]) + j])) {
                 fprintf(stderr, "Bad value at (%i, %i)\n", i, j);
+                return(-1);
             }
          }
     }
