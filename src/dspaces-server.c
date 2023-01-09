@@ -1128,8 +1128,8 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     for(i = 0; i < server->nremote; i++) {
         DEBUG_OUT("initializing client connection to %s\n",
                   server->remotes[i].name);
-        dspaces_init_wan(&server->remotes[i].conn, listen_addr_str,
-                         server->remotes[i].addr_str);
+        dspaces_init_wan(listen_addr_str,
+                         server->remotes[i].addr_str, 0, &server->remotes[i].conn);
     }
 
     server->f_kill = server->dsg->num_apps;

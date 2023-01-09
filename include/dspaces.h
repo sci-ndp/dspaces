@@ -47,8 +47,10 @@ int dspaces_init(int rank, dspaces_client_t *client);
  */
 int dspaces_init_mpi(MPI_Comm comm, dspaces_client_t *c);
 
-int dspaces_init_wan(dspaces_client_t *c, const char *listen_addr_str,
-                     const char *conn_str);
+int dspaces_init_wan(const char *listen_addr_str,
+                     const char *conn_str, int rank, dspaces_client_t *c);
+
+int dspaces_init_wan_mpi(const char *listen_addr_str, const char *conn_str, MPI_Comm comm, dspaces_client_t *c);
 
 int dspaces_server_count(dspaces_client_t client);
 

@@ -703,13 +703,13 @@ static int arg_conf(dspaces_client_t client, const char *conn_str)
     return (0);
 }
 
-int dspaces_init_wan(dspaces_client_t *c, const char *listen_addr_str,
-                     const char *conn_str)
+int dspaces_init_wan(const char *listen_addr_str,
+                     const char *conn_str, int rank, dspaces_client_t *c)
 {
     dspaces_client_t client;
     int ret;
 
-    ret = dspaces_init_internal(0, &client);
+    ret = dspaces_init_internal(rank, &client);
     if(ret != dspaces_SUCCESS) {
         return (ret);
     }
@@ -722,6 +722,35 @@ int dspaces_init_wan(dspaces_client_t *c, const char *listen_addr_str,
 
     choose_server(client);
     init_ss_info(client);
+    dspaces_post_init(client);
+
+    *c = client;
+
+    return (dspaces_SUCCESS);
+}
+
+int dspaces_init_wan_mpi(const char *listen_addr_str, const char *conn_str,
+                            MPI_Comm comm, dspaces_client_t *c)
+{
+    dspaces_client_t client;
+    int rank;
+    int ret;
+    
+    MPI_Comm_rank(comm, &rank);
+
+    ret = dspaces_init_internal(rank, &client);
+    if(ret != dspaces_SUCCESS) {
+        return (ret);
+    }
+
+    ret = arg_conf(client, conn_str);
+    if(ret != 0) {
+        return (ret);
+    }
+    dspaces_init_margo(client, listen_addr_str);
+
+    choose_server(client);
+    init_ss_info_mpi(client, comm);
     dspaces_post_init(client);
 
     *c = client;
