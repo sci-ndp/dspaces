@@ -191,6 +191,13 @@ void wrapper_dspaces_define_gdim(PyObject *clientppy, const char *name, PyObject
     dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
     int ndim = PyTuple_GET_SIZE(gdimt);
     uint64_t gdim[ndim];
+    PyObject *item;
+    int i;
+
+    for(i = 0; i < ndim; i++) {
+        item = PyTuple_GetItem(gdimt, i);
+        gdim[i] = PyLong_AsLong(item);    
+    }
 
     dspaces_define_gdim(*clientp, name, ndim, gdim);
 }
