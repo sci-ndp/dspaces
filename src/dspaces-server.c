@@ -2043,8 +2043,11 @@ static void get_rpc(hg_handle_t handle)
     } else {
         from_obj = ls_find(server->dsg->ls, &in_odsc);
     }
+    DEBUG_OUT("found source data object\n");
     od = obj_data_alloc(&in_odsc);
+    DEBUG_OUT("allocated target object\n");
     ssd_copy(od, from_obj);
+    DEBUG_OUT("copied object data\n");
     ABT_mutex_unlock(server->ls_mutex);
 
     hg_size_t size = (in_odsc.size) * bbox_volume(&(in_odsc.bb));
@@ -2052,7 +2055,7 @@ static void get_rpc(hg_handle_t handle)
     cbuffer = malloc(size);
     hret = margo_bulk_create(mid, 1, (void **)&cbuffer, &size,
                              HG_BULK_READ_ONLY, &bulk_handle);
-
+    DEBUG_OUT("created bulk handle of size %li\n", size);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s): margo_bulk_create() failure\n", __func__);
         out.ret = dspaces_ERR_MERCURY;
@@ -2083,6 +2086,7 @@ static void get_rpc(hg_handle_t handle)
         margo_destroy(handle);
         return;
     }
+    DEBUG_OUT("completed bulk transfer.\n");
     margo_bulk_free(bulk_handle);
     out.ret = dspaces_SUCCESS;
     out.len = csize;
