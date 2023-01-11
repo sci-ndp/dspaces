@@ -47,6 +47,43 @@ PyObject *wrapper_dspaces_init_mpi(PyObject *commpy)
     return (client);
 }
 
+PyObject *wrapper_dspaces_init_wan(const char *listen_str, const char *conn, int rank)
+{
+    dspaces_client_t *clientp;
+
+    import_array();
+    import_mpi4py();
+
+    clientp = malloc(sizeof(*clientp));
+
+    dspaces_init_wan(listen_str, conn, rank, clientp);
+
+    PyObject *client = PyLong_FromVoidPtr((void *)clientp);
+
+    return (client);
+}
+
+PyObject *wrapper_dspaces_init_wan_mpi(const char *listen_str, const char *conn, PyObject *commpy)
+{
+    MPI_Comm *comm_p = NULL;
+    dspaces_client_t *clientp;
+
+    import_array();
+    import_mpi4py();
+
+    comm_p = PyMPIComm_Get(commpy);
+    if(!comm_p) {
+        return(NULL);
+    }
+    clientp = malloc(sizeof(*clientp));
+
+    dspaces_init_wan_mpi(listen_str, conn, *comm_p, clientp);
+
+    PyObject *client = PyLong_FromVoidPtr((void *)clientp);
+
+    return(client);
+}
+
 PyObject *wrapper_dspaces_server_init(const char *listen_str, PyObject *commpy,
                                 const char *conf)
 {
@@ -147,4 +184,13 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
                                NULL);
 
     return (arr);
+}
+
+void wrapper_dspaces_define_gdim(PyObject *clientppy, const char *name, PyObject *gdimt)
+{
+    dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
+    int ndim = PyTuple_GET_SIZE(gdimt);
+    uint64_t gdim[ndim];
+
+    dspaces_define_gdim(*clientp, name, ndim, gdim);
 }

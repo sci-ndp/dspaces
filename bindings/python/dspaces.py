@@ -12,14 +12,24 @@ class DSpacesServer:
         wrapper_dspaces_server_fini(self.server)
 
 class DSpaces:
-    def __init__(self, rank = None, comm = None):
-        if rank == None or not comm == None:
-            from mpi4py import MPI
-            if comm == None:
-                comm = MPI.COMM_WORLD
-            self.client = wrapper_dspaces_init_mpi(comm)
+    def __init__(self, comm = None, conn = None, rank = None):
+        if conn == None:
+            if rank == None or not comm == None:
+                from mpi4py import MPI
+                if comm == None:
+                    comm = MPI.COMM_WORLD
+                self.client = wrapper_dspaces_init_mpi(comm)
+            else:
+                self.client = wrapper_dspaces_init(rank)
         else:
-            self.client = wrapper_dspaces_init(rank)
+            listen_str = conn.split("://")[0]
+            if rank == None or not comm == None:
+                from mpi4py import MPI
+                if comm == None:
+                    comm = MPI.COMM_WORLD
+                self.client = wrapper_dspaces_init_wan_mpi(listen_str.encode('ascii'), conn.encode('ascii'), comm)
+            else:
+                self.client = wrapper_dspaces_init_wan(listen_str.encode('ascii'), conn.encode('ascii'), rank)
 
     def __del__(self):
         wrapper_dspaces_fini(self.client) 
@@ -37,4 +47,7 @@ class DSpaces:
         if len(lb) != len(ub):
             raise TypeError("lower-bound and upper-bound must have the same dimensionality")
         return wrapper_dspaces_get(self.client, name.encode('ascii'), version, lb, ub, np.dtype(dtype), timeout)    
+
+    def DefineGDim(self, name, gdim):
+        wrapper_dspaces_define_gdim(self.client, name.encode('ascii'), gdim)
 
