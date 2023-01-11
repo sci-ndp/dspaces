@@ -698,8 +698,11 @@ static int obj_update_dht(dspaces_provider_t server, struct obj_data *od,
                           obj_update_t type)
 {
     obj_descriptor *odsc = &od->obj_desc;
+    DEBUG_OUT("getting sspace lock.\n");
     ABT_mutex_lock(server->sspace_mutex);
+    DEBUG_OUT("got sspace lock.\n");
     struct sspace *ssd = lookup_sspace(server, odsc->name, &od->gdim);
+    DEBUG_OUT("realeasing sspace lock.\n");
     ABT_mutex_unlock(server->sspace_mutex);
     struct dht_entry *dht_tab[ssd->dht->num_entries];
 
@@ -1787,7 +1790,7 @@ static void query_rpc(hg_handle_t handle)
     memcpy(&in_odsc, in.odsc_gdim.raw_odsc, sizeof(in_odsc));
     memcpy(&in_gdim, in.odsc_gdim.raw_gdim, sizeof(struct global_dimension));
     timeout = in.param;
-    DEBUG_OUT("Received query for %s with timeout %d",
+    DEBUG_OUT("Received query for %s with timeout %d\n",
               obj_desc_sprint(&in_odsc), timeout);
 
     out.odsc_list.size =
@@ -2124,7 +2127,9 @@ static void odsc_internal_rpc(hg_handle_t handle)
               obj_desc_sprint(&in_odsc), timeout);
 
     obj_descriptor *odsc_tab;
+    DEBUG_OUT("getting sspace lock.\n");
     ABT_mutex_lock(server->sspace_mutex);
+    DEBUG_OUT("got sspace lock.\n");
     struct sspace *ssd = lookup_sspace(server, in_odsc.name, &od_gdim);
     ABT_mutex_unlock(server->sspace_mutex);
     int num_odsc;
@@ -2201,6 +2206,7 @@ static void obj_update_rpc(hg_handle_t handle)
 
     DEBUG_OUT("received update_rpc %s\n", obj_desc_sprint(&in_odsc));
     ABT_mutex_lock(server->sspace_mutex);
+    DEBUG_OUT("got sspace lock.\n");
     struct sspace *ssd = lookup_sspace(server, in_odsc.name, &gdim);
     ABT_mutex_unlock(server->sspace_mutex);
     struct dht_entry *de = ssd->ent_self;
