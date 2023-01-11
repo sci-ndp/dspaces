@@ -1291,6 +1291,7 @@ static void put_rpc(hg_handle_t handle)
     bulk_gdim_t in;
     bulk_out_t out;
     hg_bulk_t bulk_handle;
+    struct timeval start, stop;
 
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
 
@@ -1352,6 +1353,16 @@ static void put_rpc(hg_handle_t handle)
         return;
     }
 
+    gettimeofday(&start, NULL);
+
+    if(server->f_debug) {
+        long dsec = stop.tv_sec - start.tv_sec;
+        long dusec = stop.tv_usec - start.tv_usec;
+        float transfer_time = (float)dsec + (dusec / 1000000.0);
+        DEBUG_OUT("got %" PRIu64 " bytes in %f sec\n", size, transfer_time);
+    }
+
+
     hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr, in.handle, 0,
                                bulk_handle, 0, size);
     if(hret != HG_SUCCESS) {
@@ -1363,6 +1374,8 @@ static void put_rpc(hg_handle_t handle)
         margo_destroy(handle);
         return;
     }
+
+    gettimeofday(&stop, NULL);
 
     ABT_mutex_lock(server->ls_mutex);
     ls_add_obj(server->dsg->ls, od);
