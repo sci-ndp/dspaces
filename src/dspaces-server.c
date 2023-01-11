@@ -1353,7 +1353,7 @@ static void put_rpc(hg_handle_t handle)
         return;
     }
 
-    gettimeofday(&start, NULL);
+    gettimeofday(&stop, NULL);
 
     if(server->f_debug) {
         long dsec = stop.tv_sec - start.tv_sec;
