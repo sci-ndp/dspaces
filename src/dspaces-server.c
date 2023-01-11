@@ -661,9 +661,11 @@ static struct sspace *lookup_sspace(dspaces_provider_t server,
     struct bbox domain;
     memset(&domain, 0, sizeof(struct bbox));
     domain.num_dims = gdim.ndim;
+    DEBUG_OUT("global dimmensions being allocated:\n");
     for(i = 0; i < gdim.ndim; i++) {
         domain.lb.c[i] = 0;
         domain.ub.c[i] = gdim.sizes.c[i] - 1;
+        DEBUG_OUT("dim %i: lb = %" PRIu64 ", ub = %" PRIu64 "\n", i, domain.lb.c[i], domain.ub.c[i]);
     }
 
     ssd_entry = malloc(sizeof(struct sspace_list_entry));
