@@ -1355,14 +1355,6 @@ static void put_rpc(hg_handle_t handle)
 
     gettimeofday(&start, NULL);
 
-    if(server->f_debug) {
-        long dsec = stop.tv_sec - start.tv_sec;
-        long dusec = stop.tv_usec - start.tv_usec;
-        float transfer_time = (float)dsec + (dusec / 1000000.0);
-        DEBUG_OUT("got %" PRIu64 " bytes in %f sec\n", size, transfer_time);
-    }
-
-
     hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr, in.handle, 0,
                                bulk_handle, 0, size);
     if(hret != HG_SUCCESS) {
@@ -1376,6 +1368,13 @@ static void put_rpc(hg_handle_t handle)
     }
 
     gettimeofday(&stop, NULL);
+
+    if(server->f_debug) {
+        long dsec = stop.tv_sec - start.tv_sec;
+        long dusec = stop.tv_usec - start.tv_usec;
+        float transfer_time = (float)dsec + (dusec / 1000000.0);
+        DEBUG_OUT("got %" PRIu64 " bytes in %f sec\n", size, transfer_time);
+    }
 
     ABT_mutex_lock(server->ls_mutex);
     ls_add_obj(server->dsg->ls, od);
