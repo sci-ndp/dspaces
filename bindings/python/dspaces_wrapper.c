@@ -286,6 +286,6 @@ PyObject *wrapper_dspaces_op_new_add(PyObject *exprppy1, PyObject *exprppy2)
 PyObject *wrapper_dspaces_ops_calc(PyObject *clientppy, PyObject *exprppy)
 {
     dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
-    ds_expr_t *exprp = PyLong_AsVoidPtr(exprrpy);
+    ds_expr_t *exprp = PyLong_AsVoidPtr(exprppy);
     
 }
