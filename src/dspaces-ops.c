@@ -62,7 +62,7 @@ err_free:
     return (NULL);
 }
 
-struct ds_data_expr *dspaces_op_new_iconst(int val)
+struct ds_data_expr *dspaces_op_new_iconst(long val)
 {
     struct ds_data_expr *expr = malloc(sizeof(*expr));
 
@@ -224,10 +224,10 @@ double ds_op_calc_rval(struct ds_data_expr *expr, long pos, int *res)
     return (0);
 }
 
-int ds_op_calc_ival(struct ds_data_expr *expr, long pos, int *res)
+long ds_op_calc_ival(struct ds_data_expr *expr, long pos, int *res)
 {
     struct obj_data *od;
-    int subval1, subval2;
+    long subval1, subval2;
     int err = 0;
     *res = 0;
 

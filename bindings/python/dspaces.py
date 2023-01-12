@@ -1,7 +1,7 @@
 from dspaces.dspaces_wrapper import *
 import numpy as np
 
-class DSpacesServer:
+class DSServer:
     def __init__(self, conn = "sockets", comm = None, conf = "dataspaces.conf"):
         from mpi4py import MPI
         if comm == None:
@@ -11,7 +11,7 @@ class DSpacesServer:
     def Run(self):
         wrapper_dspaces_server_fini(self.server)
 
-class DSpaces:
+class DSClient:
     def __init__(self, comm = None, conn = None, rank = None):
         if conn == None:
             if rank == None or not comm == None:
@@ -51,3 +51,32 @@ class DSpaces:
     def DefineGDim(self, name, gdim):
         wrapper_dspaces_define_gdim(self.client, name.encode('ascii'), gdim)
 
+class DSExpr:
+    def __init__(self, client):
+        self.client = client
+    def __add__(self, other):
+        obj = DSExpr(self.client)
+        obj.expr = wrapper_dspaces_op_new_add(self.expr, other.expr)
+        return(obj)
+    def exec(self):
+        return(wrapper_dspaces_ops_calc(self.client, self.expr))
+class DSConst(DSExpr):
+    def __init__(self, client, val):
+        self.client = client
+        if np.dtype(type(val)) == np.int64:
+            self.expr = wrapper_dspaces_ops_new_iconst(val)
+        elif dtype(type(val)) == np.float64:
+            self.expr = wrapper_dspaces_ops_new_rconst(val)
+        else:
+            raise(TypeError("expression constants must be floats or ints"))
+    def __add__(self, other):
+        return(DSObj.__add_(self, other))
+
+class DSData(DSExpr):
+    def __init__(self, client, name, version, lb, ub, dtype):
+        self.client = client
+        if len(lb) != len(ub):
+            raise TypeError("lower-bound and upper-bound must have the same dimensionality")
+        self.expr = wrapper_dspaces_ops_new_obj(client.client, name.encode('ascii'), version, lb, ub, dtype)
+    def __add__(self, other):
+        return(DSExpr.__add__(self, other))

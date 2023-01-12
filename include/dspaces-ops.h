@@ -23,7 +23,7 @@ typedef enum ds_val_type {
 typedef struct ds_data_expr {
     ds_op_t op;
     union {
-        int ival;
+        long ival;
         double rval;
         struct obj_data *od;
     };
@@ -148,7 +148,7 @@ MERCURY_GEN_PROC(do_ops_in_t, ((hg_bulk_t)(handle))((ds_expr_t)(expr)))
 
 struct ds_data_expr *dspaces_op_new_obj(dspaces_client_t client, const char *var_name, unsigned int ver, ds_val_t type, int ndim, uint64_t *lb, uint64_t *ub);
 
-struct ds_data_expr *dspaces_op_new_iconst(int val);
+struct ds_data_expr *dspaces_op_new_iconst(long val);
 
 struct ds_data_expr *dspaces_op_new_rconst(double val);
 
@@ -166,7 +166,7 @@ struct ds_data_expr *dspaces_op_new_2arg(ds_op_t op, struct ds_data_expr *expr1,
 
 double ds_op_calc_rval(struct ds_data_expr *expr, long pos, int *res);
 
-int ds_op_calc_ival(struct ds_data_expr *expr, long pos, int *res);
+long ds_op_calc_ival(struct ds_data_expr *expr, long pos, int *res);
 
 void gather_op_ods(struct ds_data_expr *expr, struct list_head *expr_odl);
 

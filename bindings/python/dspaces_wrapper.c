@@ -6,6 +6,7 @@
 #include <numpy/ndarraytypes.h>
 
 #include <dspaces.h>
+#include <dspaces-ops.h>
 #include <dspaces-server.h>
 
 #include <stdio.h>
@@ -200,4 +201,91 @@ void wrapper_dspaces_define_gdim(PyObject *clientppy, const char *name, PyObject
     }
 
     dspaces_define_gdim(*clientp, name, ndim, gdim);
+}
+
+PyObject *wrapper_dspaces_ops_new_iconst(long val)
+{
+    ds_expr_t *exprp;
+
+    exprp = malloc(sizeof(*exprp));
+
+    *exprp = dspaces_op_new_iconst(val);
+
+    PyObject *expr = PyLong_FromVoidPtr((void *)exprp);
+
+    return(expr);
+}
+
+PyObject *wrapper_dspaces_ops_new_rconst(double val)
+{
+    ds_expr_t *exprp;
+
+    exprp = malloc(sizeof(*exprp));
+
+    *exprp = dspaces_op_new_rconst(val);
+
+    PyObject *expr = PyLong_FromVoidPtr((void *)exprp);
+
+    return(expr);
+}
+
+PyObject *wrapper_dspaces_ops_new_obj(PyObject *clientppy, const char *name, int version, PyObject *lbt, PyObject *ubt, PyObject *dtype)
+{
+    dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
+    ds_expr_t *exprp;
+    int ndim = PyTuple_GET_SIZE(lbt);
+    uint64_t lb[ndim];
+    uint64_t ub[ndim];
+    PyObject *item, *item_utf, *expr;
+    char *type_str;
+    int val_type;
+    int i;
+
+    item = PyObject_GetAttrString(dtype, "__name__");
+    item_utf = PyUnicode_EncodeLocale(item, "strict");
+    type_str = PyBytes_AsString(item_utf);
+
+    if(strcmp(type_str, "float") == 0) {
+        val_type = DS_VAL_REAL;
+    } else if(strcmp(type_str, "int") == 0) {
+        val_type = DS_VAL_INT;
+    } else {
+        PyErr_SetString(PyExc_TypeError, "type must be int or float");
+        return(NULL);
+    }
+
+    for(i = 0; i < ndim; i++) {
+        item = PyTuple_GetItem(lbt, i);
+        lb[i] = PyLong_AsLong(item);
+        item = PyTuple_GetItem(ubt, i);
+        ub[i] = PyLong_AsLong(item);
+    }
+
+    exprp = malloc(sizeof(*exprp));
+    *exprp = dspaces_op_new_obj(*clientp, name, version, val_type, ndim, lb, ub);
+    expr = PyLong_FromVoidPtr((void *)exprp);
+
+    return(expr);
+}
+
+PyObject *wrapper_dspaces_op_new_add(PyObject *exprppy1, PyObject *exprppy2)
+{
+    ds_expr_t *exprp1, *exprp2, *resp;
+    PyObject *res;
+
+    exprp1 = PyLong_AsVoidPtr(exprppy1);
+    exprp2 = PyLong_AsVoidPtr(exprppy2);
+
+    resp = malloc(sizeof(*resp));
+    *resp = dspaces_op_new_add(*exprp1, *exprp2);
+    res = PyLong_FromVoidPtr((void *)resp);
+
+    return(res);
+}
+
+PyObject *wrapper_dspaces_ops_calc(PyObject *clientppy, PyObject *exprppy)
+{
+    dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
+    ds_expr_t *exprp = PyLong_AsVoidPtr(exprrpy);
+    
 }
