@@ -172,4 +172,8 @@ void gather_op_ods(struct ds_data_expr *expr, struct list_head *expr_odl);
 
 void update_expr_objs(struct ds_data_expr *expr, struct obj_data *od);
 
+int dspaces_op_get_result_type(struct ds_data_expr *expr);
+
+void dspaces_op_get_result_size(struct ds_data_expr *expr, int *ndim, uint64_t **dims);
+
 #endif /* __DSPACES_OP_H__ */

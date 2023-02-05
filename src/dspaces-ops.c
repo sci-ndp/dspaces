@@ -364,3 +364,49 @@ void update_expr_objs(struct ds_data_expr *expr, struct obj_data *od)
         break;
     }
 }
+
+int dspaces_op_get_result_type(struct ds_data_expr *expr)
+{
+    return(expr->type);
+}
+
+void dspaces_op_get_result_size(struct ds_data_expr *expr, int *ndim, uint64_t **dims)
+{
+    int lndim, rndim;
+    uint64_t *ldims, *rdims;
+    int i;
+
+    switch(expr->op) {
+        case DS_OP_OBJ:
+            *ndim = expr->od->obj_desc.bb.num_dims;
+            *dims = malloc(*ndim * sizeof(**dims));
+            for(i = 0; i < *ndim; i++) {
+                (*dims)[i] = (expr->od->obj_desc.bb.ub.c[i] - expr->od->obj_desc.bb.lb.c[i]) + 1;
+            }
+            break;
+        case DS_OP_ICONST: 
+        case DS_OP_RCONST:
+            *ndim = 0;
+            *dims = NULL;
+            break;
+        case DS_OP_ADD:
+        case DS_OP_SUB:
+        case DS_OP_MULT:
+        case DS_OP_DIV:
+        case DS_OP_POW:
+            dspaces_op_get_result_size(expr->sub_expr[0], &lndim, &ldims);
+            dspaces_op_get_result_size(expr->sub_expr[1], &rndim, &rdims);
+            if(lndim > rndim) {
+                *ndim = lndim;
+                *dims = ldims;
+                free(rdims);
+            } else {
+                *ndim = rndim;
+                *dims = rdims;
+                free(ldims);
+            }
+            break;
+        default:
+            fprintf(stderr, "ERROR: %s: unknown op type.\n", __func__);
+    }     
+}

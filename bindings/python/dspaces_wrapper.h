@@ -31,3 +31,5 @@ PyObject *wrapper_dspaces_ops_new_rconst(double val);
 PyObject *wrapper_dspaces_ops_new_obj(PyObject *clientppy, const char *name, int version, PyObject *lbt, PyObject *ubt, PyObject *dtype);
 
 PyObject *wrapper_dspaces_op_new_add(PyObject *exprppy1, PyObject *exprppy2);
+
+PyObject *wrapper_dspaces_ops_calc(PyObject *clientppy, PyObject *exprppy);

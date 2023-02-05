@@ -59,10 +59,10 @@ class DSExpr:
         obj.expr = wrapper_dspaces_op_new_add(self.expr, other.expr)
         return(obj)
     def exec(self):
-        return(wrapper_dspaces_ops_calc(self.client, self.expr))
+        return(wrapper_dspaces_ops_calc(self.client.client, self.expr))
 class DSConst(DSExpr):
     def __init__(self, client, val):
-        self.client = client
+        DSExpr.__init__(self, client)
         if np.dtype(type(val)) == np.int64:
             self.expr = wrapper_dspaces_ops_new_iconst(val)
         elif dtype(type(val)) == np.float64:
@@ -70,11 +70,11 @@ class DSConst(DSExpr):
         else:
             raise(TypeError("expression constants must be floats or ints"))
     def __add__(self, other):
-        return(DSObj.__add_(self, other))
+        return(DSExpr.__add__(self, other))
 
 class DSData(DSExpr):
     def __init__(self, client, name, version, lb, ub, dtype):
-        self.client = client
+        DSExpr.__init__(self, client)
         if len(lb) != len(ub):
             raise TypeError("lower-bound and upper-bound must have the same dimensionality")
         self.expr = wrapper_dspaces_ops_new_obj(client.client, name.encode('ascii'), version, lb, ub, dtype)

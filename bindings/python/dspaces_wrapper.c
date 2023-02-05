@@ -285,7 +285,49 @@ PyObject *wrapper_dspaces_op_new_add(PyObject *exprppy1, PyObject *exprppy2)
 
 PyObject *wrapper_dspaces_ops_calc(PyObject *clientppy, PyObject *exprppy)
 {
+    void *result_buf;
     dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
     ds_expr_t *exprp = PyLong_AsVoidPtr(exprppy);
-    
+    int typenum;
+    int ndim;
+    uint64_t *dims;
+    ds_val_t etype;
+    npy_intp *array_dims;
+    long int_res;
+    double real_res;
+    PyObject *arr;
+    int i;
+
+    dspaces_op_calc(*clientp, *exprp, &result_buf);
+    dspaces_op_get_result_size(*exprp, &ndim, &dims);
+    etype = dspaces_op_get_result_type(*exprp);
+    if(ndim == 0) {
+        if(etype == DS_VAL_INT) {
+            int_res = *(long *)result_buf;
+            free(result_buf);
+            return(PyLong_FromLong(int_res));
+        } else if(etype == DS_VAL_REAL) {
+            real_res = *(double *)result_buf;
+            free(result_buf);
+            return(PyFloat_FromDouble(real_res));
+        } else {
+            PyErr_SetString(PyExc_TypeError, "invalid type assigned to expression (corruption?)");
+            return(NULL);
+        }
+    }
+    array_dims = malloc(sizeof(*array_dims) * ndim);
+    for(i = 0; i < ndim; i++) {
+        array_dims[i] = dims[i];
+    }
+    free(dims);
+    if(etype == DS_VAL_INT) {
+        typenum = NPY_INT64;
+    } else if(etype == DS_VAL_REAL) {
+        typenum = NPY_FLOAT64;
+    } else {
+        PyErr_SetString(PyExc_TypeError, "invalid type assigned to expression (corruption?)");
+        return(NULL);
+    }
+    arr = PyArray_SimpleNewFromData(ndim, array_dims, typenum, result_buf);
+    return(arr);
 }
