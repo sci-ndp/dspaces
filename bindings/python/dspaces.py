@@ -13,6 +13,7 @@ class DSServer:
 
 class DSClient:
     def __init__(self, comm = None, conn = None, rank = None):
+        self.nspace = ""
         if conn == None:
             if rank == None or not comm == None:
                 from mpi4py import MPI
@@ -38,18 +39,21 @@ class DSClient:
         for token in range(token_count):
             wrapper_dspaces_kill(self.client)
 
+    def SetNSpace(self, nspace):
+        self.nspace = nspace + "\\"
+
     def Put(self, data, name, version, offset):
         if len(offset) != len(data.shape):
             raise TypeError("offset should have the same dimensionality as data")
-        wrapper_dspaces_put(self.client, data, name.encode('ascii'), version, offset)
+        wrapper_dspaces_put(self.client, data, (self.nspace + name).encode('ascii'), version, offset)
 
     def Get(self, name, version, lb, ub, dtype, timeout):
         if len(lb) != len(ub):
             raise TypeError("lower-bound and upper-bound must have the same dimensionality")
-        return wrapper_dspaces_get(self.client, name.encode('ascii'), version, lb, ub, np.dtype(dtype), timeout)    
+        return wrapper_dspaces_get(self.client, (self.nspace + name).encode('ascii'), version, lb, ub, np.dtype(dtype), timeout)    
 
     def DefineGDim(self, name, gdim):
-        wrapper_dspaces_define_gdim(self.client, name.encode('ascii'), gdim)
+        wrapper_dspaces_define_gdim(self.client, (self.nspace + name).encode('ascii'), gdim)
 
 class DSExpr:
     def __init__(self, client):
