@@ -233,6 +233,8 @@ int test_sub_run(int ndims, int *npdim, uint64_t *spdim, int timestep,
         fprintf(stderr, "%s: dspaces_init() failed with %d.\n", __func__, ret);
     }
 
+    dspaces_set_namespace(ndcl, "test");
+
     tm_end = timer_read(&timer_);
     fprintf(stdout, "TIMING_PERF Init_server_connection peer %d time= %lf\n",
             rank_, tm_end - tm_st);

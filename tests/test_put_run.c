@@ -206,6 +206,8 @@ int test_put_run(int ndims, int *npdim, uint64_t *spdim, int timestep,
         goto error;
     }
 
+    dspaces_set_namespace(ndcl, "test");
+
     tm_end = timer_read(&timer_);
     fprintf(stdout, "TIMING_PERF Init_server_connection peer %d time= %lf\n",
             rank_, tm_end - tm_st);
