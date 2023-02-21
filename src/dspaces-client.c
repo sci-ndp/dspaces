@@ -824,7 +824,7 @@ int dspaces_fini(dspaces_client_t client)
 void dspaces_define_gdim(dspaces_client_t client, const char *var_name,
                          int ndim, uint64_t *gdim)
 {
-    char *long_vname;
+    char *long_vname = NULL;
     const char *fq_vname = NULL;
 
     if(client->nspace) {
@@ -849,7 +849,7 @@ void dspaces_define_gdim(dspaces_client_t client, const char *var_name,
 
 void dspaces_get_gdim(dspaces_client_t client, const char *var_name, int *ndim, uint64_t *gdims)
 {
-    char *long_vname;
+    char *long_vname = NULL;
     const char *fq_vname = NULL;
     struct global_dimension gdim;
 
@@ -1239,6 +1239,7 @@ static int get_data(dspaces_client_t client, int num_odscs,
     size_t max_size = 0;
     void *ucbuffer;
     int ret;
+    hg_return_t hret;
 
     in = (bulk_in_t *)malloc(sizeof(bulk_in_t) * num_odscs);
     od = malloc(num_odscs * sizeof(struct obj_data *));
@@ -1255,8 +1256,14 @@ static int get_data(dspaces_client_t client, int num_odscs,
 
         rdma_size[i] = (req_obj.size) * bbox_volume(&odsc_tab[i].bb);
 
-        margo_bulk_create(client->mid, 1, (void **)(&(od[i]->data)),
+        DEBUG_OUT("For odsc %i, element size is %i, and there are %li elements to fetch.\n", i, req_obj.size,  bbox_volume(&odsc_tab[i].bb));
+
+        DEBUG_OUT("creating bulk handle for buffer %p of size %li.\n", od[i]->data, rdma_size[i]);
+        hret = margo_bulk_create(client->mid, 1, (void **)(&(od[i]->data)),
                           &rdma_size[i], HG_BULK_WRITE_ONLY, &in[i].handle);
+        if(hret != HG_SUCCESS) {
+            fprintf(stderr, "ERROR: %s: margo_bulk_create failed with %i\n", __func__, hret);
+        }
         if(rdma_size[i] > max_size) {
             max_size = rdma_size[i];
         }
@@ -1597,6 +1604,8 @@ int dspaces_aget(dspaces_client_t client, const char *var_name,
 
     fill_odsc(client, var_name, ver, 0, ndim, lb, ub, &odsc);
 
+    DEBUG_OUT("Querying %s with timeout %d\n", obj_desc_sprint(&odsc), timeout);
+
     num_odscs = get_odscs(client, &odsc, timeout, &odsc_tab);
 
     DEBUG_OUT("Finished query - need to fetch %d objects\n", num_odscs);
@@ -1607,7 +1616,11 @@ int dspaces_aget(dspaces_client_t client, const char *var_name,
     // send request to get the obj_desc
     if(num_odscs != 0)
         elem_size = odsc_tab[0].size;
+    else {
+        DEBUG_OUT("not setting element size because there are no result descriptors.");
+    }
     odsc.size = elem_size;
+    DEBUG_OUT("element size is %i\n", odsc.size);
     for(i = 0; i < ndim; i++) {
         num_elem *= (ub[i] - lb[i]) + 1;
     }
