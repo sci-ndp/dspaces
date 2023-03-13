@@ -2468,7 +2468,7 @@ static void do_ops_rpc(hg_handle_t handle)
             ((double *)buffer)[i] = ds_op_calc_rval(expr, i, &err);
         }
     } else {
-        fprintf(stderr, "ERROR: %s: invalid expressiond data type.\n", __func__);
+        fprintf(stderr, "ERROR: %s: invalid expression data type.\n", __func__);
         goto cleanup;
     }
 

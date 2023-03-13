@@ -12,7 +12,8 @@ typedef enum ds_operator {
     DS_OP_SUB,
     DS_OP_MULT,
     DS_OP_DIV,
-    DS_OP_POW
+    DS_OP_POW,
+    DS_OP_ARCTAN
 } ds_op_t;
 
 typedef enum ds_val_type {
@@ -37,6 +38,7 @@ static inline hg_return_t hg_proc_ds_expr_t(hg_proc_t proc, void *data)
     void **datav;
     hg_return_t ret;
     int8_t byte;
+    int32_t word;
     int i;
 
     ds_expr_t buf = *((ds_expr_t *)data);
@@ -53,11 +55,18 @@ static inline hg_return_t hg_proc_ds_expr_t(hg_proc_t proc, void *data)
                 ret = HG_SUCCESS;
                 break;
             case DS_OP_ICONST:
-                hg_proc_int32_t(proc, &buf->ival);
+                word = buf->ival;
+                hg_proc_int32_t(proc, &word);
                 ret = HG_SUCCESS;
                 break;
             case DS_OP_RCONST:
                 hg_proc_int64_t(proc, &buf->rval);
+                ret = HG_SUCCESS;
+                break;
+            case DS_OP_ARCTAN:
+                byte = 1;
+                hg_proc_uint8_t(proc, &byte);
+                hg_proc_ds_expr_t(proc, &buf->sub_expr[0]);
                 ret = HG_SUCCESS;
                 break;
             case DS_OP_ADD:
@@ -91,13 +100,15 @@ static inline hg_return_t hg_proc_ds_expr_t(hg_proc_t proc, void *data)
                 ret = HG_SUCCESS;
                 break;
             case DS_OP_ICONST:
-                hg_proc_int32_t(proc, &buf->ival);
+                hg_proc_int32_t(proc, &word);
+                buf->ival = word;
                 ret = HG_SUCCESS;
                 break;
             case DS_OP_RCONST:
                 hg_proc_int64_t(proc, &buf->rval);
                 ret = HG_SUCCESS;
                 break;
+            case DS_OP_ARCTAN:
             case DS_OP_ADD:
             case DS_OP_SUB:
             case DS_OP_MULT:
@@ -123,6 +134,11 @@ static inline hg_return_t hg_proc_ds_expr_t(hg_proc_t proc, void *data)
                 break;
             case DS_OP_ICONST:
             case DS_OP_RCONST:
+                ret = HG_SUCCESS;
+                break;
+            case DS_OP_ARCTAN:
+                free(buf->sub_expr[0]);
+                free(buf->sub_expr);
                 ret = HG_SUCCESS;
                 break;
             case DS_OP_ADD:
@@ -161,6 +177,10 @@ struct ds_data_expr *dspaces_op_new_mult(struct ds_data_expr *expr1, struct ds_d
 struct ds_data_expr *dspaces_op_new_div(struct ds_data_expr *expr1, struct ds_data_expr *expr2);
 
 struct ds_data_expr *dspaces_op_new_pow(struct ds_data_expr *expr1, struct ds_data_expr *expr2);
+
+struct ds_data_expr *dspaces_op_new_arctan(struct ds_data_expr *expr);
+
+struct ds_data_expr *dspaces_op_new_1arg(ds_op_t op, struct ds_data_expr *expr1);
 
 struct ds_data_expr *dspaces_op_new_2arg(ds_op_t op, struct ds_data_expr *expr1, struct ds_data_expr *expr2);
 

@@ -56,6 +56,7 @@ int main(int argc, char **argv)
          for(j = 0; j < gdim[1]; j++) {
             if(result[(i * gdim[1]) + j] != 1 - (a[(i * gdim[1]) + j] + b[(i * gdim[1]) + j])) {
                 fprintf(stderr, "Bad value at (%i, %i)\n", i, j);
+                fprintf(stderr, " Expected %lf, but got %lf\n", 1 - (a[(i * gdim[1]) + j] + b[(i * gdim[1]) + j]), result[(i * gdim[1]) + j]);
                 return(-1);
             }
          }

@@ -55,12 +55,56 @@ class DSClient:
     def DefineGDim(self, name, gdim):
         wrapper_dspaces_define_gdim(self.client, (self.nspace + name).encode('ascii'), gdim)
 
+def _get_expr(obj, client):
+    if isinstance(obj, DSExpr):
+        return(obj)
+    else:
+        return(DSConst(client, obj))
+
 class DSExpr:
     def __init__(self, client):
         self.client = client
     def __add__(self, other):
+        other_expr = _get_expr(other, self.client)
         obj = DSExpr(self.client)
-        obj.expr = wrapper_dspaces_op_new_add(self.expr, other.expr)
+        obj.expr = wrapper_dspaces_op_new_add(self.expr, other_expr.expr)
+        return(obj)
+    def __radd__(self, other):
+        return(DSExpr.__add__(self, other))
+    def __sub__(self, other):
+        other_expr = _get_expr(other, self.client)
+        obj = DSExpr(self.client)
+        obj.expr = wrapper_dspaces_op_new_sub(self.expr, other_expr.expr)
+        return(obj)
+    def __rsub__(self, other):
+        other_expr = _get_expr(other, self.client)
+        return(DSExpr.__sub__(other_expr, self))
+    def __mul__(self, other):
+        other_expr = _get_expr(other, self.client)
+        obj = DSExpr(self.client)
+        obj.expr = wrapper_dspaces_op_new_mult(self.expr, other_expr.expr)
+        return(obj)
+    def __rmul__(self, other):
+        return(DSExpr.__mul__(self, other))
+    def __truediv__(self, other):
+        other_expr = _get_expr(other, self.client)
+        obj = DSExpr(self.client)
+        obj.expr = wrapper_dspaces_op_new_div(self.expr, other_expr.expr)
+        return(obj)
+    def __rtruediv__(self, other):
+        other_expr = _get_expr(other, self.client)
+        return(DSExpr.__truediv__(other_expr, self))
+    def __pow__(self, other):
+        other_expr = _get_expr(other, self.client)
+        obj = DSExpr(self.client)
+        obj.expr = wrapper_dspaces_op_new_pow(self.expr, other_expr.expr)
+        return(obj)
+    def __rpow__(self, other):
+        other_expr = _get_expr(other, self.client)
+        return(DSExpr.__pow__(other_expr, self))
+    def arctan(self):
+        obj = DSExpr(self.client)
+        obj.expr = wrapper_dspaces_op_new_arctan(self.expr)
         return(obj)
     def exec(self):
         return(wrapper_dspaces_ops_calc(self.client.client, self.expr))
@@ -69,11 +113,13 @@ class DSConst(DSExpr):
         DSExpr.__init__(self, client)
         if np.dtype(type(val)) == np.int64:
             self.expr = wrapper_dspaces_ops_new_iconst(val)
-        elif dtype(type(val)) == np.float64:
+        elif np.dtype(type(val)) == np.float64:
             self.expr = wrapper_dspaces_ops_new_rconst(val)
         else:
             raise(TypeError("expression constants must be floats or ints"))
     def __add__(self, other):
+        return(DSExpr.__add__(self, other))
+    def __radd__(self, other):
         return(DSExpr.__add__(self, other))
 
 class DSData(DSExpr):
@@ -83,4 +129,6 @@ class DSData(DSExpr):
             raise TypeError("lower-bound and upper-bound must have the same dimensionality")
         self.expr = wrapper_dspaces_ops_new_obj(client.client, name.encode('ascii'), version, lb, ub, dtype)
     def __add__(self, other):
+        return(DSExpr.__add__(self, other))
+    def __radd__(self, other):
         return(DSExpr.__add__(self, other))

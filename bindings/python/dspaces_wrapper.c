@@ -283,6 +283,80 @@ PyObject *wrapper_dspaces_op_new_add(PyObject *exprppy1, PyObject *exprppy2)
     return(res);
 }
 
+PyObject *wrapper_dspaces_op_new_sub(PyObject *exprppy1, PyObject *exprppy2)
+{
+    ds_expr_t *exprp1, *exprp2, *resp;
+    PyObject *res;
+
+    exprp1 = PyLong_AsVoidPtr(exprppy1);
+    exprp2 = PyLong_AsVoidPtr(exprppy2);
+
+    resp = malloc(sizeof(*resp));
+    *resp = dspaces_op_new_sub(*exprp1, *exprp2);
+    res = PyLong_FromVoidPtr((void *)resp);
+
+    return(res);
+}
+
+PyObject *wrapper_dspaces_op_new_mult(PyObject *exprppy1, PyObject *exprppy2)
+{
+    ds_expr_t *exprp1, *exprp2, *resp;
+    PyObject *res;
+
+    exprp1 = PyLong_AsVoidPtr(exprppy1);
+    exprp2 = PyLong_AsVoidPtr(exprppy2);
+
+    resp = malloc(sizeof(*resp));
+    *resp = dspaces_op_new_mult(*exprp1, *exprp2);
+    res = PyLong_FromVoidPtr((void *)resp);
+
+    return(res);
+}
+
+PyObject *wrapper_dspaces_op_new_div(PyObject *exprppy1, PyObject *exprppy2)
+{
+    ds_expr_t *exprp1, *exprp2, *resp;
+    PyObject *res;
+
+    exprp1 = PyLong_AsVoidPtr(exprppy1);
+    exprp2 = PyLong_AsVoidPtr(exprppy2);
+
+    resp = malloc(sizeof(*resp));
+    *resp = dspaces_op_new_div(*exprp1, *exprp2);
+    res = PyLong_FromVoidPtr((void *)resp);
+
+    return(res);
+}
+
+PyObject *wrapper_dspaces_op_new_pow(PyObject *exprppy1, PyObject *exprppy2)
+{
+    ds_expr_t *exprp1, *exprp2, *resp;
+    PyObject *res;
+
+    exprp1 = PyLong_AsVoidPtr(exprppy1);
+    exprp2 = PyLong_AsVoidPtr(exprppy2);
+
+    resp = malloc(sizeof(*resp));
+    *resp = dspaces_op_new_pow(*exprp1, *exprp2);
+    res = PyLong_FromVoidPtr((void *)resp);
+
+    return(res);
+}
+
+PyObject *wrapper_dspaces_op_new_arctan(PyObject *exprppy1)
+{
+    ds_expr_t *exprp1, *resp;
+    PyObject *res;
+
+    exprp1 = PyLong_AsVoidPtr(exprppy1);
+
+    resp = malloc(sizeof(*resp));
+    *resp = dspaces_op_new_arctan(*exprp1);
+    res = PyLong_FromVoidPtr((void *)resp);
+
+    return(res);
+}
+
 PyObject *wrapper_dspaces_ops_calc(PyObject *clientppy, PyObject *exprppy)
 {
     void *result_buf;

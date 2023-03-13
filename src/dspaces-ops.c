@@ -114,13 +114,40 @@ struct ds_data_expr *dspaces_op_new_pow(struct ds_data_expr *expr1,
     return (dspaces_op_new_2arg(DS_OP_POW, expr1, expr2));
 }
 
+struct ds_data_expr *dspaces_op_new_arctan(struct ds_data_expr *expr)
+{
+    return(dspaces_op_new_1arg(DS_OP_ARCTAN, expr));
+}
+
+struct ds_data_expr *dspaces_op_new_1arg(ds_op_t op, struct ds_data_expr *expr1)
+{
+    struct ds_data_expr *expr;
+
+    if(op != DS_OP_ARCTAN) {
+        fprintf(stderr, "ERROR: %s: unknown unary opcode %i.\n", __func__, op);
+    }
+
+    expr = malloc(sizeof(*expr));
+    expr->op = op;
+    if(op == DS_OP_ARCTAN || op == DS_OP_DIV) {
+        expr->type = DS_VAL_REAL;
+    } else {
+        expr->type = expr1->type;
+    }
+    expr->size = expr1->size;
+    expr->sub_expr = malloc(sizeof(*expr->sub_expr));
+    expr->sub_expr[0] = expr1;
+
+    return(expr);
+}
+
 struct ds_data_expr *dspaces_op_new_2arg(ds_op_t op, struct ds_data_expr *expr1,
                                          struct ds_data_expr *expr2)
 {
     struct ds_data_expr *expr;
 
     if(op < DS_OP_ADD || op > DS_OP_POW) {
-        fprintf(stderr, "ERROR: %s: unkown opcode %i.\n", __func__, op);
+        fprintf(stderr, "ERROR: %s: unknown binary opcode %i.\n", __func__, op);
         return (NULL);
     }
 
@@ -163,8 +190,6 @@ double ds_op_calc_rval(struct ds_data_expr *expr, long pos, int *res)
         return (((double *)od->data)[pos]);
     case DS_OP_ICONST:
         *res = -1;
-        int *a = NULL;
-        int b = *a;
         fprintf(
             stderr,
             "ERROR: %s: attempted illegal cast of int to real (corruption?)\n",
@@ -196,6 +221,17 @@ double ds_op_calc_rval(struct ds_data_expr *expr, long pos, int *res)
             return (0);
         }
         break;
+    case DS_OP_ARCTAN:
+        if(expr->sub_expr[0]->type == DS_VAL_REAL) {
+            subval1 = ds_op_calc_rval(expr->sub_expr[0], pos, &err);
+        } else if(expr->sub_expr[0]->type == DS_VAL_INT) {
+            subval1 = ds_op_calc_ival(expr->sub_expr[0], pos, &err);
+        }
+        if(err < 0) {
+            *res = err;
+            return(0);
+        }
+        break;
     default:
         *res = -1;
         fprintf(stderr, "ERROR: %s: unknown opcode %i\n", __func__, expr->type);
@@ -213,6 +249,8 @@ double ds_op_calc_rval(struct ds_data_expr *expr, long pos, int *res)
         return(subval1 / subval2);
     case DS_OP_POW:
         return(pow(subval1, subval2));
+    case DS_OP_ARCTAN:
+        return(atan(subval1));
     default:
         fprintf(stderr,
                 "ERROR: %s: no way to handle unknown op %i (corruption?)\n",
@@ -335,6 +373,9 @@ void gather_op_ods(struct ds_data_expr *expr, struct list_head *expr_odl)
         gather_op_ods(expr->sub_expr[0], expr_odl);
         gather_op_ods(expr->sub_expr[1], expr_odl);
         break;
+    case DS_OP_ARCTAN:
+        gather_op_ods(expr->sub_expr[0], expr_odl);
+        break;
     default:
         break;
     }
@@ -359,6 +400,9 @@ void update_expr_objs(struct ds_data_expr *expr, struct obj_data *od)
     case DS_OP_POW:
         update_expr_objs(expr->sub_expr[0], od);
         update_expr_objs(expr->sub_expr[1], od);
+        break;
+    case DS_OP_ARCTAN:
+        update_expr_objs(expr->sub_expr[0], od);
         break;
     default:
         break;
@@ -405,6 +449,11 @@ void dspaces_op_get_result_size(struct ds_data_expr *expr, int *ndim, uint64_t *
                 *dims = rdims;
                 free(ldims);
             }
+            break;
+        case DS_OP_ARCTAN:
+            dspaces_op_get_result_size(expr->sub_expr[0], &lndim, &ldims);
+            *ndim = lndim;
+            *dims = ldims;
             break;
         default:
             fprintf(stderr, "ERROR: %s: unknown op type.\n", __func__);

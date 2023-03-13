@@ -2336,6 +2336,7 @@ int dspaces_op_calc(dspaces_client_t client, struct ds_data_expr *expr, void **b
     if(out.len) {
         *buf = malloc(rdma_size);
         ret = LZ4_decompress_safe(cbuf, *buf, out.len, rdma_size);
+        DEBUG_OUT("decompressed results from %zi to %zi bytes.\n", out.len, rdma_size);
         free(cbuf);
     } else {
         *buf = cbuf;

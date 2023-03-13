@@ -32,4 +32,14 @@ PyObject *wrapper_dspaces_ops_new_obj(PyObject *clientppy, const char *name, int
 
 PyObject *wrapper_dspaces_op_new_add(PyObject *exprppy1, PyObject *exprppy2);
 
+PyObject *wrapper_dspaces_op_new_sub(PyObject *exprppy1, PyObject *exprppy2);
+
+PyObject *wrapper_dspaces_op_new_mult(PyObject *exprppy1, PyObject *exprppy2);
+
+PyObject *wrapper_dspaces_op_new_div(PyObject *exprppy1, PyObject *exprppy2);
+
+PyObject *wrapper_dspaces_op_new_pow(PyObject *exprppy1, PyObject *exprppy2);
+
+PyObject *wrapper_dspaces_op_new_arctan(PyObject *exprppy1);
+
 PyObject *wrapper_dspaces_ops_calc(PyObject *clientppy, PyObject *exprppy);
