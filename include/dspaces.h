@@ -391,6 +391,8 @@ int dspaces_get_meta(dspaces_client_t client, const char *name, int mode,
 
 int dspaces_op_calc(dspaces_client_t client, struct ds_data_expr *expr, void **buf);
 
+void dspaces_set_namespace(dspaces_client_t client, const char *nspace);
+
 #if defined(__cplusplus)
 }
 #endif

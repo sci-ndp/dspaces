@@ -631,7 +631,17 @@ static struct sspace *lookup_sspace(dspaces_provider_t server,
 {
     struct global_dimension gdim;
     struct ds_gspace *dsg_l = server->dsg;
+    int i;
+
     memcpy(&gdim, gd, sizeof(struct global_dimension));
+
+
+    if(server->f_debug) {
+        DEBUG_OUT("global dimensions for %s:\n", var_name);
+        for(i = 0; i < gdim.ndim; i++) {
+            DEBUG_OUT(" dim[%i] = %" PRIu64 "\n", i, gdim.sizes.c[i]);
+        }
+    }
 
     // Return the default shared space created based on
     // global data domain specified in dataspaces.conf
@@ -657,7 +667,7 @@ static struct sspace *lookup_sspace(dspaces_provider_t server,
     DEBUG_OUT("didn't find an existing shared space. Make a new one.\n");
 
     // If not found, add new shared space
-    int i, err;
+    int err;
     struct bbox domain;
     memset(&domain, 0, sizeof(struct bbox));
     domain.num_dims = gdim.ndim;
