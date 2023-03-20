@@ -1256,7 +1256,7 @@ static int get_data(dspaces_client_t client, int num_odscs,
 
         rdma_size[i] = (req_obj.size) * bbox_volume(&odsc_tab[i].bb);
 
-        DEBUG_OUT("For odsc %i, element size is %i, and there are %li elements to fetch.\n", i, req_obj.size,  bbox_volume(&odsc_tab[i].bb));
+        DEBUG_OUT("For odsc %i, element size is %zi, and there are %li elements to fetch.\n", i, req_obj.size,  bbox_volume(&odsc_tab[i].bb));
 
         DEBUG_OUT("creating bulk handle for buffer %p of size %li.\n", od[i]->data, rdma_size[i]);
         hret = margo_bulk_create(client->mid, 1, (void **)(&(od[i]->data)),
@@ -1620,7 +1620,7 @@ int dspaces_aget(dspaces_client_t client, const char *var_name,
         DEBUG_OUT("not setting element size because there are no result descriptors.");
     }
     odsc.size = elem_size;
-    DEBUG_OUT("element size is %i\n", odsc.size);
+    DEBUG_OUT("element size is %zi\n", odsc.size);
     for(i = 0; i < ndim; i++) {
         num_elem *= (ub[i] - lb[i]) + 1;
     }

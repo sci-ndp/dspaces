@@ -65,6 +65,13 @@ xpkg_import_module (liblz4 REQUIRED liblz4)
 include(python_bindings)
 
 find_package(MPI COMPONENTS REQUIRED)
+find_package(OpenMP)
+if(OPENMP_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    add_definitions(-DOPS_USE_OPENMP)
+endif()
+
 
 include(CheckLanguage)
 check_language(Fortran)
