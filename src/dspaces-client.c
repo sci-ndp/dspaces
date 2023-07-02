@@ -248,6 +248,8 @@ static int init_ss_info(dspaces_client_t client)
 
     ret = get_ss_info(client, &ss_data);
     install_ss_info(client, &ss_data);
+
+    return(ret);
 }
 
 static int init_ss_info_mpi(dspaces_client_t client, MPI_Comm comm)
@@ -797,8 +799,7 @@ static int setup_put(dspaces_client_t client, const char *var_name,
     hg_size_t rdma_size = (elem_size)*bbox_volume(&odsc.bb);
 
     DEBUG_OUT("sending object %s \n", obj_desc_sprint(&odsc));
-    // int *a = NULL;
-    // int b = *a;
+    
     hret = margo_bulk_create(client->mid, 1, (void **)&data, &rdma_size,
                              HG_BULK_READ_ONLY, &in->handle);
     if(hret != HG_SUCCESS) {
@@ -814,6 +815,8 @@ static int setup_put(dspaces_client_t client, const char *var_name,
         margo_bulk_free(in->handle);
         return dspaces_ERR_MERCURY;
     }
+
+    return(0);
 }
 
 int dspaces_put(dspaces_client_t client, const char *var_name, unsigned int ver,
@@ -1080,6 +1083,7 @@ int dspaces_check_put(dspaces_client_t client, struct dspaces_put_req *req,
                 return ret;
             }
         }
+        return(hret);
     } else {
         margo_test(req->req, &flag);
         if(flag) {
