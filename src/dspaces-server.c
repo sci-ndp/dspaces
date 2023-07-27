@@ -256,7 +256,7 @@ static int parse_conf(const char *fname)
     return 0;
 }
 
-static int parse_conf_toml(const char *fname, struct remote **rem_array,
+static int parse_conf_toml(const char *fname, struct list_head *dir_list, struct remote **rem_array,
                            int *nremote)
 {
     FILE *fin;
@@ -339,6 +339,8 @@ static int parse_conf_toml(const char *fname, struct remote **rem_array,
             port = dat.u.i;
             sprintf((*rem_array)[i].addr_str, "sockets://%s:%i", ip, port);
             free(ip);
+         }
+    }
     
     storage = toml_table_in(conf, "storage");
     if(storage) {
@@ -579,7 +581,7 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     if(!ext || strcmp(ext, ".toml") != 0) {
         err = parse_conf(conf_name);
     } else {
-        err = parse_conf_toml(conf_name, &server->remotes, &server->nremote);
+        err = parse_conf_toml(conf_name, &server->dirs, &server->remotes, &server->nremote);
     }
     if(err < 0) {
         goto err_out;
