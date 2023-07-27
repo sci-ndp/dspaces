@@ -5,4 +5,8 @@
     HG_Register(__hgclass, __hgid, BOOST_PP_CAT(hg_proc_, __in_t),             \
                 BOOST_PP_CAT(hg_proc_, __out_t), _handler_for_##__handler);
 
+#ifndef HOST_NAME_MAX
+#define HOST_NAME_MAX 255
+#endif
+
 #endif
