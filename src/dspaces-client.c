@@ -8,9 +8,11 @@
 #include "dspacesp.h"
 #include "gspace.h"
 #include "ss_data.h"
+#include "dspaces-ops.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <lz4.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -99,6 +101,7 @@ struct dspaces_client {
     hg_id_t kill_client_id;
     hg_id_t sub_id;
     hg_id_t notify_id;
+    hg_id_t do_ops_id;
     struct dc_gspace *dcg;
     char **server_address;
     char **node_names;
@@ -117,6 +120,8 @@ struct dspaces_client {
     struct sub_list_node *sub_lists[SUB_HASH_SIZE];
     struct sub_list_node *done_list;
     int pending_sub;
+
+    char *nspace;
 
 #ifdef HAVE_DRC
     uint32_t drc_credential_id;
@@ -216,7 +221,8 @@ static int get_ss_info(dspaces_client_t client, ss_info_hdr *ss_data)
     DEBUG_OUT("Got ss_rpc reply\n");
     hret = margo_get_output(handle, &out);
     if(hret != HG_SUCCESS) {
-        fprintf(stderr, "ERROR: (%s): margo_get_output() failed\n", __func__);
+        fprintf(stderr, "ERROR: (%s): margo_get_output() failed with %i\n",
+                __func__, hret);
         margo_destroy(handle);
         return dspaces_ERR_MERCURY;
     }
@@ -507,7 +513,7 @@ static int dspaces_init_margo(dspaces_client_t client,
             fprintf(stderr, "%s", margo_json);
             free(margo_json);
         }
-        margo_set_log_level(client->mid, MARGO_LOG_TRACE);
+        margo_set_log_level(client->mid, MARGO_LOG_WARNING);
     }
 
 #endif /* HAVE_DRC */
@@ -565,6 +571,7 @@ static int dspaces_init_margo(dspaces_client_t client,
         DS_HG_REGISTER(hg, client->notify_id, odsc_list_t, void, notify_rpc);
         margo_registered_name(client->mid, "query_meta_rpc",
                               &client->query_meta_id, &flag);
+        margo_registered_name(client->mid, "do_ops_rpc", &client->do_ops_id, &flag);
     } else {
         client->put_id = MARGO_REGISTER(client->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, NULL);
@@ -612,6 +619,7 @@ static int dspaces_init_margo(dspaces_client_t client,
                             NULL);
         margo_registered_disable_response(client->mid, client->notify_id,
                                           HG_TRUE);
+        client->do_ops_id = MARGO_REGISTER(client->mid, "do_ops_rpc", do_ops_in_t, bulk_out_t, NULL);
     }
 
     return (dspaces_SUCCESS);
@@ -690,6 +698,72 @@ int dspaces_init_mpi(MPI_Comm comm, dspaces_client_t *c)
     return (dspaces_SUCCESS);
 }
 
+static int arg_conf(dspaces_client_t client, const char *conn_str)
+{
+    client->size_sp = 1;
+    client->server_address = malloc(sizeof(*client->server_address));
+    client->node_names = malloc(sizeof(*client->node_names));
+    client->node_names[0] = strdup("remote");
+    client->server_address[0] = strdup(conn_str);
+
+    return (0);
+}
+
+int dspaces_init_wan(const char *listen_addr_str,
+                     const char *conn_str, int rank, dspaces_client_t *c)
+{
+    dspaces_client_t client;
+    int ret;
+
+    ret = dspaces_init_internal(rank, &client);
+    if(ret != dspaces_SUCCESS) {
+        return (ret);
+    }
+
+    ret = arg_conf(client, conn_str);
+    if(ret != 0) {
+        return (ret);
+    }
+    dspaces_init_margo(client, listen_addr_str);
+
+    choose_server(client);
+    init_ss_info(client);
+    dspaces_post_init(client);
+
+    *c = client;
+
+    return (dspaces_SUCCESS);
+}
+
+int dspaces_init_wan_mpi(const char *listen_addr_str, const char *conn_str,
+                            MPI_Comm comm, dspaces_client_t *c)
+{
+    dspaces_client_t client;
+    int rank;
+    int ret;
+    
+    MPI_Comm_rank(comm, &rank);
+
+    ret = dspaces_init_internal(rank, &client);
+    if(ret != dspaces_SUCCESS) {
+        return (ret);
+    }
+
+    ret = arg_conf(client, conn_str);
+    if(ret != 0) {
+        return (ret);
+    }
+    dspaces_init_margo(client, listen_addr_str);
+
+    choose_server(client);
+    init_ss_info_mpi(client, comm);
+    dspaces_post_init(client);
+
+    *c = client;
+
+    return (dspaces_SUCCESS);
+}
+
 int dspaces_server_count(dspaces_client_t client) { return (client->size_sp); }
 
 static void free_done_list(dspaces_client_t client)
@@ -754,12 +828,63 @@ int dspaces_fini(dspaces_client_t client)
 void dspaces_define_gdim(dspaces_client_t client, const char *var_name,
                          int ndim, uint64_t *gdim)
 {
+    char *long_vname = NULL;
+    const char *fq_vname = NULL;
+
+    if(client->nspace) {
+        long_vname = malloc(strlen(client->nspace + strlen(var_name) + 2));
+        sprintf(long_vname, "%s\\%s", client->nspace, var_name);
+        fq_vname = long_vname;
+    } else {
+        fq_vname = var_name;
+    }
+
     if(ndim > BBOX_MAX_NDIM) {
         fprintf(stderr, "ERROR: %s: maximum object dimensionality is %d\n",
                 __func__, BBOX_MAX_NDIM);
     } else {
-        update_gdim_list(&(client->dcg->gdim_list), var_name, ndim, gdim);
+        update_gdim_list(&(client->dcg->gdim_list), fq_vname, ndim, gdim);
     }
+
+    if(long_vname) {
+        free(long_vname);
+    }
+}
+
+void dspaces_get_gdim(dspaces_client_t client, const char *var_name, int *ndim, uint64_t *gdims)
+{
+    char *long_vname = NULL;
+    const char *fq_vname = NULL;
+    struct global_dimension gdim;
+
+    if(client->nspace) {
+        long_vname = malloc(strlen(client->nspace + strlen(var_name) + 2));
+        sprintf(long_vname, "%s\\%s", client->nspace, var_name);
+        fq_vname = long_vname;
+    } else {
+        fq_vname = var_name;
+    }
+
+    set_global_dimension(&(client->dcg->gdim_list), fq_vname,
+                           &(client->dcg->default_gdim), &gdim);
+    get_global_dimensions(&gdim, ndim, gdims);
+
+    if(long_vname) {
+        free(long_vname);
+    }
+}
+
+static void copy_var_name_to_odsc(dspaces_client_t client, const char *var_name, obj_descriptor *odsc)
+{
+    if(client->nspace) {
+        strncpy(odsc->name, client->nspace, strlen(client->nspace));
+        odsc->name[strlen(client->nspace)] = '\\';
+        strncpy(&odsc->name[strlen(client->nspace) + 1], var_name, 
+                (sizeof(odsc->name) - strlen(client->nspace)) - 1);
+    } else {
+        strncpy(odsc->name, var_name, sizeof(odsc->name) - 1);
+    }
+    odsc->name[sizeof(odsc->name) - 1] = '\0';
 }
 
 static int setup_put(dspaces_client_t client, const char *var_name,
@@ -785,11 +910,10 @@ static int setup_put(dspaces_client_t client, const char *var_name,
     memcpy(odsc.bb.lb.c, lb, sizeof(uint64_t) * ndim);
     memcpy(odsc.bb.ub.c, ub, sizeof(uint64_t) * ndim);
 
-    strncpy(odsc.name, var_name, sizeof(odsc.name) - 1);
-    odsc.name[sizeof(odsc.name) - 1] = '\0';
+    copy_var_name_to_odsc(client, var_name, &odsc);
 
     struct global_dimension odsc_gdim;
-    set_global_dimension(&(client->dcg->gdim_list), var_name,
+    set_global_dimension(&(client->dcg->gdim_list), odsc.name,
                          &(client->dcg->default_gdim), &odsc_gdim);
 
     in->odsc.size = sizeof(odsc);
@@ -845,11 +969,10 @@ int dspaces_put(dspaces_client_t client, const char *var_name, unsigned int ver,
     memcpy(odsc.bb.lb.c, lb, sizeof(uint64_t) * ndim);
     memcpy(odsc.bb.ub.c, ub, sizeof(uint64_t) * ndim);
 
-    strncpy(odsc.name, var_name, sizeof(odsc.name) - 1);
-    odsc.name[sizeof(odsc.name) - 1] = '\0';
+    copy_var_name_to_odsc(client, var_name, &odsc);
 
     struct global_dimension odsc_gdim;
-    set_global_dimension(&(client->dcg->gdim_list), var_name,
+    set_global_dimension(&(client->dcg->gdim_list), odsc.name,
                          &(client->dcg->default_gdim), &odsc_gdim);
 
     in.odsc.size = sizeof(odsc);
@@ -982,11 +1105,10 @@ struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
     memcpy(odsc.bb.lb.c, lb, sizeof(uint64_t) * ndim);
     memcpy(odsc.bb.ub.c, ub, sizeof(uint64_t) * ndim);
 
-    strncpy(odsc.name, var_name, sizeof(odsc.name) - 1);
-    odsc.name[sizeof(odsc.name) - 1] = '\0';
+    copy_var_name_to_odsc(client, var_name, &odsc);
 
     struct global_dimension odsc_gdim;
-    set_global_dimension(&(client->dcg->gdim_list), var_name,
+    set_global_dimension(&(client->dcg->gdim_list), odsc.name,
                          &(client->dcg->default_gdim), &odsc_gdim);
 
     ds_req->in.odsc.size = sizeof(odsc);
@@ -1116,15 +1238,20 @@ static int get_data(dspaces_client_t client, int num_odscs,
 {
     struct timeval start, stop;
     bulk_in_t *in;
-    in = (bulk_in_t *)malloc(sizeof(bulk_in_t) * num_odscs);
-
     struct obj_data **od;
-    od = malloc(num_odscs * sizeof(struct obj_data *));
-
     margo_request *serv_req;
     hg_handle_t *hndl;
+    hg_size_t *rdma_size;
+    size_t max_size = 0;
+    void *ucbuffer;
+    int ret;
+    hg_return_t hret;
+
+    in = (bulk_in_t *)malloc(sizeof(bulk_in_t) * num_odscs);
+    od = malloc(num_odscs * sizeof(struct obj_data *));
     hndl = (hg_handle_t *)malloc(sizeof(hg_handle_t) * num_odscs);
     serv_req = (margo_request *)malloc(sizeof(margo_request) * num_odscs);
+    rdma_size = (hg_size_t *)malloc(sizeof(*rdma_size) * num_odscs);
 
     gettimeofday(&start, NULL);
 
@@ -1133,10 +1260,19 @@ static int get_data(dspaces_client_t client, int num_odscs,
         in[i].odsc.size = sizeof(obj_descriptor);
         in[i].odsc.raw_odsc = (char *)(&odsc_tab[i]);
 
-        hg_size_t rdma_size = (req_obj.size) * bbox_volume(&odsc_tab[i].bb);
+        rdma_size[i] = (req_obj.size) * bbox_volume(&odsc_tab[i].bb);
 
-        margo_bulk_create(client->mid, 1, (void **)(&(od[i]->data)), &rdma_size,
-                          HG_BULK_WRITE_ONLY, &in[i].handle);
+        DEBUG_OUT("For odsc %i, element size is %zi, and there are %li elements to fetch.\n", i, req_obj.size,  bbox_volume(&odsc_tab[i].bb));
+
+        DEBUG_OUT("creating bulk handle for buffer %p of size %li.\n", od[i]->data, rdma_size[i]);
+        hret = margo_bulk_create(client->mid, 1, (void **)(&(od[i]->data)),
+                          &rdma_size[i], HG_BULK_WRITE_ONLY, &in[i].handle);
+        if(hret != HG_SUCCESS) {
+            fprintf(stderr, "ERROR: %s: margo_bulk_create failed with %i\n", __func__, hret);
+        }
+        if(rdma_size[i] > max_size) {
+            max_size = rdma_size[i];
+        }
 
         hg_addr_t server_addr;
         margo_addr_lookup(client->mid, odsc_tab[i].owner, &server_addr);
@@ -1159,22 +1295,39 @@ static int get_data(dspaces_client_t client, int num_odscs,
     }
 
     struct obj_data *return_od = obj_data_alloc_no_data(&req_obj, data);
+    ucbuffer = malloc(max_size);
 
     // TODO: rewrite with margo_wait_any()
     for(int i = 0; i < num_odscs; ++i) {
         margo_wait(serv_req[i]);
         bulk_out_t resp;
         margo_get_output(hndl[i], &resp);
-        margo_free_output(hndl[i], &resp);
-        margo_destroy(hndl[i]);
+
+        if((!(odsc_tab[i].flags & DS_CLIENT_STORAGE)) && resp.len) {
+            // decompress into buffer and copy back
+            ret = LZ4_decompress_safe(od[i]->data, ucbuffer, resp.len,
+                                      rdma_size[i]);
+            DEBUG_OUT("decompressed from %li to %i bytes\n", resp.len, ret);
+            if(ret != rdma_size[i]) {
+                fprintf(stderr, "LZ4 decompression failed with %i.\n", ret);
+            }
+            memcpy(od[i]->data, ucbuffer, rdma_size[i]);
+        } else if(!resp.len) {
+            DEBUG_OUT("receive bbuffer is not compressed.\n");
+        }
+
         // copy received data into user return buffer
         ssd_copy(return_od, od[i]);
         obj_data_free(od[i]);
+        margo_free_output(hndl[i], &resp);
+        margo_destroy(hndl[i]);
     }
     free(hndl);
     free(serv_req);
     free(in);
     free(return_od);
+    free(rdma_size);
+    free(ucbuffer);
 
     gettimeofday(&stop, NULL);
 
@@ -1317,15 +1470,14 @@ int dspaces_put_local(dspaces_client_t client, const char *var_name,
     memcpy(odsc.bb.lb.c, lb, sizeof(uint64_t) * ndim);
     memcpy(odsc.bb.ub.c, ub, sizeof(uint64_t) * ndim);
 
-    strncpy(odsc.name, var_name, sizeof(odsc.name) - 1);
-    odsc.name[sizeof(odsc.name) - 1] = '\0';
+    copy_var_name_to_odsc(client, var_name, &odsc);
 
     odsc_gdim_t in;
     bulk_out_t out;
     struct obj_data *od;
     od = obj_data_alloc_with_data(&odsc, data);
 
-    set_global_dimension(&(client->dcg->gdim_list), var_name,
+    set_global_dimension(&(client->dcg->gdim_list), odsc.name,
                          &(client->dcg->default_gdim), &od->gdim);
 
     ABT_mutex_lock(client->ls_mutex);
@@ -1425,7 +1577,7 @@ static int get_odscs(dspaces_client_t client, obj_descriptor *odsc, int timeout,
     return (num_odscs);
 }
 
-static void fill_odsc(const char *var_name, unsigned int ver, int elem_size,
+static void fill_odsc(dspaces_client_t client, const char *var_name, unsigned int ver, int elem_size,
                       int ndim, uint64_t *lb, uint64_t *ub,
                       obj_descriptor *odsc)
 {
@@ -1441,8 +1593,7 @@ static void fill_odsc(const char *var_name, unsigned int ver, int elem_size,
     memcpy(odsc->bb.lb.c, lb, sizeof(uint64_t) * ndim);
     memcpy(odsc->bb.ub.c, ub, sizeof(uint64_t) * ndim);
 
-    strncpy(odsc->name, var_name, sizeof(odsc->name) - 1);
-    odsc->name[sizeof(odsc->name) - 1] = '\0';
+    copy_var_name_to_odsc(client, var_name, odsc);
 }
 
 int dspaces_aget(dspaces_client_t client, const char *var_name,
@@ -1457,7 +1608,9 @@ int dspaces_aget(dspaces_client_t client, const char *var_name,
     int i;
     int ret = dspaces_SUCCESS;
 
-    fill_odsc(var_name, ver, 0, ndim, lb, ub, &odsc);
+    fill_odsc(client, var_name, ver, 0, ndim, lb, ub, &odsc);
+
+    DEBUG_OUT("Querying %s with timeout %d\n", obj_desc_sprint(&odsc), timeout);
 
     num_odscs = get_odscs(client, &odsc, timeout, &odsc_tab);
 
@@ -1469,7 +1622,11 @@ int dspaces_aget(dspaces_client_t client, const char *var_name,
     // send request to get the obj_desc
     if(num_odscs != 0)
         elem_size = odsc_tab[0].size;
+    else {
+        DEBUG_OUT("not setting element size because there are no result descriptors.");
+    }
     odsc.size = elem_size;
+    DEBUG_OUT("element size is %zi\n", odsc.size);
     for(i = 0; i < ndim; i++) {
         num_elem *= (ub[i] - lb[i]) + 1;
     }
@@ -1489,7 +1646,7 @@ int dspaces_get(dspaces_client_t client, const char *var_name, unsigned int ver,
     int num_odscs;
     int ret = dspaces_SUCCESS;
 
-    fill_odsc(var_name, ver, elem_size, ndim, lb, ub, &odsc);
+    fill_odsc(client, var_name, ver, elem_size, ndim, lb, ub, &odsc);
 
     DEBUG_OUT("Querying %s with timeout %d\n", obj_desc_sprint(&odsc), timeout);
 
@@ -1504,6 +1661,8 @@ int dspaces_get(dspaces_client_t client, const char *var_name, unsigned int ver,
     if(num_odscs != 0) {
         get_data(client, num_odscs, odsc, odsc_tab, data);
         free(odsc_tab);
+    } else {
+        return (-1);
     }
 
     return (ret);
@@ -2059,6 +2218,7 @@ struct dspaces_sub_handle *dspaces_sub(dspaces_client_t client,
     memcpy(subh->q_odsc.bb.lb.c, lb, sizeof(uint64_t) * ndim);
     memcpy(subh->q_odsc.bb.ub.c, ub, sizeof(uint64_t) * ndim);
     strncpy(subh->q_odsc.name, var_name, strlen(var_name) + 1);
+    copy_var_name_to_odsc(client, var_name, &subh->q_odsc);
 
     // A hack to send our address to the server without using more space. This
     // field is ignored in a normal query.
@@ -2074,7 +2234,7 @@ struct dspaces_sub_handle *dspaces_sub(dspaces_client_t client,
     DEBUG_OUT("registered data subscription for %s with id %d\n",
               obj_desc_sprint(&subh->q_odsc), subh->id);
 
-    set_global_dimension(&(client->dcg->gdim_list), var_name,
+    set_global_dimension(&(client->dcg->gdim_list), subh->q_odsc.name,
                          &(client->dcg->default_gdim), &od_gdim);
     in.odsc_gdim.gdim_size = sizeof(struct global_dimension);
     in.odsc_gdim.raw_gdim = (char *)(&od_gdim);
@@ -2193,4 +2353,63 @@ void dspaces_kill(dspaces_client_t client)
 
     margo_addr_free(client->mid, server_addr);
     margo_destroy(h);
+}
+
+int dspaces_op_calc(dspaces_client_t client, struct ds_data_expr *expr, void **buf)
+{
+    hg_handle_t handle;
+    do_ops_in_t in;
+    bulk_out_t out;
+    hg_addr_t server_addr;
+    hg_size_t rdma_size = expr->size;
+    void *cbuf;
+    hg_return_t hret;
+    int ret;
+
+    in.expr = expr;
+    cbuf = malloc(expr->size);
+    
+    get_server_address(client, &server_addr);
+    
+    margo_bulk_create(client->mid, 1, &cbuf, &rdma_size, HG_BULK_WRITE_ONLY, &in.handle);
+    hret = margo_create(client->mid, server_addr, client->do_ops_id, &handle);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: %s: margo_create() failed with %d.\n", __func__, hret);
+        return(dspaces_ERR_MERCURY);
+    }
+    hret = margo_forward(handle, &in);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: %s: margo_forward() failed with %d.\n",
+                __func__, hret);
+        margo_destroy(handle);
+        return(dspaces_ERR_MERCURY);
+    }
+    hret = margo_get_output(handle, &out);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: %s: margo_get_output() failed with %d.\n",
+                __func__, hret);
+        margo_destroy(handle);
+        return(dspaces_ERR_MERCURY);
+    }
+
+    if(out.len) {
+        *buf = malloc(rdma_size);
+        ret = LZ4_decompress_safe(cbuf, *buf, out.len, rdma_size);
+        DEBUG_OUT("decompressed results from %zi to %zi bytes.\n", out.len, rdma_size);
+        free(cbuf);
+    } else {
+        *buf = cbuf;
+    }
+
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+}
+
+void dspaces_set_namespace(dspaces_client_t client, const char *nspace)
+{
+   if(client->nspace) {
+      free(client->nspace);
+   }
+
+   client->nspace = strdup(nspace);
 }

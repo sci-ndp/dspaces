@@ -4,6 +4,7 @@
  *
  * See COPYRIGHT in top-level directory.
  */
+#include "dspaces-ops.h"
 #include "dspaces-server.h"
 #include "dspaces-storage.h"
 #include "dspaces.h"
@@ -14,12 +15,16 @@
 #include <abt.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <lz4.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#ifdef OPS_USE_OPENMP
+#include <omp.h>
+#endif
 
 #ifdef HAVE_DRC
 #include <rdmacred.h>
@@ -51,6 +56,12 @@ struct addr_list_entry {
     char *addr;
 };
 
+struct remote {
+    char *name;
+    char addr_str[128];
+    dspaces_client_t conn;
+};
+
 struct dspaces_provider {
     struct list_head dirs;
     margo_instance_id mid;
@@ -58,6 +69,7 @@ struct dspaces_provider {
     hg_id_t put_local_id;
     hg_id_t put_meta_id;
     hg_id_t query_id;
+    hg_id_t peek_meta_id;
     hg_id_t query_meta_id;
     hg_id_t get_id;
     hg_id_t get_local_id;
@@ -69,6 +81,7 @@ struct dspaces_provider {
     hg_id_t kill_client_id;
     hg_id_t sub_id;
     hg_id_t notify_id;
+    hg_id_t do_ops_id;
     struct ds_gspace *dsg;
     char **server_address;
     char **node_names;
@@ -94,6 +107,12 @@ struct dspaces_provider {
     ABT_xstream drain_xstream;
     ABT_pool drain_pool;
     ABT_thread drain_t;
+
+    const char *pub_ip;
+    const char *priv_ip;
+
+    struct remote *remotes;
+    int nremote;
 };
 
 DECLARE_MARGO_RPC_HANDLER(put_rpc)
@@ -101,12 +120,14 @@ DECLARE_MARGO_RPC_HANDLER(put_local_rpc)
 DECLARE_MARGO_RPC_HANDLER(put_meta_rpc)
 DECLARE_MARGO_RPC_HANDLER(get_rpc)
 DECLARE_MARGO_RPC_HANDLER(query_rpc)
+DECLARE_MARGO_RPC_HANDLER(peek_meta_rpc)
 DECLARE_MARGO_RPC_HANDLER(query_meta_rpc)
 DECLARE_MARGO_RPC_HANDLER(obj_update_rpc)
 DECLARE_MARGO_RPC_HANDLER(odsc_internal_rpc)
 DECLARE_MARGO_RPC_HANDLER(ss_rpc)
 DECLARE_MARGO_RPC_HANDLER(kill_rpc)
 DECLARE_MARGO_RPC_HANDLER(sub_rpc)
+DECLARE_MARGO_RPC_HANDLER(do_ops_rpc)
 
 static void put_rpc(hg_handle_t h);
 static void put_local_rpc(hg_handle_t h);
@@ -119,8 +140,7 @@ static void odsc_internal_rpc(hg_handle_t h);
 static void ss_rpc(hg_handle_t h);
 static void kill_rpc(hg_handle_t h);
 static void sub_rpc(hg_handle_t h);
-// static void write_lock_rpc(hg_handle_t h);
-// static void read_lock_rpc(hg_handle_t h);
+static void do_ops_rpc(hg_handle_t h);
 
 /* Server configuration parameters */
 static struct {
@@ -236,18 +256,23 @@ static int parse_conf(const char *fname)
     return 0;
 }
 
-static int parse_conf_toml(const char *fname, struct list_head *dir_list)
+static int parse_conf_toml(const char *fname, struct list_head *dir_list, struct remote **rem_array,
+                           int *nremote)
 {
     FILE *fin;
     toml_table_t *conf;
     toml_table_t *storage;
     toml_table_t *conf_dir;
     toml_table_t *server;
+    toml_table_t *remotes;
+    toml_table_t *remote;
     toml_datum_t dat;
     toml_array_t *arr;
     struct dspaces_dir *dir;
     struct dspaces_file *file;
     char errbuf[200];
+    char *ip;
+    int port;
     int ndim = 0;
     int ndir, nfile;
     int i, j, n;
@@ -300,6 +325,23 @@ static int parse_conf_toml(const char *fname, struct list_head *dir_list)
         }
     }
 
+    remotes = toml_table_in(conf, "remotes");
+    if(remotes) {
+        *nremote = toml_table_ntab(remotes);
+        *rem_array = malloc(sizeof(**rem_array) * *nremote);
+        for(i = 0; i < *nremote; i++) {
+            // remote = toml_table_at(remotes, i);
+            (*rem_array)[i].name = strdup(toml_key_in(remotes, i));
+            remote = toml_table_in(remotes, (*rem_array)[i].name);
+            dat = toml_string_in(remote, "ip");
+            ip = dat.u.s;
+            dat = toml_int_in(remote, "port");
+            port = dat.u.i;
+            sprintf((*rem_array)[i].addr_str, "sockets://%s:%i", ip, port);
+            free(ip);
+         }
+    }
+    
     storage = toml_table_in(conf, "storage");
     if(storage) {
         ndir = toml_table_ntab(storage);
@@ -513,7 +555,11 @@ void print_conf()
     printf(")\n");
     printf(" MAX STORED VERSIONS: %i\n", ds_conf.max_versions);
     printf(" HASH TYPE: %s\n", hash_strings[ds_conf.hash_version]);
-    printf(" APPS EXPECTED: %i\n", ds_conf.num_apps);
+    if(ds_conf.num_apps >= 0) {
+        printf(" APPS EXPECTED: %i\n", ds_conf.num_apps);
+    } else {
+        printf(" RUN UNTIL KILLED\n");
+    }
     printf("=========================\n");
 }
 
@@ -525,9 +571,9 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     int err = -ENOMEM;
 
     /* Default values */
-    ds_conf.max_versions = 1;
+    ds_conf.max_versions = 255;
     ds_conf.hash_version = ssd_hash_version_auto;
-    ds_conf.num_apps = 1;
+    ds_conf.num_apps = -1;
 
     INIT_LIST_HEAD(&server->dirs);
 
@@ -535,7 +581,7 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     if(!ext || strcmp(ext, ".toml") != 0) {
         err = parse_conf(conf_name);
     } else {
-        err = parse_conf_toml(conf_name, &server->dirs);
+        err = parse_conf_toml(conf_name, &server->dirs, &server->remotes, &server->nremote);
     }
     if(err < 0) {
         goto err_out;
@@ -599,6 +645,13 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
         goto err_free;
     }
 
+    // proxy storage
+    dsg_l->ps = ls_alloc(ds_conf.max_versions);
+    if(!dsg_l->ps) {
+        fprintf(stderr, "%s(): ERROR ls_alloc() failed\n", __func__);
+        goto err_free;
+    }
+
     dsg_l->num_apps = ds_conf.num_apps;
 
     INIT_LIST_HEAD(&dsg_l->obj_desc_drain_list);
@@ -633,7 +686,17 @@ static struct sspace *lookup_sspace(dspaces_provider_t server,
 {
     struct global_dimension gdim;
     struct ds_gspace *dsg_l = server->dsg;
+    int i;
+
     memcpy(&gdim, gd, sizeof(struct global_dimension));
+
+
+    if(server->f_debug) {
+        DEBUG_OUT("global dimensions for %s:\n", var_name);
+        for(i = 0; i < gdim.ndim; i++) {
+            DEBUG_OUT(" dim[%i] = %" PRIu64 "\n", i, gdim.sizes.c[i]);
+        }
+    }
 
     // Return the default shared space created based on
     // global data domain specified in dataspaces.conf
@@ -659,13 +722,15 @@ static struct sspace *lookup_sspace(dspaces_provider_t server,
     DEBUG_OUT("didn't find an existing shared space. Make a new one.\n");
 
     // If not found, add new shared space
-    int i, err;
+    int err;
     struct bbox domain;
     memset(&domain, 0, sizeof(struct bbox));
     domain.num_dims = gdim.ndim;
+    DEBUG_OUT("global dimmensions being allocated:\n");
     for(i = 0; i < gdim.ndim; i++) {
         domain.lb.c[i] = 0;
         domain.ub.c[i] = gdim.sizes.c[i] - 1;
+        DEBUG_OUT("dim %i: lb = %" PRIu64 ", ub = %" PRIu64 "\n", i, domain.lb.c[i], domain.ub.c[i]);
     }
 
     ssd_entry = malloc(sizeof(struct sspace_list_entry));
@@ -700,8 +765,11 @@ static int obj_update_dht(dspaces_provider_t server, struct obj_data *od,
                           obj_update_t type)
 {
     obj_descriptor *odsc = &od->obj_desc;
+    DEBUG_OUT("getting sspace lock.\n");
     ABT_mutex_lock(server->sspace_mutex);
+    DEBUG_OUT("got sspace lock.\n");
     struct sspace *ssd = lookup_sspace(server, odsc->name, &od->gdim);
+    DEBUG_OUT("realeasing sspace lock.\n");
     ABT_mutex_unlock(server->sspace_mutex);
     struct dht_entry *dht_tab[ssd->dht->num_entries];
 
@@ -822,7 +890,7 @@ static void drain_thread(void *arg)
 {
     dspaces_provider_t server = arg;
 
-    while(server->f_kill > 0) {
+    while(server->f_kill != 0) {
         int counter = 0;
         DEBUG_OUT("Thread WOKEUP\n");
         do {
@@ -880,7 +948,7 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     struct hg_init_info hii = {0};
     char margo_conf[1024];
     struct margo_init_info mii = {0};
-    int ret;
+    int i, ret;
 
     if(is_initialized) {
         fprintf(stderr,
@@ -975,7 +1043,7 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
             fprintf(stderr, "%s", margo_json);
             free(margo_json);
         }
-        margo_set_log_level(server->mid, MARGO_LOG_TRACE);
+        margo_set_log_level(server->mid, MARGO_LOG_WARNING);
     }
     MPI_Barrier(comm);
 
@@ -1017,6 +1085,10 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                               &flag);
         DS_HG_REGISTER(hg, server->query_id, odsc_gdim_t, odsc_list_t,
                        query_rpc);
+        margo_registered_name(server->mid, "peek_meta_rpc",
+                              &server->peek_meta_id, &flag);
+        DS_HG_REGISTER(hg, server->peek_meta_id, peek_meta_in_t,
+                       peek_meta_out_t, peek_meta_rpc);
         margo_registered_name(server->mid, "query_meta_rpc",
                               &server->query_meta_id, &flag);
         DS_HG_REGISTER(hg, server->query_meta_id, query_meta_in_t,
@@ -1041,6 +1113,8 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
         DS_HG_REGISTER(hg, server->sub_id, odsc_gdim_t, void, sub_rpc);
         margo_registered_name(server->mid, "notify_rpc", &server->notify_id,
                               &flag);
+        margo_registered_name(server->mid, "do_ops_rpc", &server->do_ops_id, &flag);
+        DS_HG_REGISTER(hg, server->do_ops_id, do_ops_in_t, bulk_out_t, do_ops_rpc);
     } else {
         server->put_id = MARGO_REGISTER(server->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, put_rpc);
@@ -1063,6 +1137,11 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
         server->query_id = MARGO_REGISTER(server->mid, "query_rpc", odsc_gdim_t,
                                           odsc_list_t, query_rpc);
         margo_register_data(server->mid, server->query_id, (void *)server,
+                            NULL);
+        server->peek_meta_id =
+            MARGO_REGISTER(server->mid, "peek_meta_rpc", peek_meta_in_t,
+                           peek_meta_out_t, peek_meta_rpc);
+        margo_register_data(server->mid, server->peek_meta_id, (void *)server,
                             NULL);
         server->query_meta_id =
             MARGO_REGISTER(server->mid, "query_meta_rpc", query_meta_in_t,
@@ -1094,7 +1173,6 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
             MARGO_REGISTER(server->mid, "kill_client_rpc", int32_t, void, NULL);
         margo_registered_disable_response(server->mid, server->kill_client_id,
                                           HG_TRUE);
-
         server->sub_id =
             MARGO_REGISTER(server->mid, "sub_rpc", odsc_gdim_t, void, sub_rpc);
         margo_register_data(server->mid, server->sub_id, (void *)server, NULL);
@@ -1103,6 +1181,9 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
             MARGO_REGISTER(server->mid, "notify_rpc", odsc_list_t, void, NULL);
         margo_registered_disable_response(server->mid, server->notify_id,
                                           HG_TRUE);
+        server->do_ops_id =
+            MARGO_REGISTER(server->mid, "do_ops_rpc", do_ops_in_t, bulk_out_t, do_ops_rpc);
+        margo_register_data(server->mid, server->do_ops_id, (void *)server, NULL);
     }
     int err = dsg_alloc(server, conf_file, comm);
     if(err) {
@@ -1112,8 +1193,20 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                 __func__, err);
         return (dspaces_ERR_ALLOCATION);
     }
+    for(i = 0; i < server->nremote; i++) {
+        DEBUG_OUT("initializing client connection to %s\n",
+                  server->remotes[i].name);
+        dspaces_init_wan(listen_addr_str,
+                         server->remotes[i].addr_str, 0, &server->remotes[i].conn);
+    }
 
     server->f_kill = server->dsg->num_apps;
+    if(server->f_kill > 0) {
+        DEBUG_OUT("Server will wait for %i kill tokens before halting.\n",
+                  server->f_kill);
+    } else {
+        DEBUG_OUT("Server will run indefinitely.\n");
+    }
 
     if(server->f_drain) {
         // thread to drain the data
@@ -1122,6 +1215,17 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                                    &server->drain_pool);
         ABT_thread_create(server->drain_pool, drain_thread, server,
                           ABT_THREAD_ATTR_NULL, &server->drain_t);
+    }
+
+    server->pub_ip = getenv("DSPACES_PUBLIC_IP");
+    server->priv_ip = getenv("DSPACES_PRIVATE_IP");
+
+    if(server->pub_ip) {
+        DEBUG_OUT("public IP is %s\n", server->pub_ip);
+    }
+
+    if(server->priv_ip) {
+        DEBUG_OUT("private IP is %s\n", server->priv_ip);
     }
 
     *sv = server;
@@ -1195,6 +1299,7 @@ static void kill_local_clients(dspaces_provider_t server)
 
 static int server_destroy(dspaces_provider_t server)
 {
+    int i;
     MPI_Barrier(server->comm);
     DEBUG_OUT("Finishing up, waiting for asynchronous jobs to finish...\n");
 
@@ -1211,6 +1316,10 @@ static int server_destroy(dspaces_provider_t server)
     // at some point.
     sleep(5);
 
+    for(i = 0; i < server->nremote; i++) {
+        dspaces_fini(server->remotes[i].conn);
+    }
+
     free_sspace(server->dsg);
     ls_free(server->dsg->ls);
     free(server->dsg);
@@ -1226,12 +1335,33 @@ static int server_destroy(dspaces_provider_t server)
     return 0;
 }
 
+static void address_translate(dspaces_provider_t server, char *addr_str)
+{
+    char *addr_loc = strstr(addr_str, server->priv_ip);
+    char *addr_tail;
+    int publen, privlen;
+
+    if(addr_loc) {
+        DEBUG_OUT("translating %s.\n", addr_str);
+        publen = strlen(server->pub_ip);
+        privlen = strlen(server->priv_ip);
+        addr_tail = strdup(addr_loc + privlen);
+        strcpy(addr_loc, server->pub_ip);
+        strcat(addr_str, addr_tail);
+        free(addr_tail);
+        DEBUG_OUT("translated address: %s\n", addr_str);
+    } else {
+        DEBUG_OUT("no translation needed.\n");
+    }
+}
+
 static void put_rpc(hg_handle_t handle)
 {
     hg_return_t hret;
     bulk_gdim_t in;
     bulk_out_t out;
     hg_bulk_t bulk_handle;
+    struct timeval start, stop;
 
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
 
@@ -1264,6 +1394,9 @@ static void put_rpc(hg_handle_t handle)
     margo_addr_to_string(server->mid, in_odsc.owner, &owner_addr_size,
                          owner_addr);
     margo_addr_free(server->mid, owner_addr);
+    if(server->pub_ip && server->priv_ip) {
+        address_translate(server, in_odsc.owner);
+    }
 
     struct obj_data *od;
     od = obj_data_alloc(&in_odsc);
@@ -1275,6 +1408,8 @@ static void put_rpc(hg_handle_t handle)
     // do write lock
 
     hg_size_t size = (in_odsc.size) * bbox_volume(&(in_odsc.bb));
+
+    DEBUG_OUT("Creating a bulk transfer buffer of size %li\n", size);
 
     hret = margo_bulk_create(mid, 1, (void **)&(od->data), &size,
                              HG_BULK_WRITE_ONLY, &bulk_handle);
@@ -1288,6 +1423,8 @@ static void put_rpc(hg_handle_t handle)
         return;
     }
 
+    gettimeofday(&start, NULL);
+
     hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr, in.handle, 0,
                                bulk_handle, 0, size);
     if(hret != HG_SUCCESS) {
@@ -1298,6 +1435,15 @@ static void put_rpc(hg_handle_t handle)
         margo_bulk_free(bulk_handle);
         margo_destroy(handle);
         return;
+    }
+
+    gettimeofday(&stop, NULL);
+
+    if(server->f_debug) {
+        long dsec = stop.tv_sec - start.tv_sec;
+        long dusec = stop.tv_usec - start.tv_usec;
+        float transfer_time = (float)dsec + (dusec / 1000000.0);
+        DEBUG_OUT("got %" PRIu64 " bytes in %f sec\n", size, transfer_time);
     }
 
     ABT_mutex_lock(server->ls_mutex);
@@ -1467,6 +1613,63 @@ static void put_meta_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(put_meta_rpc)
 
+static int query_remotes(dspaces_provider_t server, obj_descriptor *q_odsc, struct global_dimension *q_gdim, 
+                         int timeout, obj_descriptor **results, int req_id)
+{
+    uint64_t buf_size;
+    void *buffer = NULL;
+    int found = 0;
+    obj_descriptor *odsc;
+    struct obj_data *od;
+    hg_addr_t owner_addr;
+    size_t owner_addr_size = 128;
+    int i;
+
+    buf_size = obj_data_size(q_odsc);
+    buffer = malloc(buf_size);
+
+    DEBUG_OUT("%i remotes to query\n", server->nremote);
+    for(i = 0; i < server->nremote; i++) {
+        DEBUG_OUT("req %i: querying remote %s\n", req_id,
+                  server->remotes[i].name);
+        dspaces_define_gdim(server->remotes[i].conn, q_odsc->name, q_gdim->ndim,
+                            q_gdim->sizes.c);
+        if(dspaces_get(server->remotes[i].conn, q_odsc->name, q_odsc->version,
+                       q_odsc->size, q_odsc->bb.num_dims, q_odsc->bb.lb.c,
+                       q_odsc->bb.ub.c, buffer, 0) == 0) {
+            DEBUG_OUT("found data\n");
+            found = 1;
+            break;
+        }
+    }
+
+    if(found) {
+        odsc = calloc(1, sizeof(*odsc));
+        odsc->version = q_odsc->version;
+        margo_addr_self(server->mid, &owner_addr);
+        margo_addr_to_string(server->mid, odsc->owner, &owner_addr_size,
+                             owner_addr);
+        margo_addr_free(server->mid, owner_addr);
+        // Selectively translate address?
+        odsc->st = q_odsc->st;
+        odsc->size = q_odsc->size;
+        memcpy(&odsc->bb, &q_odsc->bb, sizeof(odsc->bb));
+        od = obj_data_alloc_no_data(odsc, buffer);
+        *results = odsc;
+        if(server->f_debug) {
+            DEBUG_OUT("created local object %s\n", obj_desc_sprint(odsc));
+        }
+        ABT_mutex_lock(server->ls_mutex);
+        ls_add_obj(server->dsg->ps, od);
+        ABT_mutex_unlock(server->ls_mutex);
+        return (sizeof(obj_descriptor));
+    } else {
+        DEBUG_OUT("req %i: not found on any remotes.\n", req_id);
+        *results = NULL;
+        return (0);
+    }
+}
+
 static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
                            int timeout, obj_descriptor **results, int req_id)
 {
@@ -1489,6 +1692,12 @@ static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
 
     q_odsc = (obj_descriptor *)query->odsc_gdim.raw_odsc;
     q_gdim = (struct global_dimension *)query->odsc_gdim.raw_gdim;
+
+    if(server->remotes && !ls_lookup(server->dsg->ls, q_odsc->name)) {
+        DEBUG_OUT("req %i: no local objects with name %s. Checking remotes.\n",
+                  req_id, q_odsc->name);
+        return (query_remotes(server, (obj_descriptor *)query->odsc_gdim.raw_odsc, (struct global_dimension *)query->odsc_gdim.raw_gdim, timeout, results, req_id));
+    }
 
     DEBUG_OUT("getting sspace lock.\n");
     ABT_mutex_lock(server->sspace_mutex);
@@ -1648,7 +1857,7 @@ static void query_rpc(hg_handle_t handle)
     memcpy(&in_odsc, in.odsc_gdim.raw_odsc, sizeof(in_odsc));
     memcpy(&in_gdim, in.odsc_gdim.raw_gdim, sizeof(struct global_dimension));
     timeout = in.param;
-    DEBUG_OUT("Received query for %s with timeout %d",
+    DEBUG_OUT("Received query for %s with timeout %d\n",
               obj_desc_sprint(&in_odsc), timeout);
 
     out.odsc_list.size =
@@ -1663,14 +1872,104 @@ static void query_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(query_rpc)
 
+static int peek_meta_remotes(dspaces_provider_t server, peek_meta_in_t *in)
+{
+    margo_request *reqs;
+    hg_handle_t *peek_hndls;
+    peek_meta_out_t *resps;
+    hg_addr_t addr;
+    int i;
+    int ret = -1;
+    size_t index;
+    hg_return_t hret;
+
+    reqs = malloc(sizeof(*reqs) * server->nremote);
+    resps = malloc(sizeof(*resps) * server->nremote);
+    peek_hndls = malloc(sizeof(*peek_hndls) * server->nremote);
+
+    DEBUG_OUT("sending peek request to remotes for metadata '%s'\n", in->name);
+    for(i = 0; i < server->nremote; i++) {
+        DEBUG_OUT("querying %s at %s\n", server->remotes[i].name,
+                  server->remotes[i].addr_str);
+        margo_addr_lookup(server->mid, server->remotes[i].addr_str, &addr);
+        hret = margo_create(server->mid, addr, server->peek_meta_id,
+                            &peek_hndls[i]);
+        hret = margo_iforward(peek_hndls[i], in, &reqs[i]);
+        margo_addr_free(server->mid, addr);
+    }
+
+    for(i = 0; i < server->nremote; i++) {
+        hret = margo_wait_any(server->nremote, reqs, &index);
+        margo_get_output(peek_hndls[index], &resps[index]);
+        DEBUG_OUT("%s replied with %i\n", server->remotes[index].name,
+                  resps[index].res);
+        if(resps[index].res == 1) {
+            ret = i;
+        }
+        margo_free_output(peek_hndls[index], &resps[index]);
+        margo_destroy(peek_hndls[index]);
+    }
+
+    free(reqs);
+    free(resps);
+    free(peek_hndls);
+
+    return (ret);
+}
+
+static void peek_meta_rpc(hg_handle_t handle)
+{
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    const struct hg_info *info = margo_get_info(handle);
+    dspaces_provider_t server =
+        (dspaces_provider_t)margo_registered_data(mid, info->id);
+    peek_meta_in_t in;
+    peek_meta_out_t out;
+    hg_return_t hret;
+    hg_addr_t addr;
+
+    hret = margo_get_input(handle, &in);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr,
+                "DATASPACES: ERROR handling %s: margo_get_input() failed with "
+                "%d.\n",
+                __func__, hret);
+        margo_destroy(handle);
+        return;
+    }
+
+    DEBUG_OUT("received peek request for metadata '%s'\n", in.name);
+
+    out.res = 0;
+
+    if(meta_find_next_entry(server->dsg->ls, in.name, -1, 0)) {
+        DEBUG_OUT("found the metadata\n");
+        out.res = 1;
+    } else if(server->nremote) {
+        DEBUG_OUT("no such metadata in local storage.\n");
+        if(peek_meta_remotes(server, &in) > -1) {
+            out.res = 1;
+        }
+    }
+
+    margo_respond(handle, &out);
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(peek_meta_rpc)
+
 static void query_meta_rpc(hg_handle_t handle)
 {
     margo_instance_id mid;
     const struct hg_info *info;
     dspaces_provider_t server;
     query_meta_in_t in;
-    query_meta_out_t out;
+    query_meta_out_t rem_out, out;
+    peek_meta_in_t rem_in;
     struct meta_data *mdata, *mdlatest;
+    int remote, found_remote;
+    hg_handle_t rem_hndl;
+    hg_addr_t rem_addr;
     hg_return_t hret;
 
     mid = margo_hg_handle_get_instance(handle);
@@ -1689,55 +1988,84 @@ static void query_meta_rpc(hg_handle_t handle)
     DEBUG_OUT("received metadata query for version %d of '%s', mode %d.\n",
               in.version, in.name, in.mode);
 
-    switch(in.mode) {
-    case META_MODE_SPEC:
-        DEBUG_OUT("spec query - searching without waiting...\n");
-        mdata = meta_find_entry(server->dsg->ls, in.name, in.version, 0);
-        break;
-    case META_MODE_NEXT:
-        DEBUG_OUT("find next query...\n");
-        mdata = meta_find_next_entry(server->dsg->ls, in.name, in.version, 1);
-        break;
-    case META_MODE_LAST:
-        DEBUG_OUT("find last query...\n");
-        mdata = meta_find_next_entry(server->dsg->ls, in.name, in.version, 1);
-        mdlatest = mdata;
-        do {
-            mdata = mdlatest;
-            DEBUG_OUT("found version %d. Checking for newer...\n",
-                      mdata->version);
-            mdlatest = meta_find_next_entry(server->dsg->ls, in.name,
-                                            mdlatest->version, 0);
-        } while(mdlatest);
-        break;
-    default:
-        fprintf(stderr,
-                "ERROR: unkown mode %d while processing metadata query.\n",
-                in.mode);
-    }
-
-    if(mdata) {
-        DEBUG_OUT("found version %d, length %d.", mdata->version,
-                  mdata->length);
-        out.mdata.len = mdata->length;
-        out.mdata.buf = malloc(mdata->length);
-        memcpy(out.mdata.buf, mdata->data, mdata->length);
-        /*
-        hret = margo_bulk_create(mid, 1, (void **)&mdata->data, &out.size,
-                                 HG_BULK_READ_ONLY, &out.handle);
-        if(hret != HG_SUCCESS) {
-            fprintf(stderr, "margo_bulk_create failed with %d\n", hret);
+    found_remote = 0;
+    if(server->nremote) {
+        rem_in.name = in.name;
+        remote = peek_meta_remotes(server, &rem_in);
+        if(remote > -1) {
+            DEBUG_OUT("remote %s has %s metadata\n",
+                      server->remotes[remote].name, in.name);
+            margo_addr_lookup(server->mid, server->remotes[remote].addr_str,
+                              &rem_addr);
+            hret = margo_create(server->mid, rem_addr, server->query_meta_id,
+                                &rem_hndl);
+            if(hret != HG_SUCCESS) {
+                fprintf(stderr, "ERROR: (%s): margo_create() failed\n",
+                        __func__);
+                margo_addr_free(server->mid, rem_addr);
+            } else {
+                margo_forward(rem_hndl, &in);
+                hret = margo_get_output(rem_hndl, &out);
+                if(hret != HG_SUCCESS) {
+                    fprintf(stderr,
+                            "ERROR: %s: margo_get_output() failed with %d.\n",
+                            __func__, hret);
+                } else {
+                    DEBUG_OUT("retreived metadata from %s\n",
+                              server->remotes[remote].name);
+                    found_remote = 1;
+                }
+            }
         }
-        */
-        out.version = mdata->version;
-    } else {
-        out.mdata.len = 0;
-        out.version = -1;
     }
+    if(!found_remote) {
+        switch(in.mode) {
+        case META_MODE_SPEC:
+            DEBUG_OUT("spec query - searching without waiting...\n");
+            mdata = meta_find_entry(server->dsg->ls, in.name, in.version, 0);
+            break;
+        case META_MODE_NEXT:
+            DEBUG_OUT("find next query...\n");
+            mdata =
+                meta_find_next_entry(server->dsg->ls, in.name, in.version, 1);
+            break;
+        case META_MODE_LAST:
+            DEBUG_OUT("find last query...\n");
+            mdata =
+                meta_find_next_entry(server->dsg->ls, in.name, in.version, 1);
+            mdlatest = mdata;
+            do {
+                mdata = mdlatest;
+                DEBUG_OUT("found version %d. Checking for newer...\n",
+                          mdata->version);
+                mdlatest = meta_find_next_entry(server->dsg->ls, in.name,
+                                                mdlatest->version, 0);
+            } while(mdlatest);
+            break;
+        default:
+            fprintf(stderr,
+                    "ERROR: unkown mode %d while processing metadata query.\n",
+                    in.mode);
+        }
 
+        if(mdata) {
+            DEBUG_OUT("found version %d, length %d.", mdata->version,
+                      mdata->length);
+            out.mdata.len = mdata->length;
+            out.mdata.buf = malloc(mdata->length);
+            memcpy(out.mdata.buf, mdata->data, mdata->length);
+            out.version = mdata->version;
+        } else {
+            out.mdata.len = 0;
+            out.version = -1;
+        }
+    }
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
-    // margo_bulk_free(out.handle);
+    if(found_remote) {
+        margo_free_output(rem_hndl, &out);
+        margo_destroy(rem_hndl);
+    }
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(query_meta_rpc)
@@ -1748,6 +2076,8 @@ static void get_rpc(hg_handle_t handle)
     bulk_in_t in;
     bulk_out_t out;
     hg_bulk_t bulk_handle;
+    int csize;
+    void *cbuffer;
 
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
 
@@ -1773,17 +2103,24 @@ static void get_rpc(hg_handle_t handle)
     struct obj_data *od, *from_obj;
 
     ABT_mutex_lock(server->ls_mutex);
-    from_obj = ls_find(server->dsg->ls, &in_odsc);
-
+    if(server->remotes && ls_lookup(server->dsg->ps, in_odsc.name)) {
+        from_obj = ls_find(server->dsg->ps, &in_odsc);
+    } else {
+        from_obj = ls_find(server->dsg->ls, &in_odsc);
+    }
+    DEBUG_OUT("found source data object\n");
     od = obj_data_alloc(&in_odsc);
+    DEBUG_OUT("allocated target object\n");
     ssd_copy(od, from_obj);
+    DEBUG_OUT("copied object data\n");
     ABT_mutex_unlock(server->ls_mutex);
 
     hg_size_t size = (in_odsc.size) * bbox_volume(&(in_odsc.bb));
     void *buffer = (void *)od->data;
-    hret = margo_bulk_create(mid, 1, (void **)&buffer, &size, HG_BULK_READ_ONLY,
-                             &bulk_handle);
-
+    cbuffer = malloc(size);
+    hret = margo_bulk_create(mid, 1, (void **)&cbuffer, &size,
+                             HG_BULK_READ_ONLY, &bulk_handle);
+    DEBUG_OUT("created bulk handle of size %li\n", size);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s): margo_bulk_create() failure\n", __func__);
         out.ret = dspaces_ERR_MERCURY;
@@ -1793,8 +2130,17 @@ static void get_rpc(hg_handle_t handle)
         return;
     }
 
+    csize = LZ4_compress_default(od->data, cbuffer, size, size);
+
+    DEBUG_OUT("compressed result from %li to %i bytes.\n", size, csize);
+    if(!csize) {
+        DEBUG_OUT("compressed result could not fit in dst buffer - longer than "
+                  "original! Sending uncompressed.\n");
+        memcpy(cbuffer, od->data, size);
+    }
+
     hret = margo_bulk_transfer(mid, HG_BULK_PUSH, info->addr, in.handle, 0,
-                               bulk_handle, 0, size);
+                               bulk_handle, 0, (csize ? csize : size));
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s): margo_bulk_transfer() failure (%d)\n",
                 __func__, hret);
@@ -1805,13 +2151,15 @@ static void get_rpc(hg_handle_t handle)
         margo_destroy(handle);
         return;
     }
+    DEBUG_OUT("completed bulk transfer.\n");
     margo_bulk_free(bulk_handle);
     out.ret = dspaces_SUCCESS;
-    out.ret = dspaces_SUCCESS;
+    out.len = csize;
     obj_data_free(od);
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
     margo_destroy(handle);
+    free(cbuffer);
 }
 DEFINE_MARGO_RPC_HANDLER(get_rpc)
 
@@ -1850,7 +2198,9 @@ static void odsc_internal_rpc(hg_handle_t handle)
               obj_desc_sprint(&in_odsc), timeout);
 
     obj_descriptor *odsc_tab;
+    DEBUG_OUT("getting sspace lock.\n");
     ABT_mutex_lock(server->sspace_mutex);
+    DEBUG_OUT("got sspace lock.\n");
     struct sspace *ssd = lookup_sspace(server, in_odsc.name, &od_gdim);
     ABT_mutex_unlock(server->sspace_mutex);
     int num_odsc;
@@ -1927,6 +2277,7 @@ static void obj_update_rpc(hg_handle_t handle)
 
     DEBUG_OUT("received update_rpc %s\n", obj_desc_sprint(&in_odsc));
     ABT_mutex_lock(server->sspace_mutex);
+    DEBUG_OUT("got sspace lock.\n");
     struct sspace *ssd = lookup_sspace(server, in_odsc.name, &gdim);
     ABT_mutex_unlock(server->sspace_mutex);
     struct dht_entry *de = ssd->ent_self;
@@ -1981,6 +2332,7 @@ static void ss_rpc(hg_handle_t handle)
 
     out.ss_buf.size = sizeof(ss_info_hdr);
     out.ss_buf.raw_odsc = (char *)(&ss_data);
+    out.chk_str = strdup("chkstr");
     margo_respond(handle, &out);
     DEBUG_OUT("responded in %s\n", __func__);
     margo_destroy(handle);
@@ -2102,6 +2454,132 @@ static void sub_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(sub_rpc)
 
+static void do_ops_rpc(hg_handle_t handle)
+{
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    const struct hg_info *info = margo_get_info(handle);
+    dspaces_provider_t server =
+        (dspaces_provider_t)margo_registered_data(mid, info->id);
+    do_ops_in_t in;
+    bulk_out_t out;
+    struct obj_data *od, *stage_od, *res_od;
+    struct list_head odl;
+    struct ds_data_expr *expr;
+    struct global_dimension *gdim;
+    obj_descriptor *odsc;
+    int res_size;
+    int num_odscs;
+    obj_descriptor *q_results;
+    uint64_t res_buf_size;
+    odsc_gdim_t query;
+    hg_return_t hret;
+    void *buffer, *cbuffer;
+    hg_bulk_t bulk_handle;
+    hg_size_t size;
+    int err;
+    int csize;
+    long i;
+
+    hret = margo_get_input(handle, &in);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: %s: margo_get_input() failed with %d.\n", __func__, hret);
+        margo_destroy(handle);
+        return;
+    }
+    expr = in.expr;
+    DEBUG_OUT("doing expression type %i\n", expr->type);
+
+    INIT_LIST_HEAD(&odl);
+    gather_op_ods(expr, &odl);
+    list_for_each_entry(od, &odl, struct obj_data, obj_entry)
+    {
+        odsc = &od->obj_desc;
+        DEBUG_OUT("Finding data for '%s'\n", odsc->name);
+        res_od = obj_data_alloc(odsc);
+        stage_od = ls_find(server->dsg->ls, odsc);
+        if(!stage_od) {
+            DEBUG_OUT("not stored locally.\n");
+            // size is currently not used`
+            query.odsc_gdim.size = sizeof(*odsc);
+            query.odsc_gdim.raw_odsc = (char *)odsc;
+            query.odsc_gdim.gdim_size = sizeof(od->gdim);
+            query.odsc_gdim.raw_gdim = (char *)&od->gdim;
+
+            // TODO: assumes data is either local or on a remote
+            res_size = get_query_odscs(server, &query, -1, &q_results, -1);
+            if(res_size != sizeof(odsc)) {
+                fprintf(stderr, "WARNING: %s: multiple odscs for query.\n", __func__);        
+            }
+            stage_od = ls_find(server->dsg->ps, odsc);
+            if(!stage_od) {
+                fprintf(stderr, "ERROR: %s: nothing in the proxy cache for query.\n", __func__);
+            }
+        }
+        ssd_copy(res_od, stage_od);
+        // update any obj in expression to use res_od
+        DEBUG_OUT("updating expression data with variable data.\n");
+        update_expr_objs(expr, res_od);
+    }
+  
+    res_buf_size = expr->size;
+    buffer = malloc(res_buf_size);
+    cbuffer = malloc(res_buf_size);
+    if(expr->type == DS_VAL_INT) {
+        #pragma omp for
+        for(i = 0; i < res_buf_size / sizeof(int); i++) {
+            ((int *)buffer)[i] = ds_op_calc_ival(expr, i, &err);
+        }
+    } else if(expr->type == DS_VAL_REAL) {
+        #pragma omp for
+        for(i = 0; i < res_buf_size / sizeof(double); i++) {
+            ((double *)buffer)[i] = ds_op_calc_rval(expr, i, &err);
+        }
+    } else {
+        fprintf(stderr, "ERROR: %s: invalid expression data type.\n", __func__);
+        goto cleanup;
+    }
+
+    size = res_buf_size;
+    hret = margo_bulk_create(mid, 1, (void **)&cbuffer, &size,
+                             HG_BULK_READ_ONLY, &bulk_handle);
+
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_bulk_create() failure\n", __func__);
+        out.ret = dspaces_ERR_MERCURY;
+        margo_respond(handle, &out);
+    }
+
+    csize = LZ4_compress_default(buffer, cbuffer, size, size);
+
+    DEBUG_OUT("compressed result from %li to %i bytes.\n", size, csize);
+    if(!csize) {
+        DEBUG_OUT("compressed result could not fit in dst buffer - longer than "
+                  "original! Sending uncompressed.\n");
+        memcpy(cbuffer, buffer, size);
+    }
+
+    hret = margo_bulk_transfer(mid, HG_BULK_PUSH, info->addr, in.handle, 0,
+                               bulk_handle, 0, (csize ? csize : size));
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_bulk_transfer() failure (%d)\n",
+                __func__, hret);
+        out.ret = dspaces_ERR_MERCURY;
+        margo_respond(handle, &out);
+        margo_bulk_free(bulk_handle);
+        goto cleanup;
+    }
+    margo_bulk_free(bulk_handle);
+    out.ret = dspaces_SUCCESS;
+    out.len = csize;
+    margo_respond(handle, &out);
+cleanup:
+    free(buffer);
+    free(cbuffer);
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(do_ops_rpc)
+
 void dspaces_server_fini(dspaces_provider_t server)
 {
     DEBUG_OUT("waiting for finalize to occur\n");
@@ -2142,7 +2620,6 @@ int dspaces_server_find_objs(dspaces_provider_t server, const char *var_name,
         }
         free(od_tab);
     }
-
     return (num_obj);
 }
 

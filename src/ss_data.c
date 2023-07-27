@@ -763,8 +763,9 @@ char *obj_desc_sprint(obj_descriptor *odsc)
                         "\t.name = %s,\n"
                         "\t.owner = %s,\n"
                         "\t.version = %d,\n"
+                        "\t.size = %i,\n"
                         "\t.bb = ",
-                        odsc->name, odsc->owner, odsc->version);
+                        odsc->name, odsc->owner, odsc->version, odsc->size);
     str = str_append_const(str_append(str, bbox_sprint(&odsc->bb)), "}\n");
 
     return str;
@@ -1622,7 +1623,6 @@ int dht_add_entry(struct dht_entry *de, obj_descriptor *odsc)
 
     memcpy(&odscl->odsc, odsc, sizeof(*odsc));
 
-
     list_for_each_entry_safe(sub, tmp, &de->dht_subs[n],
                              struct dht_sub_list_entry, entry)
     {
@@ -1665,8 +1665,8 @@ int dht_find_entry_all(struct dht_entry *de, obj_descriptor *q_odsc,
     int sub = timeout != 0 && de == de->ss->ent_self;
 
     n = q_odsc->version % de->odsc_size;
+    num_elem = ssh_hash_elem_count(de->ss, &q_odsc->bb);
     if(sub) {
-        num_elem = ssh_hash_elem_count(de->ss, &q_odsc->bb);
         ABT_mutex_lock(de->hash_mutex[n]);
     }
     *odsc_tab = malloc(sizeof(**odsc_tab) * de->odsc_num);
@@ -1675,10 +1675,8 @@ int dht_find_entry_all(struct dht_entry *de, obj_descriptor *q_odsc,
     {
         if(obj_desc_equals_intersect(&odscl->odsc, q_odsc)) {
             (*odsc_tab)[num_odsc++] = &odscl->odsc;
-            if(sub) {
-                bbox_intersect(&q_odsc->bb, &odscl->odsc.bb, &isect);
-                num_elem -= ssh_hash_elem_count(de->ss, &isect);
-            }
+            bbox_intersect(&q_odsc->bb, &odscl->odsc.bb, &isect);
+            num_elem -= ssh_hash_elem_count(de->ss, &isect);
         }
     }
     if(sub) {
@@ -1687,6 +1685,12 @@ int dht_find_entry_all(struct dht_entry *de, obj_descriptor *q_odsc,
                                 timeout);
         }
         ABT_mutex_unlock(de->hash_mutex[n]);
+    } else {
+        if(num_elem > 0) {
+            num_odsc = 0;
+            free(*odsc_tab);
+            *odsc_tab = NULL;
+        }
     }
 
     return num_odsc;
@@ -1780,7 +1784,7 @@ struct meta_data *meta_find_next_entry(ss_storage *ls, const char *name,
 {
     int i, index;
     struct list_head *list;
-    struct meta_data *mdata, *mdres;
+    struct meta_data *mdata, *mdres = NULL;
 
     for(index = 0; index <= ls->size_hash; index++) {
         ABT_mutex_lock(ls->meta_mutex[index]);
@@ -1812,6 +1816,17 @@ struct meta_data *meta_find_next_entry(ss_storage *ls, const char *name,
     ABT_mutex_unlock(ls->meta_mutex[ls->size_hash]);
 
     return (mdres);
+}
+
+void get_global_dimensions(struct global_dimension *l, int *ndim,
+                           uint64_t *gdim)
+{
+    int i;
+
+    *ndim = l->ndim;
+    for(i = 0; i < l->ndim; i++) {
+        gdim[i] = l->sizes.c[i];
+    }
 }
 
 void copy_global_dimension(struct global_dimension *l, int ndim,
@@ -1864,6 +1879,21 @@ struct gdim_list_entry *lookup_gdim_list(struct list_head *gdim_list,
             return e;
     }
     return NULL;
+}
+
+void get_gdims(struct list_head *gdim_list, const char *var_name, int *ndim, uint64_t **gdim)
+{
+    struct gdim_list_entry *e = lookup_gdim_list(gdim_list, var_name);
+    int i;
+
+    if(!e) {
+        *ndim = -1;   
+    } else {
+        *ndim = e->gdim.ndim;
+        for(i = 0; i < *ndim; i++) {
+           (*gdim)[i] = e->gdim.sizes.c[i];
+        }
+    }
 }
 
 void update_gdim_list(struct list_head *gdim_list, const char *var_name,

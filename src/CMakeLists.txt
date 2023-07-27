@@ -5,7 +5,7 @@ if(HAVE_DRC)
 endif()
 
 # list of source files
-set(dspaces-src util.c bbox.c ss_data.c dspaces-client.c)
+set(dspaces-src util.c bbox.c ss_data.c dspaces-client.c dspaces-ops.c)
 
 # load package helper for generating cmake CONFIG packages
 include (CMakePackageConfigHelpers)
@@ -17,10 +17,10 @@ set (dspaces-vers "${dspaces_VERSION_MAJOR}.${dspaces_VERSION_MINOR}")
 
 add_library(dspaces ${dspaces-src})
 if(HAVE_DRC)
-    target_link_libraries (dspaces margo m pthread ${DRC_LIBRARIES})
+    target_link_libraries (dspaces margo m pthread ${DRC_LIBRARIES} liblz4)
     target_include_directories (dspaces PUBLIC $<INSTALL_INTERFACE:include> ${DRC_INCLUDE_DIRS})
 else()
-    target_link_libraries (dspaces margo m pthread)
+    target_link_libraries (dspaces margo m pthread liblz4)
     target_include_directories (dspaces PUBLIC $<INSTALL_INTERFACE:include>)
 endif()
 
@@ -35,13 +35,13 @@ set_target_properties (dspaces
 
 set(dspaces-server-src util.c bbox.c ss_data.c dspaces-server.c toml.c)
 
-add_library(dspaces-server ${dspaces-server-src})
+add_library(dspaces-server ${dspaces-server-src} ${dspaces-src})
 if(HAVE_DRC)
-    target_link_libraries (dspaces-server margo m pthread ${DRC_LIBRARIES})
+    target_link_libraries (dspaces-server margo m pthread ${DRC_LIBRARIES} liblz4)
     target_include_directories (dspaces-server BEFORE PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include> ${DRC_INCLUDE_DIRS})
 else()
-    target_link_libraries (dspaces-server margo m pthread)
+    target_link_libraries (dspaces-server margo m pthread liblz4)
     target_include_directories (dspaces-server BEFORE PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>)
 endif()

@@ -22,6 +22,8 @@ typedef struct dspaces_client *dspaces_client_t;
 typedef struct dspaces_put_req *dspaces_put_req_t;
 #define dspaces_PUT_NULL ((dspaces_put_req_t)NULL)
 
+struct ds_data_expr;
+
 #define META_MODE_SPEC 1
 #define META_MODE_NEXT 2
 #define META_MODE_LAST 3
@@ -45,10 +47,17 @@ int dspaces_init(int rank, dspaces_client_t *client);
  */
 int dspaces_init_mpi(MPI_Comm comm, dspaces_client_t *c);
 
+int dspaces_init_wan(const char *listen_addr_str,
+                     const char *conn_str, int rank, dspaces_client_t *c);
+
+int dspaces_init_wan_mpi(const char *listen_addr_str, const char *conn_str, MPI_Comm comm, dspaces_client_t *c);
+
 int dspaces_server_count(dspaces_client_t client);
 
 void dspaces_define_gdim(dspaces_client_t client, const char *var_name,
                          int ndim, uint64_t *gdim);
+
+void dspaces_get_gdim(dspaces_client_t client, const char *var_name, int *ndim, uint64_t *gdim);
 
 /**
  * @brief Finalizes a dspaces client.
@@ -133,8 +142,8 @@ int dspaces_put(dspaces_client_t client, const char *var_name, unsigned int ver,
 struct dspaces_put_req *dspaces_iput(dspaces_client_t client,
                                      const char *var_name, unsigned int ver,
                                      int size, int ndim, uint64_t *lb,
-                                     uint64_t *ub, void *data,
-                                     int allocate, int check, int free);
+                                     uint64_t *ub, void *data, int allocate,
+                                     int check, int free);
 
 /**
  * @brief Check status of non-blocking put
@@ -379,6 +388,10 @@ int dspaces_put_meta(dspaces_client_t client, const char *name, int version,
  */
 int dspaces_get_meta(dspaces_client_t client, const char *name, int mode,
                      int current, int *version, void **data, unsigned int *len);
+
+int dspaces_op_calc(dspaces_client_t client, struct ds_data_expr *expr, void **buf);
+
+void dspaces_set_namespace(dspaces_client_t client, const char *nspace);
 
 #if defined(__cplusplus)
 }

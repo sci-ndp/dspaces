@@ -128,6 +128,7 @@ typedef struct {
 
 } odsc_hdr_with_gdim;
 
+
 struct dht_sub_list_entry {
     obj_descriptor *odsc; // subbed object
     long remaining;
@@ -321,17 +322,18 @@ static inline hg_return_t hg_proc_dsp_buf_t(hg_proc_t proc, void *data)
 
 MERCURY_GEN_PROC(bulk_gdim_t, ((odsc_hdr_with_gdim)(odsc))((hg_bulk_t)(handle)))
 MERCURY_GEN_PROC(bulk_in_t, ((odsc_hdr)(odsc))((hg_bulk_t)(handle)))
-MERCURY_GEN_PROC(bulk_out_t, ((int32_t)(ret)))
+MERCURY_GEN_PROC(bulk_out_t, ((int32_t)(ret))((hg_size_t)(len)))
 MERCURY_GEN_PROC(put_meta_in_t, ((hg_string_t)(name))((int32_t)(length))(
                                     (int32_t)(version))((hg_bulk_t)(handle)))
 MERCURY_GEN_PROC(query_meta_in_t,
                  ((hg_string_t)(name))((int32_t)(version))((uint8_t)(mode)))
-MERCURY_GEN_PROC(query_meta_out_t,
-                 ((dsp_buf_t)(mdata))((int32_t)(version)))
+MERCURY_GEN_PROC(query_meta_out_t, ((dsp_buf_t)(mdata))((int32_t)(version)))
+MERCURY_GEN_PROC(peek_meta_in_t, ((hg_string_t)(name)))
+MERCURY_GEN_PROC(peek_meta_out_t, ((int32_t)(res)))
 MERCURY_GEN_PROC(odsc_gdim_t,
                  ((odsc_hdr_with_gdim)(odsc_gdim))((int32_t)(param)))
 MERCURY_GEN_PROC(odsc_list_t, ((odsc_hdr)(odsc_list))((int32_t)(param)))
-MERCURY_GEN_PROC(ss_information, ((odsc_hdr)(ss_buf)))
+MERCURY_GEN_PROC(ss_information, ((odsc_hdr)(ss_buf))((hg_string_t)(chk_str)))
 
 char *obj_desc_sprint(obj_descriptor *);
 //
@@ -405,6 +407,8 @@ void free_gdim_list(struct list_head *gdim_list);
 void set_global_dimension(struct list_head *gdim_list, const char *var_name,
                           const struct global_dimension *default_gdim,
                           struct global_dimension *gdim);
+void get_global_dimensions(struct global_dimension *l, int *ndim, uint64_t *gdim);
+void get_gdims(struct list_head *gdim_list, const char *var_name, int *ndim, uint64_t **gdim);
 
 struct lock_data *get_lock(struct list_head *list, char *name);
 struct lock_data *create_lock(struct list_head *list, char *name);

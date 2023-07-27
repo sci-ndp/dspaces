@@ -8,7 +8,7 @@
 #      -DCMAKE_PREFIX_PATH='/dir1;/dir2;/dir3'
 #
 
-cmake_minimum_required (VERSION 3.14)
+cmake_minimum_required (VERSION 3.16)
 project (dspaces VERSION 2.2.0 LANGUAGES C)
 
 cmake_policy(SET CMP0078 NEW)
@@ -60,10 +60,18 @@ set (BUILD_SHARED_LIBS "OFF" CACHE BOOL "Build a shared library")
 # packages we depend on
 include (xpkg-import)
 xpkg_import_module (margo REQUIRED margo)
+xpkg_import_module (liblz4 REQUIRED liblz4)
 
 include(python_bindings)
 
 find_package(MPI COMPONENTS REQUIRED)
+find_package(OpenMP)
+if(OPENMP_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    add_definitions(-DOPS_USE_OPENMP)
+endif()
+
 
 include(CheckLanguage)
 check_language(Fortran)
@@ -75,7 +83,7 @@ if(CMAKE_Fortran_COMPILER_LOADED)
     set(DSPACES_HAVE_FORTRAN TRUE)
     check_fortran_compiler_flag("-fallow-argument-mismatch" FORTRAN_HAS_ARG_MISMATCH_FLAG)
     if(FORTRAN_HAS_ARG_MISMATCH_FLAG)
-        SET(CMAKE_Fortran_FLAGS "${CMAKE_CXX_FLAGS} -fallow-argument-mismatch")
+        SET(CMAKE_Fortran_FLAGS "${CMAKE_CXX_FLAGS} -fallow-argument-mismatch -Wno-lto-type-mismatch")
     endif()
 endif()
 

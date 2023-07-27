@@ -47,6 +47,10 @@ struct ds_gspace {
     struct sspace *ssd;
     /* Local in-memory storage. */
     ss_storage *ls;
+
+    /* Remote proxy storage. */
+    ss_storage *ps;
+
     /* Default global data domain dimension */
     struct global_dimension default_gdim;
 
