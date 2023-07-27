@@ -6,6 +6,7 @@
  */
 #include "dspaces-ops.h"
 #include "dspaces-server.h"
+#include "dspaces-storage.h"
 #include "dspaces.h"
 #include "dspacesp.h"
 #include "gspace.h"
@@ -62,6 +63,7 @@ struct remote {
 };
 
 struct dspaces_provider {
+    struct list_head dirs;
     margo_instance_id mid;
     hg_id_t put_id;
     hg_id_t put_local_id;
@@ -259,15 +261,20 @@ static int parse_conf_toml(const char *fname, struct remote **rem_array,
 {
     FILE *fin;
     toml_table_t *conf;
+    toml_table_t *storage;
+    toml_table_t *conf_dir;
     toml_table_t *server;
     toml_table_t *remotes;
     toml_table_t *remote;
     toml_datum_t dat;
     toml_array_t *arr;
+    struct dspaces_dir *dir;
+    struct dspaces_file *file;
     char errbuf[200];
     char *ip;
     int port;
     int ndim = 0;
+    int ndir, nfile;
     int i, j, n;
 
     fin = fopen(fname, "r");
@@ -332,6 +339,47 @@ static int parse_conf_toml(const char *fname, struct remote **rem_array,
             port = dat.u.i;
             sprintf((*rem_array)[i].addr_str, "sockets://%s:%i", ip, port);
             free(ip);
+    
+    storage = toml_table_in(conf, "storage");
+    if(storage) {
+        ndir = toml_table_ntab(storage);
+        for(i = 0; i < ndir; i++) {
+            dir = malloc(sizeof(*dir));
+            dir->name = strdup(toml_key_in(storage, i));
+            conf_dir = toml_table_in(storage, dir->name);
+            dat = toml_string_in(conf_dir, "directory");
+            dir->path = strdup(dat.u.s);
+            free(dat.u.s);
+            if(0 != (arr = toml_array_in(conf_dir, "files"))) {
+                INIT_LIST_HEAD(&dir->files);
+                nfile = toml_array_nelem(arr);
+                for(j = 0; j < nfile; j++) {
+                    dat = toml_string_at(arr, j);
+                    file = malloc(sizeof(*file));
+                    file->type = DS_FILE_NC;
+                    file->name = strdup(dat.u.s);
+                    free(dat.u.s);
+                    list_add(&file->entry, &dir->files);
+                }
+            } else {
+                dat = toml_string_in(conf_dir, "files");
+                if(dat.ok) {
+                    if(strcmp(dat.u.s, "all") == 0) {
+                        dir->cont_type = DS_FILE_ALL;
+                    } else {
+                        fprintf(stderr,
+                                "ERROR: %s: invalid value for "
+                                "storage.%s.files: %s\n",
+                                __func__, dir->name, dat.u.s);
+                    }
+                    free(dat.u.s);
+                } else {
+                    fprintf(stderr,
+                            "ERROR: %s: no readable 'files' key for '%s'.\n",
+                            __func__, dir->name);
+                }
+            }
+            list_add(&dir->entry, dir_list);
         }
     }
 
@@ -524,6 +572,8 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     ds_conf.max_versions = 255;
     ds_conf.hash_version = ssd_hash_version_auto;
     ds_conf.num_apps = -1;
+
+    INIT_LIST_HEAD(&server->dirs);
 
     ext = strrchr(conf_name, '.');
     if(!ext || strcmp(ext, ".toml") != 0) {

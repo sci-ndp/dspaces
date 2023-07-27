@@ -308,6 +308,8 @@ FILE *open_conf_ds(dspaces_client_t client)
                 fprintf(stderr, "could not open config file 'conf.ds'.\n");
                 return (NULL);
             }
+        } else {
+            break;
         }
         wait_time = (rand() % 3) + 1;
         time += wait_time;

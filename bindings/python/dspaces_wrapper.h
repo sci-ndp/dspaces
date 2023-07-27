@@ -6,7 +6,6 @@ PyObject *wrapper_dspaces_init_wan(const char *listen_str, const char *conn, int
 
 PyObject *wrapper_dspaces_init_wan_mpi(const char *listen_str, const char *conn, PyObject *commpy);
 
-
 PyObject *wrapper_dspaces_server_init(const char *listen_str, PyObject *commpy, const char *conf);
 
 void wrapper_dspaces_fini(PyObject *clientppy);
