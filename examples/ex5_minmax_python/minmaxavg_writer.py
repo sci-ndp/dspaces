@@ -1,6 +1,6 @@
+from mpi4py import MPI
 import dspaces as ds
 import numpy as np
-from mpi4py import MPI
 import sys
 
 comm = MPI.COMM_WORLD
@@ -21,7 +21,7 @@ if array_size % size != 0:
 
 local_size = int(array_size / size)
 # Initialize DataSpaces library - defaults to using COMM_WORLD
-client = ds.DSpaces()
+client = ds.DSClient()
 
 num_ts = 3
 

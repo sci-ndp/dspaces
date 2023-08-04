@@ -21,7 +21,7 @@ if array_size % size != 0:
 
 local_size = int(array_size / size)
 # Initialize DataSpaces library - defaults to using COMM_WORLD
-client = ds.DSpaces()
+client = ds.DSClient()
 
 num_ts = 3
 
