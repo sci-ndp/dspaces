@@ -46,7 +46,13 @@ else()
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>)
 endif()
 
+if(Python_FOUND)
+    message(" ${PYTHON_INCLUDE_PATH} ${_Python_NumPy_INCLUDE_DIR}")
+    target_link_libraries(dspaces-server Python::Python)    
+    target_compile_definitions(dspaces-server PRIVATE DSPACES_HAVE_PYTHON)
+endif()
 
+target_compile_definitions(dspaces-server PRIVATE DSPACES_MOD_DIR=${CMAKE_INSTALL_PREFIX}/share/modules)
 
 # for shared libs, establish the lib version
 set_target_properties (dspaces-server
