@@ -35,6 +35,9 @@
  *
  *  Pradeep Subedi (2020) Rutgers University
  *  pradeep.subedi@rutgers.edu
+ *
+ *  Philip Davis (2023) University of Utah
+ *  philip.davis@sci.utah.edu
  */
 
 #include "ss_data.h"
@@ -1597,8 +1600,8 @@ int dht_add_entry(struct dht_entry *de, obj_descriptor *odsc)
     int n, err = -ENOMEM;
 
     n = odsc->version % de->odsc_size;
-   
-    ABT_mutex_lock(de->hash_mutex[n]); 
+
+    ABT_mutex_lock(de->hash_mutex[n]);
     odscl = dht_find_match(de, odsc);
     if(odscl) {
         /* There  is allready  a descriptor  with  a different
@@ -1881,17 +1884,18 @@ struct gdim_list_entry *lookup_gdim_list(struct list_head *gdim_list,
     return NULL;
 }
 
-void get_gdims(struct list_head *gdim_list, const char *var_name, int *ndim, uint64_t **gdim)
+void get_gdims(struct list_head *gdim_list, const char *var_name, int *ndim,
+               uint64_t **gdim)
 {
     struct gdim_list_entry *e = lookup_gdim_list(gdim_list, var_name);
     int i;
 
     if(!e) {
-        *ndim = -1;   
+        *ndim = -1;
     } else {
         *ndim = e->gdim.ndim;
         for(i = 0; i < *ndim; i++) {
-           (*gdim)[i] = e->gdim.sizes.c[i];
+            (*gdim)[i] = e->gdim.sizes.c[i];
         }
     }
 }

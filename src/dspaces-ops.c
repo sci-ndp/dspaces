@@ -2,8 +2,8 @@
 #include <dspaces-ops.h>
 #include <dspaces.h>
 #include <list.h>
-#include <ss_data.h>
 #include <math.h>
+#include <ss_data.h>
 
 struct ds_data_expr *dspaces_op_new_obj(dspaces_client_t client,
                                         const char *var_name, unsigned int ver,
@@ -35,9 +35,9 @@ struct ds_data_expr *dspaces_op_new_obj(dspaces_client_t client,
     strncpy(od->obj_desc.name, var_name, sizeof(od->obj_desc.name) - 1);
     od->obj_desc.name[sizeof(od->obj_desc.name) - 1] = '\0';
 
-    /* This is an encapsulation violation and should be fixed. The problem is that the
-     * client handle encapsualtes the default gdim structure, and the gdim type is not
-     * exposed to the client. 
+    /* This is an encapsulation violation and should be fixed. The problem is
+     * that the client handle encapsualtes the default gdim structure, and the
+     * gdim type is not exposed to the client.
      * */
     dspaces_get_gdim(client, var_name, &od->gdim.ndim, od->gdim.sizes.c);
     if(od->gdim.ndim != ndim) {
@@ -47,7 +47,6 @@ struct ds_data_expr *dspaces_op_new_obj(dspaces_client_t client,
             __func__);
         goto err_free;
     }
-    
 
     expr->op = DS_OP_OBJ;
     expr->od = od;
@@ -97,7 +96,7 @@ struct ds_data_expr *dspaces_op_new_sub(struct ds_data_expr *expr1,
 }
 
 struct ds_data_expr *dspaces_op_new_mult(struct ds_data_expr *expr1,
-                                        struct ds_data_expr *expr2)
+                                         struct ds_data_expr *expr2)
 {
     return (dspaces_op_new_2arg(DS_OP_MULT, expr1, expr2));
 }
@@ -116,7 +115,7 @@ struct ds_data_expr *dspaces_op_new_pow(struct ds_data_expr *expr1,
 
 struct ds_data_expr *dspaces_op_new_arctan(struct ds_data_expr *expr)
 {
-    return(dspaces_op_new_1arg(DS_OP_ARCTAN, expr));
+    return (dspaces_op_new_1arg(DS_OP_ARCTAN, expr));
 }
 
 struct ds_data_expr *dspaces_op_new_1arg(ds_op_t op, struct ds_data_expr *expr1)
@@ -138,7 +137,7 @@ struct ds_data_expr *dspaces_op_new_1arg(ds_op_t op, struct ds_data_expr *expr1)
     expr->sub_expr = malloc(sizeof(*expr->sub_expr));
     expr->sub_expr[0] = expr1;
 
-    return(expr);
+    return (expr);
 }
 
 struct ds_data_expr *dspaces_op_new_2arg(ds_op_t op, struct ds_data_expr *expr1,
@@ -229,7 +228,7 @@ double ds_op_calc_rval(struct ds_data_expr *expr, long pos, int *res)
         }
         if(err < 0) {
             *res = err;
-            return(0);
+            return (0);
         }
         break;
     default:
@@ -242,15 +241,15 @@ double ds_op_calc_rval(struct ds_data_expr *expr, long pos, int *res)
     case DS_OP_ADD:
         return (subval1 + subval2);
     case DS_OP_SUB:
-        return(subval1 - subval2);
+        return (subval1 - subval2);
     case DS_OP_MULT:
-        return(subval1 * subval2);
+        return (subval1 * subval2);
     case DS_OP_DIV:
-        return(subval1 / subval2);
+        return (subval1 / subval2);
     case DS_OP_POW:
-        return(pow(subval1, subval2));
+        return (pow(subval1, subval2));
     case DS_OP_ARCTAN:
-        return(atan(subval1));
+        return (atan(subval1));
     default:
         fprintf(stderr,
                 "ERROR: %s: no way to handle unknown op %i (corruption?)\n",
@@ -272,7 +271,8 @@ long ds_op_calc_ival(struct ds_data_expr *expr, long pos, int *res)
     if(expr->type != DS_VAL_INT) {
         *res = -1;
         fprintf(stderr,
-                "ERROR: %s: attempted to calculate an integer result of a non-integer "
+                "ERROR: %s: attempted to calculate an integer result of a "
+                "non-integer "
                 "expression.\n",
                 __func__);
         return (0);
@@ -321,18 +321,19 @@ long ds_op_calc_ival(struct ds_data_expr *expr, long pos, int *res)
         return (0);
     }
 
-    //Do this as a subsequent switch so we can group all the n-args together above
+    // Do this as a subsequent switch so we can group all the n-args together
+    // above
     switch(expr->op) {
     case DS_OP_ADD:
         return (subval1 + subval2);
     case DS_OP_SUB:
-        return(subval1 - subval2);
+        return (subval1 - subval2);
     case DS_OP_MULT:
-        return(subval1 * subval2);
+        return (subval1 * subval2);
     case DS_OP_DIV:
-        return(subval1 / subval2);
+        return (subval1 / subval2);
     case DS_OP_POW:
-        return(pow(subval1, subval2));
+        return (pow(subval1, subval2));
 
     default:
         fprintf(stderr,
@@ -353,8 +354,7 @@ void gather_op_ods(struct ds_data_expr *expr, struct list_head *expr_odl)
     switch(expr->op) {
     case DS_OP_OBJ:
         expr_od = expr->od;
-        list_for_each_entry(od, expr_odl, struct obj_data,
-                            obj_entry)
+        list_for_each_entry(od, expr_odl, struct obj_data, obj_entry)
         {
             if(strcmp(od->obj_desc.name, expr_od->obj_desc.name) == 0) {
                 found = 1;
@@ -411,51 +411,54 @@ void update_expr_objs(struct ds_data_expr *expr, struct obj_data *od)
 
 int dspaces_op_get_result_type(struct ds_data_expr *expr)
 {
-    return(expr->type);
+    return (expr->type);
 }
 
-void dspaces_op_get_result_size(struct ds_data_expr *expr, int *ndim, uint64_t **dims)
+void dspaces_op_get_result_size(struct ds_data_expr *expr, int *ndim,
+                                uint64_t **dims)
 {
     int lndim, rndim;
     uint64_t *ldims, *rdims;
     int i;
 
     switch(expr->op) {
-        case DS_OP_OBJ:
-            *ndim = expr->od->obj_desc.bb.num_dims;
-            *dims = malloc(*ndim * sizeof(**dims));
-            for(i = 0; i < *ndim; i++) {
-                (*dims)[i] = (expr->od->obj_desc.bb.ub.c[i] - expr->od->obj_desc.bb.lb.c[i]) + 1;
-            }
-            break;
-        case DS_OP_ICONST: 
-        case DS_OP_RCONST:
-            *ndim = 0;
-            *dims = NULL;
-            break;
-        case DS_OP_ADD:
-        case DS_OP_SUB:
-        case DS_OP_MULT:
-        case DS_OP_DIV:
-        case DS_OP_POW:
-            dspaces_op_get_result_size(expr->sub_expr[0], &lndim, &ldims);
-            dspaces_op_get_result_size(expr->sub_expr[1], &rndim, &rdims);
-            if(lndim > rndim) {
-                *ndim = lndim;
-                *dims = ldims;
-                free(rdims);
-            } else {
-                *ndim = rndim;
-                *dims = rdims;
-                free(ldims);
-            }
-            break;
-        case DS_OP_ARCTAN:
-            dspaces_op_get_result_size(expr->sub_expr[0], &lndim, &ldims);
+    case DS_OP_OBJ:
+        *ndim = expr->od->obj_desc.bb.num_dims;
+        *dims = malloc(*ndim * sizeof(**dims));
+        for(i = 0; i < *ndim; i++) {
+            (*dims)[i] = (expr->od->obj_desc.bb.ub.c[i] -
+                          expr->od->obj_desc.bb.lb.c[i]) +
+                         1;
+        }
+        break;
+    case DS_OP_ICONST:
+    case DS_OP_RCONST:
+        *ndim = 0;
+        *dims = NULL;
+        break;
+    case DS_OP_ADD:
+    case DS_OP_SUB:
+    case DS_OP_MULT:
+    case DS_OP_DIV:
+    case DS_OP_POW:
+        dspaces_op_get_result_size(expr->sub_expr[0], &lndim, &ldims);
+        dspaces_op_get_result_size(expr->sub_expr[1], &rndim, &rdims);
+        if(lndim > rndim) {
             *ndim = lndim;
             *dims = ldims;
-            break;
-        default:
-            fprintf(stderr, "ERROR: %s: unknown op type.\n", __func__);
-    }     
+            free(rdims);
+        } else {
+            *ndim = rndim;
+            *dims = rdims;
+            free(ldims);
+        }
+        break;
+    case DS_OP_ARCTAN:
+        dspaces_op_get_result_size(expr->sub_expr[0], &lndim, &ldims);
+        *ndim = lndim;
+        *dims = ldims;
+        break;
+    default:
+        fprintf(stderr, "ERROR: %s: unknown op type.\n", __func__);
+    }
 }
