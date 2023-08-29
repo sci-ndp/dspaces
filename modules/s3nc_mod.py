@@ -75,7 +75,8 @@ def build_cache_entry(dir_base, file_base, fcount):
     return(f'{cache_dir}/{cache_file}')
 
 def query(name, version, lb, ub):
-    dir_base, file_base = build_dir_file(var_name, version)
+    sys.stdout.flush()
+    dir_base, file_base = build_dir_file(name, version)
     fcount = (unpack_version(version))[-1]
     centry = build_cache_entry(dir_base, file_base, fcount)
     if not os.path.exists(centry):
@@ -85,7 +86,7 @@ def query(name, version, lb, ub):
     data = Dataset(centry)
     array = data[var]
     index = [ slice(lb[x], ub[x]+1) for x in range(len(lb)) ]
-    print('a')
+    print(array[index])
     sys.stdout.flush()
     sys.stderr.flush()
     return(array[index])
@@ -93,4 +94,4 @@ def query(name, version, lb, ub):
 if __name__ == '__main__':
     var_name = 's3nc\\RadM/M1/C2/Rad'
     version = 505081608
-    query(var_name, version, (0,0), (1,3))
+    print(query(var_name, version, (1,1), (4,2)))
