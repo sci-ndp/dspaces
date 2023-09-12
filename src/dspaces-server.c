@@ -996,9 +996,17 @@ static int dspaces_init_py_mods(dspaces_provider_t server,
     int npmods = 1;
     PyObject *pName;
 
-    pypath_len = strlen(xstr(DSPACES_MOD_DIR)) + strlen(pypath) + 2;
+    
+    pypath_len = strlen(xstr(DSPACES_MOD_DIR)) + 1;
+    if(pypath) {
+        pypath_len += strlen(pypath) + 1;
+    }
     new_pypath = malloc(pypath_len);
-    sprintf(new_pypath, "%s:%s", xstr(DSPACES_MOD_DIR), pypath);
+    if(pypath) {
+        sprintf(new_pypath, "%s:%s", xstr(DSPACES_MOD_DIR), pypath);
+    } else {
+        strcpy(new_pypath, xstr(DSPACES_MOD_DIR));
+    }
     setenv("PYTHONPATH", new_pypath, 1);
     DEBUG_OUT("New PYTHONPATH is %s\n", new_pypath);
 
