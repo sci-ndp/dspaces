@@ -11,7 +11,7 @@ ofi_str=$7
 cd ${src_dir}
 git checkout ${branch}
 cd ${build_dir}
-cmake ${src_dir} -DCMAKE_INSTALL_PREFIX=${install_dir} -DENABLE_TESTS=True -DCMAKE_C_COMPILER=${compiler} -DCMAKE_Fortran_COMPILER=${fcompiler}
+cmake ${src_dir} -DCMAKE_INSTALL_PREFIX=${install_dir} -DENABLE_TESTS=True -DCMAKE_C_COMPILER=${compiler} -DCMAKE_Fortran_COMPILER=${fcompiler} -DCMAKE_BUILD_TYPE=Debug
 make
 make install
 
