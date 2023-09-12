@@ -17,7 +17,7 @@ make install
 
 fi_info
 
-cd -
+cd /
 ${install_dir}/bin/dspaces_server ${ofi_str} &
 while [ -f conf.ds ] ; do
     sleep 1
