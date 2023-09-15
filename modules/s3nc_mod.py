@@ -27,7 +27,7 @@ def build_noaa_dir(var_name, version):
     else:
         print(f'ERROR: {product} is not yet implemented.', file=sys.stderr)
     year, day, hour, fnam = unpack_version(version)
-    return(f'{pname}/{year}/{day}/{hour}')
+    return(f'{pname}/{year}/{day:03d}/{hour:02d}')
 
 def build_noaa_file_base(var_name):
     var_parts = var_name.split('/')
