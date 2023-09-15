@@ -1013,7 +1013,7 @@ static int dspaces_init_py_mods(dspaces_provider_t server,
     bootstrap_python();
 
     pmods = malloc(sizeof(*pmods) * npmods);
-    pmods[0].name = strdup("s3nc");
+    pmods[0].name = strdup("goes17");
     pmods[0].type = DSPACES_MOD_PY;
     pName = PyUnicode_DecodeFSDefault("s3nc_mod");
     pmods[0].pModule = PyImport_Import(pName);
@@ -1999,7 +1999,7 @@ static void free_arg_list(struct dspaces_module_args *args, int len)
 static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
                           struct global_dimension *gdim)
 {
-    const char *s3nc_nspace = "s3nc\\";
+    const char *s3nc_nspace = "goes17\\";
     struct dspaces_module_args *args;
     struct dspaces_module_ret *res = NULL;
     struct obj_data *od;
@@ -2010,7 +2010,7 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
 
     if(strstr(odsc->name, s3nc_nspace) == odsc->name) {
         nargs = build_module_args_from_odsc(odsc, &args);
-        res = dspaces_module_exec(server, "s3nc", "query", args, nargs,
+        res = dspaces_module_exec(server, "goes17", "query", args, nargs,
                                   DSPACES_MOD_RET_ARRAY);
         free_arg_list(args, nargs);
         free(args);
