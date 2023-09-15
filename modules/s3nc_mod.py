@@ -44,7 +44,7 @@ def build_noaa_file_base(var_name):
 
 def build_dir_file(name, version):
     nspace, var_name = name.split('\\')
-    if nspace == 's3nc':
+    if nspace == 'goes17':
         return(build_noaa_dir(var_name, version), build_noaa_file_base(var_name))
 
 def get_channel(channel_str):
