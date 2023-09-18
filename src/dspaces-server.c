@@ -93,6 +93,7 @@ struct dspaces_module_args {
 struct dspaces_module_ret {
     int type;
     int len;
+    int tag;
     int elem_size;
     void *data;
 };
@@ -1843,6 +1844,7 @@ static struct dspaces_module_ret *py_res_buf(PyObject *pResult)
 
     pArray = (PyArrayObject *)pResult;
     ret->len = PyArray_SIZE(pArray);
+    ret->tag = PyArray_TYPE(pArray);
     ret->elem_size = PyArray_ITEMSIZE(pArray);
     data_len = ret->len * ret->elem_size;
     ret->data = malloc(data_len);
@@ -2029,6 +2031,7 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
             od_odsc = malloc(sizeof(*od_odsc));
             memcpy(od_odsc, odsc, sizeof(*od_odsc));
             odsc_take_ownership(server, od_odsc);
+            od_odsc->tag = res->tag;
             od = obj_data_alloc_no_data(od_odsc, res->data);
             memcpy(&od->gdim, gdim, sizeof(struct global_dimension));
             ABT_mutex_lock(server->ls_mutex);

@@ -21,7 +21,7 @@ def build_noaa_dir(var_name, version):
     if product == 'FDCC':
         pname = 'ABI-L2-FDCC'
     elif product == 'RadC':
-        pname = ABI-L1b-RadC
+        pname = 'ABI-L1b-RadC'
     elif product == 'RadM':
         pname = 'ABI-L1b-RadM'
     else:

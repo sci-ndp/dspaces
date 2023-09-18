@@ -1606,7 +1606,7 @@ static void fill_odsc(dspaces_client_t client, const char *var_name,
 
 int dspaces_aget(dspaces_client_t client, const char *var_name,
                  unsigned int ver, int ndim, uint64_t *lb, uint64_t *ub,
-                 void **data, int timeout)
+                 void **data, int *tag, int timeout)
 {
     obj_descriptor odsc = {0};
     obj_descriptor *odsc_tab;
@@ -1640,6 +1640,16 @@ int dspaces_aget(dspaces_client_t client, const char *var_name,
         num_elem *= (ub[i] - lb[i]) + 1;
     }
     DEBUG_OUT("data buffer size is %d\n", num_elem * elem_size);
+
+    if(tag) {
+        *tag = odsc_tab[0].tag;
+        for(i = 1; i < num_odscs; i++) {
+            if(odsc_tab[i].tag != *tag) {
+                fprintf(stderr, "WARNING: multiple distinct tag values returned in query result. Returning first one.\n");
+                break;
+            }
+        }
+    }
     *data = malloc(num_elem * elem_size);
     get_data(client, num_odscs, odsc, odsc_tab, *data);
 

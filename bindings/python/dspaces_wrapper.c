@@ -164,10 +164,11 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
     int ndim = PyTuple_GET_SIZE(lbt);
     uint64_t lb[ndim];
     uint64_t ub[ndim];
+    int tag;
     void *data;
     PyObject *item;
     PyObject *arr;
-    PyArray_Descr *descr = PyArray_DescrNew((PyArray_Descr *)dtype);
+    PyArray_Descr *descr;
     npy_intp dims[ndim];
     int i;
 
@@ -179,7 +180,13 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
         dims[i] = (ub[i] - lb[i]) + 1;
     }
 
-    dspaces_aget(*clientp, name, version, ndim, lb, ub, &data, timeout);
+    dspaces_aget(*clientp, name, version, ndim, lb, ub, &data, &tag, timeout);
+
+    if(dtype == Py_None) {
+        descr = PyArray_DescrNewFromType(tag); 
+    } else {
+        descr = PyArray_DescrNew((PyArray_Descr *)dtype);
+    }
 
     arr = PyArray_NewFromDescr(&PyArray_Type, descr, ndim, dims, NULL, data, 0,
                                NULL);

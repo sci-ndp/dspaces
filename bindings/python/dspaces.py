@@ -47,10 +47,11 @@ class DSClient:
             raise TypeError("offset should have the same dimensionality as data")
         wrapper_dspaces_put(self.client, data, (self.nspace + name).encode('ascii'), version, offset)
 
-    def Get(self, name, version, lb, ub, dtype, timeout):
+    def Get(self, name, version, lb, ub, timeout, dtype = None):
         if len(lb) != len(ub):
             raise TypeError("lower-bound and upper-bound must have the same dimensionality")
-        return wrapper_dspaces_get(self.client, (self.nspace + name).encode('ascii'), version, lb, ub, np.dtype(dtype), timeout)    
+        passed_type = None if dtype == None else np.dtype(dtype)
+        return wrapper_dspaces_get(self.client, (self.nspace + name).encode('ascii'), version, lb, ub, passed_type, timeout)    
 
     def DefineGDim(self, name, gdim):
         wrapper_dspaces_define_gdim(self.client, (self.nspace + name).encode('ascii'), gdim)

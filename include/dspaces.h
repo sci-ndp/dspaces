@@ -251,13 +251,14 @@ int dspaces_get(dspaces_client_t client, const char *var_name, unsigned int ver,
  * @param[in] ub:       coordinates for the upper corner of the local
  *                  bounding box.
  * @param[in] data:     Pointer to user data buffer.
+ * @param[out] tag:     Pointer to an int buffer to store tag value. Not stored if tag is NULL.
  * @param[in] timeout:  Timeout value: -1 is never, 0 is immediate.
  *
  * @return  0 indicates success.
  */
 int dspaces_aget(dspaces_client_t client, const char *var_name,
                  unsigned int ver, int ndim, uint64_t *lb, uint64_t *ub,
-                 void **data, int timeout);
+                 void **data, int *tag, int timeout);
 
 struct dspaces_req {
     char *var_name;

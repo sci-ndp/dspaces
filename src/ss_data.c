@@ -767,8 +767,9 @@ char *obj_desc_sprint(obj_descriptor *odsc)
                         "\t.owner = %s,\n"
                         "\t.version = %d,\n"
                         "\t.size = %i,\n"
+                        "\t.tag = %i,\n"
                         "\t.bb = ",
-                        odsc->name, odsc->owner, odsc->version, odsc->size);
+                        odsc->name, odsc->owner, odsc->version, odsc->size, odsc->tag);
     str = str_append_const(str_append(str, bbox_sprint(&odsc->bb)), "}\n");
 
     return str;
