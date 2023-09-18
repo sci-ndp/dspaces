@@ -1127,6 +1127,7 @@ struct obj_data *obj_data_alloc(obj_descriptor *odsc)
     memset(od, 0, sizeof(*od));
 
     int size = obj_data_size(odsc);
+    fprintf(stderr,"%s: %i\n", __func__, size);
     od->data = malloc(size);
     if(!od->data) {
         fprintf(stderr, "Malloc od_data error\n");
