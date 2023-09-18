@@ -86,6 +86,7 @@ def query(name, version, lb, ub):
     data = Dataset(centry)
     array = data[var]
     index = [ slice(lb[x], ub[x]+1) for x in range(len(lb)) ]
+    print(index)
     print(array[index])
     sys.stdout.flush()
     sys.stderr.flush()
