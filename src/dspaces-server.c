@@ -2117,6 +2117,14 @@ static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
         margo_addr_free(server->mid, server_addr);
     }
 
+    if(peer_num == 0){
+        DEBUG_OUT("no peers in global space, handling with modules only\n");
+        odsc_tabs = malloc(sizeof(*odsc_tabs));
+        odsc_nums = calloc(sizeof(*odsc_nums), 1);
+        route_request(server, q_odsc, q_gdim);
+        self_id_num = 0;
+    }
+
     if(self_id_num > -1) {
         route_request(server, q_odsc, q_gdim);
         DEBUG_OUT("finding local entries for req_id %i.\n", req_id);
@@ -2170,6 +2178,7 @@ static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
 
     odsc_curr = *results = malloc(sizeof(**results) * total_odscs);
 
+    if(peer_num == 0) peer_num = 1;
     for(i = 0; i < peer_num; i++) {
         if(odsc_nums[i] == 0) {
             continue;
