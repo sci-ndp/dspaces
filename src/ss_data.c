@@ -1197,6 +1197,17 @@ uint64_t obj_data_size(obj_descriptor *obj_desc)
     return obj_desc->size * bbox_volume(&obj_desc->bb);
 }
 
+void obj_data_resize(obj_descriptor *obj_desc, uint64_t *new_dims)
+{
+    struct bbox *bb = &obj_desc->bb;
+    int i;
+
+    for(i = 0; i < bb->num_dims; i++) {
+        bb->ub.c[i] = bb->lb.c[i] + (new_dims[i] - 1); 
+    }
+    obj_desc->flags ^= DS_OBJ_RESIZE;
+}
+
 int obj_desc_equals_no_owner(const obj_descriptor *odsc1,
                              const obj_descriptor *odsc2)
 {

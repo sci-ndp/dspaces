@@ -1623,7 +1623,11 @@ int dspaces_aget(dspaces_client_t client, const char *var_name,
     num_odscs = get_odscs(client, &odsc, timeout, &odsc_tab);
 
     DEBUG_OUT("Finished query - need to fetch %d objects\n", num_odscs);
-    for(int i = 0; i < num_odscs; ++i) {
+    for(int i = 0; i < num_odscs; i++) {
+        if(odsc_tab[i].flags && DS_OBJ_RESIZE) {
+            DEBUG_OUT("the result is cropped.\n");
+            memcpy(&odsc.bb, &odsc_tab[i].bb, sizeof(odsc_tab[i].bb));
+        }
         DEBUG_OUT("%s\n", obj_desc_sprint(&odsc_tab[i]));
     }
 

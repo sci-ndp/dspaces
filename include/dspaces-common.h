@@ -25,6 +25,8 @@ extern "C" {
 #define dspaces_ERR_UNKNOWN_OBJ -8 /* Could not find the object*/
 #define dspaces_ERR_END -9         /* End of range for valid error codes */
 
+#define DS_OBJ_RESIZE 0x02
+
 #if defined(__cplusplus)
 }
 #endif

@@ -24,6 +24,7 @@
 #define MAX_VERSIONS 10
 
 #define DS_CLIENT_STORAGE 0x01
+#define DS_OBJ_RESIZE 0x02
 
 typedef struct {
     void *iov_base;
@@ -386,6 +387,7 @@ void meta_data_free(struct meta_data *mdata);
 
 void obj_data_free(struct obj_data *od);
 uint64_t obj_data_size(obj_descriptor *);
+void obj_data_resize(obj_descriptor *obj_desc, uint64_t *new_dims);
 
 int obj_desc_equals(obj_descriptor *, obj_descriptor *);
 int obj_desc_equals_no_owner(const obj_descriptor *, const obj_descriptor *);
