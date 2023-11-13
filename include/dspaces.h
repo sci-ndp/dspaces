@@ -246,10 +246,10 @@ int dspaces_get(dspaces_client_t client, const char *var_name, unsigned int ver,
  *              array.
  * @param[in] ndim:     the number of dimensions for the local bounding
  *              box.
- * @param[in] lb:       coordinates for the lower corner of the local
+ * @param[in, out] lb:       coordinates for the lower corner of the local
  *                  bounding box.
- * @param[in] ub:       coordinates for the upper corner of the local
- *                  bounding box.
+ * @param[in, out] ub:       coordinates for the upper corner of the local
+ *                  bounding box. Updated if truncated by data bounds.
  * @param[in] data:     Pointer to user data buffer.
  * @param[out] tag:     Pointer to an int buffer to store tag value. Not stored if tag is NULL.
  * @param[in] timeout:  Timeout value: -1 is never, 0 is immediate.

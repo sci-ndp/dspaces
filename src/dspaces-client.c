@@ -1613,7 +1613,7 @@ int dspaces_aget(dspaces_client_t client, const char *var_name,
     int num_odscs;
     int elem_size;
     int num_elem = 1;
-    int i;
+    int i,j;
     int ret = dspaces_SUCCESS;
 
     fill_odsc(client, var_name, ver, 0, ndim, lb, ub, &odsc);
@@ -1627,6 +1627,9 @@ int dspaces_aget(dspaces_client_t client, const char *var_name,
         if(odsc_tab[i].flags && DS_OBJ_RESIZE) {
             DEBUG_OUT("the result is cropped.\n");
             memcpy(&odsc.bb, &odsc_tab[i].bb, sizeof(odsc_tab[i].bb));
+            for(j = 0; j < odsc.bb.num_dims; j++) {
+                ub[j] = odsc.bb.ub.c[j];
+            }
         }
         DEBUG_OUT("%s\n", obj_desc_sprint(&odsc_tab[i]));
     }

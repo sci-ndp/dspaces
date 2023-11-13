@@ -177,7 +177,6 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
         lb[i] = PyLong_AsLong(item);
         item = PyTuple_GetItem(ubt, i);
         ub[i] = PyLong_AsLong(item);
-        dims[i] = (ub[i] - lb[i]) + 1;
     }
 
     dspaces_aget(*clientp, name, version, ndim, lb, ub, &data, &tag, timeout);
@@ -186,6 +185,10 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
         descr = PyArray_DescrNewFromType(tag); 
     } else {
         descr = PyArray_DescrNew((PyArray_Descr *)dtype);
+    }
+
+    for(i = 0; i < ndim; i++) {
+        dims[i] = ((ub[i] - lb[i]) + 1);
     }
 
     arr = PyArray_NewFromDescr(&PyArray_Type, descr, ndim, dims, NULL, data, 0,
