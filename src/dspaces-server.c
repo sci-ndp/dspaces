@@ -1858,7 +1858,6 @@ static struct dspaces_module_ret *py_res_buf(PyObject *pResult)
     ret->tag = PyArray_TYPE(pArray);
     ret->elem_size = PyArray_ITEMSIZE(pArray);
     data_len = ret->len * ret->elem_size;
-    fprintf(stderr, "%s: data_len = %zi\n", __func__, data_len);
     ret->data = malloc(data_len);
     memcpy(ret->data, PyArray_DATA(pArray), data_len);
 
