@@ -999,7 +999,6 @@ static int dspaces_init_py_mods(dspaces_provider_t server,
     int npmods = 1;
     PyObject *pName;
 
-    
     pypath_len = strlen(xstr(DSPACES_MOD_DIR)) + 1;
     if(pypath) {
         pypath_len += strlen(pypath) + 1;
@@ -2132,7 +2131,7 @@ static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
         margo_addr_free(server->mid, server_addr);
     }
 
-    if(peer_num == 0){
+    if(peer_num == 0) {
         DEBUG_OUT("no peers in global space, handling with modules only\n");
         odsc_tabs = malloc(sizeof(*odsc_tabs));
         odsc_nums = calloc(sizeof(*odsc_nums), 1);
@@ -2193,7 +2192,8 @@ static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
 
     odsc_curr = *results = malloc(sizeof(**results) * total_odscs);
 
-    if(peer_num == 0) peer_num = 1;
+    if(peer_num == 0)
+        peer_num = 1;
     for(i = 0; i < peer_num; i++) {
         if(odsc_nums[i] == 0) {
             continue;

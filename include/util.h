@@ -1,7 +1,7 @@
 #ifndef __DS_UTIL_H_
 #define __DS_UTIL_H_
 
-#include<stdlib.h>
+#include <stdlib.h>
 
 size_t str_len(const char *str);
 char *str_append_const(char *, const char *);

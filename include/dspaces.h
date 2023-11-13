@@ -47,17 +47,19 @@ int dspaces_init(int rank, dspaces_client_t *client);
  */
 int dspaces_init_mpi(MPI_Comm comm, dspaces_client_t *c);
 
-int dspaces_init_wan(const char *listen_addr_str,
-                     const char *conn_str, int rank, dspaces_client_t *c);
+int dspaces_init_wan(const char *listen_addr_str, const char *conn_str,
+                     int rank, dspaces_client_t *c);
 
-int dspaces_init_wan_mpi(const char *listen_addr_str, const char *conn_str, MPI_Comm comm, dspaces_client_t *c);
+int dspaces_init_wan_mpi(const char *listen_addr_str, const char *conn_str,
+                         MPI_Comm comm, dspaces_client_t *c);
 
 int dspaces_server_count(dspaces_client_t client);
 
 void dspaces_define_gdim(dspaces_client_t client, const char *var_name,
                          int ndim, uint64_t *gdim);
 
-void dspaces_get_gdim(dspaces_client_t client, const char *var_name, int *ndim, uint64_t *gdim);
+void dspaces_get_gdim(dspaces_client_t client, const char *var_name, int *ndim,
+                      uint64_t *gdim);
 
 /**
  * @brief Finalizes a dspaces client.
@@ -251,7 +253,8 @@ int dspaces_get(dspaces_client_t client, const char *var_name, unsigned int ver,
  * @param[in, out] ub:       coordinates for the upper corner of the local
  *                  bounding box. Updated if truncated by data bounds.
  * @param[in] data:     Pointer to user data buffer.
- * @param[out] tag:     Pointer to an int buffer to store tag value. Not stored if tag is NULL.
+ * @param[out] tag:     Pointer to an int buffer to store tag value. Not stored
+ * if tag is NULL.
  * @param[in] timeout:  Timeout value: -1 is never, 0 is immediate.
  *
  * @return  0 indicates success.
@@ -390,7 +393,8 @@ int dspaces_put_meta(dspaces_client_t client, const char *name, int version,
 int dspaces_get_meta(dspaces_client_t client, const char *name, int mode,
                      int current, int *version, void **data, unsigned int *len);
 
-int dspaces_op_calc(dspaces_client_t client, struct ds_data_expr *expr, void **buf);
+int dspaces_op_calc(dspaces_client_t client, struct ds_data_expr *expr,
+                    void **buf);
 
 void dspaces_set_namespace(dspaces_client_t client, const char *nspace);
 

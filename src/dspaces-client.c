@@ -1613,7 +1613,7 @@ int dspaces_aget(dspaces_client_t client, const char *var_name,
     int num_odscs;
     int elem_size;
     int num_elem = 1;
-    int i,j;
+    int i, j;
     int ret = dspaces_SUCCESS;
 
     fill_odsc(client, var_name, ver, 0, ndim, lb, ub, &odsc);
@@ -1652,7 +1652,9 @@ int dspaces_aget(dspaces_client_t client, const char *var_name,
         *tag = odsc_tab[0].tag;
         for(i = 1; i < num_odscs; i++) {
             if(odsc_tab[i].tag != *tag) {
-                fprintf(stderr, "WARNING: multiple distinct tag values returned in query result. Returning first one.\n");
+                fprintf(stderr,
+                        "WARNING: multiple distinct tag values returned in "
+                        "query result. Returning first one.\n");
                 break;
             }
         }
