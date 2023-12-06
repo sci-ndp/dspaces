@@ -92,6 +92,7 @@ def query(name, version, lb, ub):
     centry = build_cache_entry(dir_base, file_base, fcount)
     if not os.path.exists(centry):
         s3_file = query_s3(dir_base, file_base, times)
+        print(s3_file)
         s3.get(s3_file, centry)
     var = name.split('/')[-1]
     data = Dataset(centry)
