@@ -11,9 +11,14 @@ cache_base = '.s3cache'
 def unpack_version(version):
     bits = Bits(uint=version, length=32)
     check, year, day, hour, fnum = bits.unpack('uint:2, uint:8, uint:9, uint:5, uint:8')
-    if check != 0:
-        print(f'WARNING: version check value mismatch. Expected 0, got {check}.', file=sys.stderr)
-    return(1900+year, day, hour, fnum)
+    if check  == 0:
+        minute = -1
+    else:
+        minute = fnum
+        fnum = -1
+    if check != 0 and check != 1:
+        print(f'WARNING: version check value mismatch. Expected 0 or 1, got {check}.', file=sys.stderr)
+    return(1900+year, day, hour, minute, fnum)
 
 def build_noaa_dir(var_name, version):
     var_parts = var_name.split('/')
@@ -26,7 +31,7 @@ def build_noaa_dir(var_name, version):
         pname = 'ABI-L1b-RadM'
     else:
         print(f'ERROR: {product} is not yet implemented.', file=sys.stderr)
-    year, day, hour, fnam = unpack_version(version)
+    year, day, hour, minute, fnum = unpack_version(version)
     return(f'{pname}/{year}/{day:03d}/{hour:02d}')
 
 def build_noaa_file_base(var_name):
@@ -57,14 +62,19 @@ def get_start_time(e):
     start_time = e.split('_')[-3]
     return(int(start_time[1:]))
 
-def query_s3(dir_base, file_base, fcount):
+def query_s3(dir_base, file_base, times):
     files = s3.ls(f's3://noaa-goes17/{dir_base}')
     results = []
+    check, year, day, hour, minute, fcount = times
+    time_start = f's{year}{day:03d}{hour:02d}{minute}'
     for f in files:
-        if f.startswith(f'noaa-goes17/{dir_base}/{file_base}'):
-            results.append(f)
+            if f.startswith(f'noaa-goes17/{dir_base}/{file_base}'):
+                if minute > -1 and f.find(time_start) > 0:
+                    return(f)
+                results.append(f)
     results.sort(key=get_start_time)
     return(results[fcount])
+
 
 def download_to_cache(s3_fname, fcount):
     os.makedirs(target_dir, exist_ok = True)
@@ -77,10 +87,11 @@ def build_cache_entry(dir_base, file_base, fcount):
 def query(name, version, lb, ub):
     sys.stdout.flush()
     dir_base, file_base = build_dir_file(name, version)
-    fcount = (unpack_version(version))[-1]
+    times = unpack_version(version)
+    fcount = max(times[-2], times[-1])
     centry = build_cache_entry(dir_base, file_base, fcount)
     if not os.path.exists(centry):
-        s3_file = query_s3(dir_base, file_base, fcount)
+        s3_file = query_s3(dir_base, file_base, times)
         s3.get(s3_file, centry)
     var = name.split('/')[-1]
     data = Dataset(centry)
