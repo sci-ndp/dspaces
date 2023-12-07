@@ -21,6 +21,10 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
                               int version, PyObject *lbt, PyObject *ubt,
                               PyObject *dtype, int timeout);
 
+PyObject *wrapper_dspaces_pexec(PyObject *clientppy, const char *name,
+				int version, PyObject *lbt, PyObject *ubt,
+				PyObject *fn);
+
 void wrapper_dspaces_define_gdim(PyObject *clientppy, const char *name, PyObject *gdimt);
 
 PyObject *wrapper_dspaces_ops_new_iconst(long val);

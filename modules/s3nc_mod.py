@@ -65,7 +65,7 @@ def get_start_time(e):
 def query_s3(dir_base, file_base, times):
     files = s3.ls(f's3://noaa-goes17/{dir_base}')
     results = []
-    check, year, day, hour, minute, fcount = times
+    year, day, hour, minute, fcount = times
     time_start = f's{year}{day:03d}{hour:02d}{minute}'
     for f in files:
             if f.startswith(f'noaa-goes17/{dir_base}/{file_base}'):
@@ -97,12 +97,17 @@ def query(name, version, lb, ub):
     var = name.split('/')[-1]
     data = Dataset(centry)
     array = data[var]
-    index = [ slice(lb[x], ub[x]+1) for x in range(len(lb)) ]
-    print(f'index = {index}')
-    print(f'result shape = {array[index].shape}')
-    sys.stdout.flush()
-    sys.stderr.flush()
-    return(array[index])
+    if lb != None:
+        index = [ slice(lb[x], ub[x]+1) for x in range(len(lb)) ]
+        print(f'index = {index}')
+        print(f'result shape = {array[index].shape}')
+        sys.stdout.flush()
+        sys.stderr.flush()
+        return(array[index])
+    else:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        return(array)
 
 if __name__ == '__main__':
     var_name = 's3nc\\RadM/M1/C2/Rad'

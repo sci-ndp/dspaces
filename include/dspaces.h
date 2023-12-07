@@ -272,6 +272,10 @@ struct dspaces_req {
     void *buf;
 };
 
+int dspaces_pexec(dspaces_client_t client, const char *var_name,
+                unsigned int ver, int ndim, uint64_t *lb, uint64_t *ub,
+                const char *fn, unsigned int fnsz, void **data);
+
 typedef int (*dspaces_sub_fn)(dspaces_client_t, struct dspaces_req *, void *);
 typedef struct dspaces_sub_handle *dspaces_sub_t;
 #define DSPACES_SUB_FAIL NULL

@@ -102,6 +102,8 @@ struct dspaces_client {
     hg_id_t sub_id;
     hg_id_t notify_id;
     hg_id_t do_ops_id;
+    hg_id_t pexec_id;
+    hg_id_t cond_id;
     struct dc_gspace *dcg;
     char **server_address;
     char **node_names;
@@ -572,6 +574,8 @@ static int dspaces_init_margo(dspaces_client_t client,
                               &client->query_meta_id, &flag);
         margo_registered_name(client->mid, "do_ops_rpc", &client->do_ops_id,
                               &flag);
+        margo_registered_name(client->mid, "pexec_rpc", &client->pexec_id, &flag);
+        margo_registered_name(client->mid, "cond_rpc", &client->cond_id, &flag);
     } else {
         client->put_id = MARGO_REGISTER(client->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, NULL);
@@ -621,6 +625,11 @@ static int dspaces_init_margo(dspaces_client_t client,
                                           HG_TRUE);
         client->do_ops_id = MARGO_REGISTER(client->mid, "do_ops_rpc",
                                            do_ops_in_t, bulk_out_t, NULL);
+        client->pexec_id = MARGO_REGISTER(client->mid, "pexec_rpc",
+                                            pexec_in_t, pexec_out_t, NULL);
+        client->cond_id = MARGO_REGISTER(client->mid, "cond_rpc",
+                                            cond_in_t, void, NULL);
+        margo_registered_disable_response(client->mid, client->cond_id, HG_TRUE);
     }
 
     return (dspaces_SUCCESS);
@@ -1784,6 +1793,109 @@ err_hg_handle:
 err_hg:
     free(in.name);
     return dspaces_ERR_MERCURY;
+}
+
+int dspaces_pexec(dspaces_client_t client, const char *var_name,
+        unsigned int ver, int ndim, uint64_t *lb, uint64_t *ub,
+        const char *fn, unsigned int fnsz, void **data)
+{
+    obj_descriptor odsc = {0};
+    hg_addr_t server_addr;
+    hg_return_t hret;
+    hg_handle_t handle, cond_handle;
+    pexec_in_t in;
+    pexec_out_t out;
+    cond_in_t in2;
+    uint64_t mtxp, condp;
+    hg_bulk_t bulk_handle;
+    hg_size_t rdma_size;
+    margo_request req;
+
+    fill_odsc(client, var_name, ver, 0, ndim, lb, ub, &odsc);
+
+    DEBUG_OUT("Doing remote pexec on %s\n", obj_desc_sprint(&odsc));
+    
+    in.odsc.size = sizeof(odsc);
+    in.odsc.raw_odsc = (char *)&odsc;
+
+    rdma_size = fnsz;
+    in.length = fnsz;
+    if(rdma_size > 0) {
+        DEBUG_OUT("sending fn\n");
+        hret = margo_bulk_create(client->mid, 1, (void **)&fn, &rdma_size, HG_BULK_READ_ONLY, &in.handle);
+        if(hret != HG_SUCCESS) {
+            fprintf(stderr, "ERROR: (%s): margo_bulk_create() failed\n", __func__);
+            return dspaces_ERR_MERCURY;
+        }
+    }
+
+    get_server_address(client, &server_addr);
+
+    hret = margo_create(client->mid, server_addr, client->pexec_id, &handle);
+
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_create() failed\n", __func__);
+        margo_bulk_free(in.handle);
+        return dspaces_ERR_MERCURY;
+    }
+
+    hret = margo_forward(handle, &in);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_forward() failed\n", __func__);
+        margo_bulk_free(in.handle);
+        margo_destroy(handle);
+        return dspaces_ERR_MERCURY;
+    }
+
+    hret = margo_get_output(handle, &out);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_get_output() failed\n", __func__);
+        margo_bulk_free(in.handle);
+        margo_destroy(handle);
+        return dspaces_ERR_MERCURY;
+    }
+    margo_bulk_free(in.handle);
+
+    DEBUG_OUT("received result with size %" PRIu32 "\n", out.length);
+    rdma_size = out.length;
+    if(rdma_size > 0) {
+        *data = malloc(out.length);
+        hret = margo_bulk_create(client->mid, 1, (void **)data, &rdma_size, HG_BULK_WRITE_ONLY, &bulk_handle);
+        if(hret != HG_SUCCESS) {
+            // TODO notify server of failure (server is waiting)
+            margo_free_output(handle, &out);
+            margo_destroy(handle);
+            return dspaces_ERR_MERCURY;
+        }
+        hret = margo_bulk_transfer(client->mid, HG_BULK_PULL, server_addr, out.handle, 0, bulk_handle, 0, rdma_size);
+        if(hret != HG_SUCCESS) {
+            fprintf(stderr, "ERROR: (%s): margo_bulk_transfer failed!\n", __func__);
+            margo_free_output(handle, &out);
+            margo_destroy(handle);
+            return dspaces_ERR_MERCURY;
+        }
+        margo_bulk_free(bulk_handle);
+        in2.mtxp = out.mtxp;
+        in2.condp = out.condp;
+        margo_destroy(handle);
+        hret = margo_create(client->mid, server_addr, client->pexec_id, &handle);
+
+        if(hret != HG_SUCCESS) {
+            fprintf(stderr, "ERROR: (%s): margo_create() failed\n", __func__);
+            return dspaces_ERR_MERCURY;
+        }
+
+        hret = margo_iforward(handle, &in2, &req);
+        if(hret != HG_SUCCESS) {
+            fprintf(stderr, "ERROR: (%s): margo_forward() failed\n", __func__);
+            margo_destroy(handle);
+            return dspaces_ERR_MERCURY;
+        }
+    } else {
+        margo_free_output(handle, &out);
+    }
+    margo_destroy(handle);
+
 }
 
 static void get_local_rpc(hg_handle_t handle)

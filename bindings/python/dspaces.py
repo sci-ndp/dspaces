@@ -1,5 +1,6 @@
 from dspaces.dspaces_wrapper import *
 import numpy as np
+import pickle
 
 class DSServer:
     def __init__(self, conn = "sockets", comm = None, conf = "dataspaces.conf"):
@@ -52,6 +53,9 @@ class DSClient:
             raise TypeError("lower-bound and upper-bound must have the same dimensionality")
         passed_type = None if dtype == None else np.dtype(dtype)
         return wrapper_dspaces_get(self.client, (self.nspace + name).encode('ascii'), version, lb, ub, passed_type, timeout)    
+
+    def Exec(self, name, version, lb, ub, fn):
+        return wrapper_dspaces_pexec(self.client, (self.nspace + name).encode('ascii'), version, lb, ub, pickle.dumps(fn))
 
     def DefineGDim(self, name, gdim):
         wrapper_dspaces_define_gdim(self.client, (self.nspace + name).encode('ascii'), gdim)

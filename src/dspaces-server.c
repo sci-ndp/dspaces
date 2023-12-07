@@ -76,6 +76,7 @@ struct remote {
 #define DSPACES_ARG_REAL 0
 #define DSPACES_ARG_INT 1
 #define DSPACES_ARG_STR 2
+#define DSPACES_ARG_NONE 3
 struct dspaces_module_args {
     char *name;
     int type;
@@ -129,6 +130,8 @@ struct dspaces_provider {
     hg_id_t sub_id;
     hg_id_t notify_id;
     hg_id_t do_ops_id;
+    hg_id_t pexec_id;
+    hg_id_t cond_id;
     int nmods;
     struct dspaces_module *mods;
     struct ds_gspace *dsg;
@@ -177,6 +180,8 @@ DECLARE_MARGO_RPC_HANDLER(ss_rpc)
 DECLARE_MARGO_RPC_HANDLER(kill_rpc)
 DECLARE_MARGO_RPC_HANDLER(sub_rpc)
 DECLARE_MARGO_RPC_HANDLER(do_ops_rpc)
+DECLARE_MARGO_RPC_HANDLER(pexec_rpc)
+DECLARE_MARGO_RPC_HANDLER(cond_rpc)
 
 static void put_rpc(hg_handle_t h);
 static void put_local_rpc(hg_handle_t h);
@@ -190,6 +195,8 @@ static void ss_rpc(hg_handle_t h);
 static void kill_rpc(hg_handle_t h);
 static void sub_rpc(hg_handle_t h);
 static void do_ops_rpc(hg_handle_t h);
+static void pexec_rpc(hg_handle_t h);
+static void cond_rpc(hg_handle_t h);
 
 /* Server configuration parameters */
 static struct {
@@ -1228,6 +1235,10 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                               &flag);
         DS_HG_REGISTER(hg, server->do_ops_id, do_ops_in_t, bulk_out_t,
                        do_ops_rpc);
+        margo_registered_name(server->mid, "pexec_rpc", &server->pexec_id, &flag);
+        DS_HG_REGISTER(hg, server->pexec_id, pexec_in_t, pexec_out_t, pexec_rpc);
+        margo_registered_name(server->mid, "cond_rpc", &server->cond_id, &flag);
+        DS_HG_REGISTER(hg, server->cond_id, cond_in_t, void, cond_rpc);
     } else {
         server->put_id = MARGO_REGISTER(server->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, put_rpc);
@@ -1298,6 +1309,11 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                                            do_ops_in_t, bulk_out_t, do_ops_rpc);
         margo_register_data(server->mid, server->do_ops_id, (void *)server,
                             NULL);
+        server->pexec_id = MARGO_REGISTER(server->mid, "pexec_rpc", pexec_in_t, pexec_out_t, pexec_rpc);
+        margo_register_data(server->mid, server->pexec_id, (void *)server, NULL);
+        server->cond_id = MARGO_REGISTER(server->mid, "cond_rpc", cond_in_t, void, cond_rpc);
+        margo_register_data(server->mid, server->cond_id, (void *)server, NULL);
+        margo_registered_disable_response(server->mid, server->cond_id, HG_TRUE);
     }
     int err = dsg_alloc(server, conf_file, comm);
     if(err) {
@@ -1829,6 +1845,8 @@ PyObject *py_obj_from_arg(struct dspaces_module_args *arg)
         return (pArg);
     case DSPACES_ARG_STR:
         return (PyUnicode_DecodeFSDefault(arg->strval));
+    case DSPACES_ARG_NONE:
+        return(Py_None);
     default:
         fprintf(stderr, "ERROR: unknown arg type in %s (%d)\n", __func__,
                 arg->type);
@@ -1961,20 +1979,29 @@ static int build_module_args_from_odsc(obj_descriptor *odsc,
     ndims = odsc->bb.num_dims;
     // odsc->bb.lb
     args[2].name = strdup("lb");
-    args[2].type = DSPACES_ARG_INT;
-    args[2].len = ndims;
-    args[2].iarray = malloc(sizeof(*args[2].iarray) * ndims);
-    for(i = 0; i < ndims; i++) {
-        args[2].iarray[i] = odsc->bb.lb.c[i];
+    if(ndims > 0) {
+        args[2].name = strdup("lb");
+        args[2].type = DSPACES_ARG_INT;
+        args[2].len = ndims;
+        args[2].iarray = malloc(sizeof(*args[2].iarray) * ndims);
+        for(i = 0; i < ndims; i++) {
+            args[2].iarray[i] = odsc->bb.lb.c[i];
+        }
+    } else {
+        args[2].type = DSPACES_ARG_NONE;
     }
 
     // odsc->bb.ub
     args[3].name = strdup("ub");
-    args[3].type = DSPACES_ARG_INT;
-    args[3].len = ndims;
-    args[3].iarray = malloc(sizeof(*args[3].iarray) * ndims);
-    for(i = 0; i < ndims; i++) {
-        args[3].iarray[i] = odsc->bb.ub.c[i];
+    if(ndims > 0) {
+        args[3].type = DSPACES_ARG_INT;
+        args[3].len = ndims;
+        args[3].iarray = malloc(sizeof(*args[3].iarray) * ndims);
+        for(i = 0; i < ndims; i++) {
+            args[3].iarray[i] = odsc->bb.ub.c[i];
+        }
+    } else {
+        args[3].type = DSPACES_ARG_NONE;
     }
 
     *argsp = args;
@@ -2039,7 +2066,7 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
             free(res->data);
         } else {
             odsc->size = res->elem_size;
-            if((odsc->size * res->len) < obj_data_size(odsc)) {
+            if((odsc->size * res->len) != obj_data_size(odsc)) {
                 DEBUG_OUT("returned data is cropped.\n");
                 obj_data_resize(odsc, res->dim);
             }
@@ -2992,6 +3019,177 @@ cleanup:
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(do_ops_rpc)
+
+static PyObject *build_ndarray_from_od(struct obj_data *od)
+{
+    obj_descriptor *odsc = odsc = &od->obj_desc;
+    int tag = odsc->tag;
+    PyArray_Descr *descr = PyArray_DescrNewFromType(tag);
+    int ndim = odsc->bb.num_dims;
+    void *data = od->data;
+    PyObject *arr, *fnp;
+    npy_intp dims[ndim];
+    int i;
+
+    for(i = 0; i < ndim; i++) {
+        dims[i] = (odsc->bb.ub.c[i] - odsc->bb.lb.c[i]) + 1;    
+    }
+
+    arr = PyArray_NewFromDescr(&PyArray_Type, descr, ndim, dims, NULL, data, 0, NULL);  
+
+    return(arr);
+}
+
+static void pexec_rpc(hg_handle_t handle)
+{
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    const struct hg_info *info = margo_get_info(handle);
+    dspaces_provider_t server =
+        (dspaces_provider_t)margo_registered_data(mid, info->id);
+    pexec_in_t in;
+    pexec_out_t out;
+    hg_return_t hret;
+    hg_bulk_t bulk_handle;
+    obj_descriptor in_odsc;
+    hg_size_t rdma_size;
+    void *fn = NULL, *res_data;
+    struct obj_data *od, *from_obj;
+    PyObject *array, *fnp, *arg, *pres, *pres_bytes;
+    static PyObject *pklmod = NULL;
+    ABT_cond cond;
+    ABT_mutex mtx;
+
+    hret = margo_get_input(handle, &in);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr,
+                "DATASPACES: ERROR handling %s: margo_get_input() failed with "
+                "%d.\n",
+                __func__, hret);
+        margo_destroy(handle);
+        return;
+    }
+
+    memcpy(&in_odsc, in.odsc.raw_odsc, sizeof(in_odsc));
+
+    DEBUG_OUT("received pexec request");
+    rdma_size = in.length;
+    if(rdma_size > 0) {
+        DEBUG_OUT("function included, length %" PRIu32 "bytes\n", in.length);
+        fn = malloc(rdma_size);
+        hret = margo_bulk_create(mid, 1, (void **)&(fn), &rdma_size,
+                             HG_BULK_WRITE_ONLY, &bulk_handle);
+
+        if(hret != HG_SUCCESS) {
+            //TODO: communicate failure
+            fprintf(stderr, "ERROR: (%s): margo_bulk_create failed!\n", __func__);
+            margo_respond(handle, &out);
+            margo_free_input(handle, &in);
+            margo_destroy(handle);
+            return;
+        }
+
+        hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr, in.handle, 0, bulk_handle, 0, rdma_size);
+        if(hret != HG_SUCCESS) {
+            fprintf(stderr, "ERROR: (%s): margo_bulk_transfer failed!\n", __func__);
+            margo_respond(handle, &out);
+            margo_free_input(handle, &in);
+            margo_bulk_free(bulk_handle);
+            margo_destroy(handle);
+            return;
+        }
+    }
+    margo_bulk_free(bulk_handle);
+    route_request(server, &in_odsc, &(server->dsg->default_gdim));
+    
+    from_obj = ls_find(server->dsg->ls, &in_odsc);
+    array = build_ndarray_from_od(from_obj);
+
+    //Race condition? Protect with mutex?
+    if((pklmod == NULL) && (pklmod = PyImport_ImportModuleNoBlock("pickle")) == NULL) {
+        margo_respond(handle, &out);
+        margo_free_input(handle, &in);
+        margo_destroy(handle);
+        return;
+    }
+    
+    arg = PyBytes_FromString(fn);
+    fnp = PyObject_CallMethodObjArgs(pklmod,
+                                    PyUnicode_FromString("loads"),
+                                    arg,
+                                    NULL);
+    Py_XDECREF(arg);
+    if(fnp && PyCallable_Check(fnp)) {
+        pres = PyObject_CallFunctionObjArgs(fnp, array, NULL);
+    } else {
+        fprintf(stderr, "ERROR: (%s): provided function could either not be loaded, or is not callabble.\n", __func__);
+        margo_respond(handle, &out);
+        margo_free_input(handle, &in);
+        margo_destroy(handle);
+        return;
+  
+    }
+
+    if(pres && (pres != Py_None)) {
+        pres_bytes = PyObject_CallMethodObjArgs(pklmod,
+                                    PyUnicode_FromString("dumps"),
+                                    pres,
+                                    NULL);
+        Py_XDECREF(pres);
+        res_data = PyBytes_AsString(fn);  
+        rdma_size = PyBytes_Size(res_data) + 1;
+        hret = margo_bulk_create(mid, 1, (void **)&res_data, &rdma_size, HG_BULK_READ_ONLY, &out.handle);
+        if(hret != HG_SUCCESS) {
+            fprintf(stderr, "ERROR: (%s): margo_bulk_create failed with %d.\n", __func__, hret);
+            out.length = 0;
+            margo_respond(handle, &out);
+            margo_free_input(handle, &in);
+            margo_destroy(handle);
+            return;
+        }
+        out.length = rdma_size;
+    } else {
+        out.length = 0; 
+    }
+
+    if(out.length > 0) {
+        ABT_cond_create(&cond);
+        ABT_mutex_create(&mtx);
+        out.condp = (uint64_t)(&cond);
+        out.mtxp = (uint64_t)(&mtx);
+        ABT_mutex_lock(mtx);
+        margo_respond(handle, &out);
+        ABT_cond_wait(cond, mtx);
+        ABT_mutex_unlock(mtx);
+        ABT_mutex_free(&mtx);
+        ABT_cond_free(&cond);
+    } else {
+        margo_respond(handle, &out);
+    }
+
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+
+    Py_XDECREF(array);
+
+}
+DEFINE_MARGO_RPC_HANDLER(pexec_rpc)
+
+static void cond_rpc(hg_handle_t handle)
+{
+    ABT_mutex *mtx;
+    ABT_cond *cond;
+    cond_in_t in;
+
+    margo_get_input(handle, &in);
+    mtx = (ABT_mutex *)in.mtxp;
+    cond = (ABT_cond *)in.condp;
+    ABT_mutex_lock(*mtx);
+    ABT_cond_signal(*cond);
+    ABT_mutex_unlock(*mtx);
+
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(cond_rpc)
 
 void dspaces_server_fini(dspaces_provider_t server)
 {
