@@ -199,13 +199,15 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
 
 PyObject *wrapper_dspaces_pexec(PyObject *clientppy, const char *name,
 				int version, PyObject *lbt, PyObject *ubt,
-				PyObject *fn)
+				PyObject *fn, const char *fn_name)
 {
     dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
     PyObject *item;
     int ndim = 0;
     uint64_t *lb, *ub;
     void *data;
+    int data_size;
+    PyObject *result;
     int i;
 
     if(lbt == Py_None || ubt == Py_None) {
@@ -234,12 +236,18 @@ PyObject *wrapper_dspaces_pexec(PyObject *clientppy, const char *name,
          return(NULL);
     }
 
-    dspaces_pexec(*clientp, name, version, ndim, lb, ub, PyBytes_AsString(fn), PyBytes_Size(fn)+1, &data);
+    dspaces_pexec(*clientp, name, version, ndim, lb, ub, PyBytes_AsString(fn), PyBytes_Size(fn)+1, fn_name, &data, &data_size);
 
     free(lb);
     free(ub);
 
-    return(data);
+    if(data_size > 0) { 
+        result = PyBytes_FromStringAndSize(data, data_size);
+    } else {
+        result = Py_None;
+    }
+
+    return(result);
 }
 
 void wrapper_dspaces_define_gdim(PyObject *clientppy, const char *name, PyObject *gdimt)

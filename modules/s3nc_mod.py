@@ -97,17 +97,16 @@ def query(name, version, lb, ub):
     var = name.split('/')[-1]
     data = Dataset(centry)
     array = data[var]
+    print(lb, ub)
     if lb != None:
         index = [ slice(lb[x], ub[x]+1) for x in range(len(lb)) ]
-        print(f'index = {index}')
-        print(f'result shape = {array[index].shape}')
-        sys.stdout.flush()
-        sys.stderr.flush()
-        return(array[index])
     else:
-        sys.stdout.flush()
-        sys.stderr.flush()
-        return(array)
+        index = [ slice(0, x) for x in array.shape ]
+    print(f'index = {index}')
+    print(f'result shape = {array[index].shape}')
+    sys.stdout.flush()
+    sys.stderr.flush()
+    return(array[index])
 
 if __name__ == '__main__':
     var_name = 's3nc\\RadM/M1/C2/Rad'

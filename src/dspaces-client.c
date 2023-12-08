@@ -1797,7 +1797,7 @@ err_hg:
 
 int dspaces_pexec(dspaces_client_t client, const char *var_name,
         unsigned int ver, int ndim, uint64_t *lb, uint64_t *ub,
-        const char *fn, unsigned int fnsz, void **data)
+        const char *fn, unsigned int fnsz, const char *fn_name, void **data, int *size)
 {
     obj_descriptor odsc = {0};
     hg_addr_t server_addr;
@@ -1817,6 +1817,8 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
     
     in.odsc.size = sizeof(odsc);
     in.odsc.raw_odsc = (char *)&odsc;
+
+    in.fn_name = strdup(fn_name);
 
     rdma_size = fnsz;
     in.length = fnsz;
@@ -1878,24 +1880,31 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
         in2.mtxp = out.mtxp;
         in2.condp = out.condp;
         margo_destroy(handle);
-        hret = margo_create(client->mid, server_addr, client->pexec_id, &handle);
+        hret = margo_create(client->mid, server_addr, client->cond_id, &handle);
 
         if(hret != HG_SUCCESS) {
             fprintf(stderr, "ERROR: (%s): margo_create() failed\n", __func__);
             return dspaces_ERR_MERCURY;
         }
 
+        DEBUG_OUT("sending cond_rpc with condp = %" PRIu64 ", mtxp = %" PRIu64 "\n", in2.condp, in2.mtxp);
         hret = margo_iforward(handle, &in2, &req);
         if(hret != HG_SUCCESS) {
-            fprintf(stderr, "ERROR: (%s): margo_forward() failed\n", __func__);
+            fprintf(stderr, "ERROR: (%s): margo_iforward() failed\n", __func__);
             margo_destroy(handle);
             return dspaces_ERR_MERCURY;
         }
+        DEBUG_OUT("sent\n");
+        *size = rdma_size;
+        margo_free_output(handle, &out);
     } else {
+        *size = 0;
+        *data = NULL;
         margo_free_output(handle, &out);
     }
     margo_destroy(handle);
-
+    DEBUG_OUT("done with handling pexec\n");
+    return(dspaces_SUCCESS);
 }
 
 static void get_local_rpc(hg_handle_t handle)

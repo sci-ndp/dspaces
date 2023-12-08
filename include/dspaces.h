@@ -274,7 +274,8 @@ struct dspaces_req {
 
 int dspaces_pexec(dspaces_client_t client, const char *var_name,
                 unsigned int ver, int ndim, uint64_t *lb, uint64_t *ub,
-                const char *fn, unsigned int fnsz, void **data);
+                const char *fn, unsigned int fnsz, const char *fn_name, 
+                void **data, int *data_size);
 
 typedef int (*dspaces_sub_fn)(dspaces_client_t, struct dspaces_req *, void *);
 typedef struct dspaces_sub_handle *dspaces_sub_t;

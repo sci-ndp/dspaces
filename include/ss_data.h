@@ -334,7 +334,7 @@ MERCURY_GEN_PROC(peek_meta_out_t, ((int32_t)(res)))
 MERCURY_GEN_PROC(odsc_gdim_t,
                  ((odsc_hdr_with_gdim)(odsc_gdim))((int32_t)(param)))
 MERCURY_GEN_PROC(odsc_list_t, ((odsc_hdr)(odsc_list))((int32_t)(param)))
-MERCURY_GEN_PROC(pexec_in_t, ((odsc_hdr)(odsc))((hg_bulk_t)(handle))((int32_t)(length)))
+MERCURY_GEN_PROC(pexec_in_t, ((odsc_hdr)(odsc))((hg_bulk_t)(handle))((int32_t)(length))((hg_string_t)(fn_name)))
 MERCURY_GEN_PROC(pexec_out_t, ((hg_bulk_t)(handle))((int32_t)(length))((uint64_t)(mtxp))((uint64_t)(condp)))
 MERCURY_GEN_PROC(ss_information, ((odsc_hdr)(ss_buf))((hg_string_t)(chk_str)))
 MERCURY_GEN_PROC(cond_in_t, ((uint64_t)(mtxp))((uint64_t)(condp)))

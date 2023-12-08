@@ -23,7 +23,7 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
 
 PyObject *wrapper_dspaces_pexec(PyObject *clientppy, const char *name,
 				int version, PyObject *lbt, PyObject *ubt,
-				PyObject *fn);
+				PyObject *fn, const char *fn_name);
 
 void wrapper_dspaces_define_gdim(PyObject *clientppy, const char *name, PyObject *gdimt);
 

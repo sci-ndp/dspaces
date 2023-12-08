@@ -834,11 +834,14 @@ static int obj_update_dht(dspaces_provider_t server, struct obj_data *od,
 
     /* Compute object distribution to nodes in the space. */
     num_de = ssd_hash(ssd, &odsc->bb, dht_tab);
+    // TODO route_requests circumvent some of the indexing
+    /*
     if(num_de == 0) {
         fprintf(stderr,
                 "'%s()': this should not happen, num_de == 0 ?! od = %s\n",
                 __func__, obj_desc_sprint(odsc));
     }
+    */
     /* Update object descriptors on the corresponding nodes. */
     for(i = 0; i < num_de; i++) {
         if(dht_tab[i]->rank == server->dsg->rank) {
@@ -1910,7 +1913,7 @@ dspaces_module_py_exec(dspaces_provider_t server, struct dspaces_module *mod,
     if(!pFunc || !PyCallable_Check(pFunc)) {
         fprintf(
             stderr,
-            "ERROR! Could not find exeuctable function '%s' in module '%s'\n",
+            "ERROR! Could not find executable function '%s' in module '%s'\n",
             operation, mod->name);
         return (NULL);
     }
@@ -2012,7 +2015,7 @@ static void free_arg(struct dspaces_module_args *arg)
 {
     if(arg) {
         free(arg->name);
-        if(arg->len > 0) {
+        if(arg->len > 0 && arg->type != DSPACES_ARG_NONE) {
             free(arg->strval);
         }
     } else {
@@ -2066,7 +2069,10 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
             free(res->data);
         } else {
             odsc->size = res->elem_size;
-            if((odsc->size * res->len) != obj_data_size(odsc)) {
+            if(odsc->bb.num_dims == 0) {
+                odsc->bb.num_dims = res->ndim;
+                obj_data_resize(odsc, res->dim);
+            } else if((odsc->size * res->len) != obj_data_size(odsc)) {
                 DEBUG_OUT("returned data is cropped.\n");
                 obj_data_resize(odsc, res->dim);
             }
@@ -3071,10 +3077,10 @@ static void pexec_rpc(hg_handle_t handle)
 
     memcpy(&in_odsc, in.odsc.raw_odsc, sizeof(in_odsc));
 
-    DEBUG_OUT("received pexec request");
+    DEBUG_OUT("received pexec request\n");
     rdma_size = in.length;
     if(rdma_size > 0) {
-        DEBUG_OUT("function included, length %" PRIu32 "bytes\n", in.length);
+        DEBUG_OUT("function included, length %" PRIu32 " bytes\n", in.length);
         fn = malloc(rdma_size);
         hret = margo_bulk_create(mid, 1, (void **)&(fn), &rdma_size,
                              HG_BULK_WRITE_ONLY, &bulk_handle);
@@ -3105,14 +3111,25 @@ static void pexec_rpc(hg_handle_t handle)
     array = build_ndarray_from_od(from_obj);
 
     //Race condition? Protect with mutex?
-    if((pklmod == NULL) && (pklmod = PyImport_ImportModuleNoBlock("pickle")) == NULL) {
+    if((pklmod == NULL) && (pklmod = PyImport_ImportModuleNoBlock("dill")) == NULL) {
         margo_respond(handle, &out);
         margo_free_input(handle, &in);
         margo_destroy(handle);
         return;
     }
-    
-    arg = PyBytes_FromString(fn);
+   /* 
+    PyObject *pModule = PyImport_Import(PyUnicode_DecodeFSDefault("dbg"));
+    if(!pModule) {
+        PyErr_Print();
+    }
+    PyObject *pFunc = PyObject_GetAttrString(pModule, "myprint");
+    arg = PyBytes_FromStringAndSize(fn, rdma_size);
+    PyObject *res = PyObject_CallFunctionObjArgs(pFunc, arg, NULL);
+    if(!res) {
+        PyErr_Print();
+    }
+*/
+    arg = PyBytes_FromStringAndSize(fn, rdma_size);
     fnp = PyObject_CallMethodObjArgs(pklmod,
                                     PyUnicode_FromString("loads"),
                                     arg,
@@ -3121,7 +3138,10 @@ static void pexec_rpc(hg_handle_t handle)
     if(fnp && PyCallable_Check(fnp)) {
         pres = PyObject_CallFunctionObjArgs(fnp, array, NULL);
     } else {
-        fprintf(stderr, "ERROR: (%s): provided function could either not be loaded, or is not callabble.\n", __func__);
+        if(!fnp) {
+            PyErr_Print();
+        }
+        fprintf(stderr, "ERROR: (%s): provided function could either not be loaded, or is not callable.\n", __func__);
         margo_respond(handle, &out);
         margo_free_input(handle, &in);
         margo_destroy(handle);
@@ -3135,8 +3155,8 @@ static void pexec_rpc(hg_handle_t handle)
                                     pres,
                                     NULL);
         Py_XDECREF(pres);
-        res_data = PyBytes_AsString(fn);  
-        rdma_size = PyBytes_Size(res_data) + 1;
+        res_data = PyBytes_AsString(pres_bytes);  
+        rdma_size = PyBytes_Size(pres_bytes) + 1;
         hret = margo_bulk_create(mid, 1, (void **)&res_data, &rdma_size, HG_BULK_READ_ONLY, &out.handle);
         if(hret != HG_SUCCESS) {
             fprintf(stderr, "ERROR: (%s): margo_bulk_create failed with %d.\n", __func__, hret);
@@ -3156,18 +3176,23 @@ static void pexec_rpc(hg_handle_t handle)
         ABT_mutex_create(&mtx);
         out.condp = (uint64_t)(&cond);
         out.mtxp = (uint64_t)(&mtx);
+        DEBUG_OUT("sending out.condp = %" PRIu64 " and out.mtxp = %" PRIu64 "\n", out.condp, out.mtxp);
         ABT_mutex_lock(mtx);
         margo_respond(handle, &out);
         ABT_cond_wait(cond, mtx);
+        DEBUG_OUT("signaled on condition\n");
         ABT_mutex_unlock(mtx);
         ABT_mutex_free(&mtx);
         ABT_cond_free(&cond);
     } else {
+        out.handle = 0;
         margo_respond(handle, &out);
     }
 
     margo_free_input(handle, &in);
     margo_destroy(handle);
+
+    DEBUG_OUT("done with pexec handling\n");
 
     Py_XDECREF(array);
 
@@ -3176,11 +3201,17 @@ DEFINE_MARGO_RPC_HANDLER(pexec_rpc)
 
 static void cond_rpc(hg_handle_t handle)
 {
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    const struct hg_info *info = margo_get_info(handle);
+    dspaces_provider_t server =
+        (dspaces_provider_t)margo_registered_data(mid, info->id);
     ABT_mutex *mtx;
     ABT_cond *cond;
     cond_in_t in;
 
     margo_get_input(handle, &in);
+    DEBUG_OUT("condition rpc for mtxp = %" PRIu64 ", condp = %" PRIu64 "\n", in.mtxp, in.condp);
+    
     mtx = (ABT_mutex *)in.mtxp;
     cond = (ABT_cond *)in.condp;
     ABT_mutex_lock(*mtx);
