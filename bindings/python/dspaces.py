@@ -54,7 +54,7 @@ class DSClient:
         passed_type = None if dtype == None else np.dtype(dtype)
         return wrapper_dspaces_get(self.client, (self.nspace + name).encode('ascii'), version, lb, ub, passed_type, timeout)    
 
-    def Exec(self, name, version, lb, ub, fn):
+    def Exec(self, name, version, lb=None, ub=None, fn=None):
         res = wrapper_dspaces_pexec(self.client, (self.nspace + name).encode('ascii'), version, lb, ub, pickle.dumps(fn), fn.__name__.encode('ascii'))
         if res:
             return pickle.loads(res)
