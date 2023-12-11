@@ -479,7 +479,7 @@ static int dspaces_init_margo(dspaces_client_t client,
 
     margo_set_environment(NULL);
     sprintf(margo_conf,
-            "{ \"use_progress_thread\" : false, \"rpc_thread_count\" : 0}");
+            "{ \"use_progress_thread\" : false, \"rpc_thread_count\" : 0, \"handle_cache_size\" : 256}");
     hii.request_post_init = 1024;
     hii.auto_sm = 0;
     mii.hg_init_info = &hii;
@@ -518,7 +518,6 @@ static int dspaces_init_margo(dspaces_client_t client,
     }
 
 #endif /* HAVE_DRC */
-
     if(!client->mid) {
         fprintf(stderr, "ERROR: %s: margo_init() failed.\n", __func__);
         return (dspaces_ERR_MERCURY);
@@ -1879,8 +1878,7 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
         margo_bulk_free(bulk_handle);
         in2.mtxp = out.mtxp;
         in2.condp = out.condp;
-        margo_destroy(handle);
-        hret = margo_create(client->mid, server_addr, client->cond_id, &handle);
+        hret = margo_create(client->mid, server_addr, client->cond_id, &cond_handle);
 
         if(hret != HG_SUCCESS) {
             fprintf(stderr, "ERROR: (%s): margo_create() failed\n", __func__);
@@ -1888,15 +1886,16 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
         }
 
         DEBUG_OUT("sending cond_rpc with condp = %" PRIu64 ", mtxp = %" PRIu64 "\n", in2.condp, in2.mtxp);
-        hret = margo_iforward(handle, &in2, &req);
+        hret = margo_iforward(cond_handle, &in2, &req);
         if(hret != HG_SUCCESS) {
             fprintf(stderr, "ERROR: (%s): margo_iforward() failed\n", __func__);
-            margo_destroy(handle);
+            margo_destroy(cond_handle);
             return dspaces_ERR_MERCURY;
         }
         DEBUG_OUT("sent\n");
         *size = rdma_size;
-        margo_free_output(handle, &out);
+        margo_free_output(cond_handle, &out);
+        margo_destroy(cond_handle);
     } else {
         *size = 0;
         *data = NULL;

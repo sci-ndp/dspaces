@@ -3117,18 +3117,6 @@ static void pexec_rpc(hg_handle_t handle)
         margo_destroy(handle);
         return;
     }
-   /* 
-    PyObject *pModule = PyImport_Import(PyUnicode_DecodeFSDefault("dbg"));
-    if(!pModule) {
-        PyErr_Print();
-    }
-    PyObject *pFunc = PyObject_GetAttrString(pModule, "myprint");
-    arg = PyBytes_FromStringAndSize(fn, rdma_size);
-    PyObject *res = PyObject_CallFunctionObjArgs(pFunc, arg, NULL);
-    if(!res) {
-        PyErr_Print();
-    }
-*/
     arg = PyBytes_FromStringAndSize(fn, rdma_size);
     fnp = PyObject_CallMethodObjArgs(pklmod,
                                     PyUnicode_FromString("loads"),
@@ -3168,6 +3156,9 @@ static void pexec_rpc(hg_handle_t handle)
         }
         out.length = rdma_size;
     } else {
+        if(!pres) {
+            PyErr_Print();    
+        }
         out.length = 0; 
     }
 
