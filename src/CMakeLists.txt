@@ -48,7 +48,8 @@ endif()
 
 if(Python_FOUND)
     message(" ${PYTHON_INCLUDE_PATH} ${_Python_NumPy_INCLUDE_DIR}")
-    target_link_libraries(dspaces-server Python::Python)    
+    target_link_libraries(dspaces-server Python::Python)
+    target_include_directories (dspaces-server BEFORE PUBLIC ${PYTHON_INCLUDE_PATH} ${_Python_NumPy_INCLUDE_DIR})
     target_compile_definitions(dspaces-server PRIVATE DSPACES_HAVE_PYTHON)
 endif()
 
