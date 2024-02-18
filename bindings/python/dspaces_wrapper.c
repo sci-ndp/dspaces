@@ -139,6 +139,7 @@ void wrapper_dspaces_put(PyObject *clientppy, PyObject *obj, const char *name,
     PyArrayObject *arr = (PyArrayObject *)obj;
     int size = PyArray_ITEMSIZE(arr);
     int ndim = PyArray_NDIM(arr);
+    int tag = PyArray_TYPE(arr);
     void *data = PyArray_DATA(arr);
     uint64_t lb[ndim];
     uint64_t ub[ndim];
@@ -151,7 +152,7 @@ void wrapper_dspaces_put(PyObject *clientppy, PyObject *obj, const char *name,
         lb[i] = PyLong_AsLong(item);
         ub[i] = lb[i] + ((long)shape[i] - 1);
     }
-    dspaces_put(*clientp, name, version, size, ndim, lb, ub, data);
+    dspaces_put_tag(*clientp, name, version, size, tag, ndim, lb, ub, data);
 
     return;
 }

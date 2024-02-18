@@ -958,6 +958,14 @@ int dspaces_put(dspaces_client_t client, const char *var_name, unsigned int ver,
                 int elem_size, int ndim, uint64_t *lb, uint64_t *ub,
                 const void *data)
 {
+    return(dspaces_put_tag(client, var_name, ver, elem_size, 0, ndim, lb, ub, data));
+}
+
+
+int dspaces_put_tag(dspaces_client_t client, const char *var_name, unsigned int ver,
+                int elem_size, int tag, int ndim, uint64_t *lb, uint64_t *ub,
+                const void *data)
+{
     hg_addr_t server_addr;
     hg_handle_t handle;
     hg_return_t hret;
@@ -969,6 +977,7 @@ int dspaces_put(dspaces_client_t client, const char *var_name, unsigned int ver,
                            .owner = {0},
                            .st = st,
                            .flags = 0,
+                           .tag = tag,
                            .size = elem_size,
                            .bb = {
                                .num_dims = ndim,
