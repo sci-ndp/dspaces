@@ -106,7 +106,9 @@ struct dspaces_module {
     char *name;
     int type;
     union {
+#ifdef DSPACES_HAVE_PYTHON
         PyObject *pModule;
+#endif // DSPACES_HAVE_PYTHON
     };
 };
 
@@ -180,7 +182,9 @@ DECLARE_MARGO_RPC_HANDLER(ss_rpc)
 DECLARE_MARGO_RPC_HANDLER(kill_rpc)
 DECLARE_MARGO_RPC_HANDLER(sub_rpc)
 DECLARE_MARGO_RPC_HANDLER(do_ops_rpc)
+#ifdef DSPACES_HAVE_PYTHON
 DECLARE_MARGO_RPC_HANDLER(pexec_rpc)
+#endif // DSPACES_HAVE_PYTHON
 DECLARE_MARGO_RPC_HANDLER(cond_rpc)
 
 static void put_rpc(hg_handle_t h);
@@ -993,6 +997,7 @@ static void drain_thread(void *arg)
     }
 }
 
+#ifdef DSPACES_HAVE_PYTHON
 static void *bootstrap_python()
 {
     Py_Initialize();
@@ -1043,10 +1048,14 @@ static int dspaces_init_py_mods(dspaces_provider_t server,
 
     return (npmods);
 }
+#endif //DSPACES_HAVE_PYTHON
+
 
 void dspaces_init_mods(dspaces_provider_t server)
 {
+#ifdef DSPACES_HAVE_PYTHON
     server->nmods = dspaces_init_py_mods(server, &server->mods);
+#endif //DSPACES_HAVE_PYTHON
 }
 
 int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
@@ -1238,8 +1247,10 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                               &flag);
         DS_HG_REGISTER(hg, server->do_ops_id, do_ops_in_t, bulk_out_t,
                        do_ops_rpc);
+#ifdef DSPACES_HAVE_PYTHON
         margo_registered_name(server->mid, "pexec_rpc", &server->pexec_id, &flag);
         DS_HG_REGISTER(hg, server->pexec_id, pexec_in_t, pexec_out_t, pexec_rpc);
+#endif // DSPACES_HAVE_PYTHON
         margo_registered_name(server->mid, "cond_rpc", &server->cond_id, &flag);
         DS_HG_REGISTER(hg, server->cond_id, cond_in_t, void, cond_rpc);
     } else {
@@ -1312,8 +1323,10 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                                            do_ops_in_t, bulk_out_t, do_ops_rpc);
         margo_register_data(server->mid, server->do_ops_id, (void *)server,
                             NULL);
+#ifdef DSPACES_HAVE_PYTHON
         server->pexec_id = MARGO_REGISTER(server->mid, "pexec_rpc", pexec_in_t, pexec_out_t, pexec_rpc);
         margo_register_data(server->mid, server->pexec_id, (void *)server, NULL);
+#endif //DSPACES_HAVE_PYTHON
         server->cond_id = MARGO_REGISTER(server->mid, "cond_rpc", cond_in_t, void, cond_rpc);
         margo_register_data(server->mid, server->cond_id, (void *)server, NULL);
         margo_registered_disable_response(server->mid, server->cond_id, HG_TRUE);
@@ -1822,6 +1835,7 @@ struct dspaces_module *dspaces_find_mod(dspaces_provider_t server,
     return (NULL);
 }
 
+#ifdef DSPACES_HAVE_PYTHON
 PyObject *py_obj_from_arg(struct dspaces_module_args *arg)
 {
     PyObject *pArg;
@@ -1939,6 +1953,7 @@ dspaces_module_py_exec(dspaces_provider_t server, struct dspaces_module *mod,
 
     return (ret);
 }
+#endif //DSPACES_HAVE_PYTHON
 
 static struct dspaces_module_ret *
 dspaces_module_exec(dspaces_provider_t server, const char *mod_name,
@@ -1949,8 +1964,13 @@ dspaces_module_exec(dspaces_provider_t server, const char *mod_name,
 
     DEBUG_OUT("sending '%s' to module '%s'\n", operation, mod->name);
     if(mod->type == DSPACES_MOD_PY) {
+#ifdef DSPACES_HAVE_PYTHON
         return (dspaces_module_py_exec(server, mod, operation, args, nargs,
                                        ret_type));
+#else
+        fprintf(stderr, "WARNNING: tried to execute python module, but not python support.\n");
+        return(NULL);
+#endif // DSPACES_HAVE_PYTHON
     } else {
         fprintf(stderr, "ERROR: unknown module request in %s.\n", __func__);
         return (NULL);
@@ -3026,6 +3046,7 @@ cleanup:
 }
 DEFINE_MARGO_RPC_HANDLER(do_ops_rpc)
 
+#ifdef DSPACES_HAVE_PYTHON
 static PyObject *build_ndarray_from_od(struct obj_data *od)
 {
     obj_descriptor *odsc = odsc = &od->obj_desc;
@@ -3189,6 +3210,7 @@ static void pexec_rpc(hg_handle_t handle)
 
 }
 DEFINE_MARGO_RPC_HANDLER(pexec_rpc)
+#endif // DSPACES_HAVE_PYTHON
 
 static void cond_rpc(hg_handle_t handle)
 {
@@ -3219,7 +3241,9 @@ void dspaces_server_fini(dspaces_provider_t server)
 
     DEBUG_OUT("waiting for finalize to occur\n");
     margo_wait_for_finalize(server->mid);
+#ifdef DSPACES_HAVE_PYTHON
     err = Py_FinalizeEx();
+#endif // DSPACES_HAVE_PYTHON
     if(err < 0) {
         fprintf(stderr, "ERROR: Python finalize failed with %d\n", err);
     }
