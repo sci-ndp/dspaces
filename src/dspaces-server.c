@@ -1943,13 +1943,15 @@ dspaces_module_py_exec(dspaces_provider_t server, struct dspaces_module *mod,
     pResult = PyObject_Call(pFunc, pArgs, pKWArgs);
     if(!pResult) {
         PyErr_Print();
+        ret = NULL;
+    } else {
+        ret = py_res_to_ret(pResult, ret_type);
+        Py_DECREF(pResult);
     }
-    ret = py_res_to_ret(pResult, ret_type);
 
     Py_DECREF(pArgs);
     Py_DECREF(pKWArgs);
     Py_DECREF(pFunc);
-    Py_DECREF(pResult);
 
     return (ret);
 }
