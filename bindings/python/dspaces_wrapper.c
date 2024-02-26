@@ -180,7 +180,9 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
         ub[i] = PyLong_AsLong(item);
     }
 
+    Py_BEGIN_ALLOW_THREADS
     dspaces_aget(*clientp, name, version, ndim, lb, ub, &data, &tag, timeout);
+    Py_END_ALLOW_THREADS
 
     if(dtype == Py_None) {
         descr = PyArray_DescrNewFromType(tag); 
