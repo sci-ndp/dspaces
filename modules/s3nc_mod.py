@@ -30,7 +30,7 @@ def build_noaa_dir(var_name, version):
     elif product == 'RadM':
         pname = 'ABI-L1b-RadM'
     else:
-        raise ValueError(f'ERROR: {product} is not yet implemented.', file=sys.stderr)
+        raise ValueError(f'ERROR: {product} is not yet implemented.')
     year, day, hour, minute, fnum = unpack_version(version)
     return(f'{pname}/{year}/{day:03d}/{hour:02d}')
 
