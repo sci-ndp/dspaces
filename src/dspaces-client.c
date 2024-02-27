@@ -508,7 +508,7 @@ static int dspaces_init_margo(dspaces_client_t client,
 #else
 
     client->mid = margo_init_ext(listen_addr_str, MARGO_SERVER_MODE, &mii);
-    if(client->f_debug) {
+    if(client->mid && client->f_debug) {
         if(!client->rank) {
             char *margo_json = margo_get_config(client->mid);
             fprintf(stderr, "%s", margo_json);
@@ -664,9 +664,12 @@ int dspaces_init(int rank, dspaces_client_t *c)
         return (ret);
     }
 
-    dspaces_init_margo(client, listen_addr_str);
+    ret = dspaces_init_margo(client, listen_addr_str);
 
     free(listen_addr_str);
+    if(ret != 0) {
+        return(ret);
+    }
 
     choose_server(client);
     init_ss_info(client);
@@ -695,8 +698,11 @@ int dspaces_init_mpi(MPI_Comm comm, dspaces_client_t *c)
     if(ret != 0) {
         return (ret);
     }
-    dspaces_init_margo(client, listen_addr_str);
+    ret = dspaces_init_margo(client, listen_addr_str);
     free(listen_addr_str);
+    if(ret != 0) {
+        return(ret);
+    }
 
     choose_server(client);
     init_ss_info_mpi(client, comm);
@@ -734,6 +740,9 @@ int dspaces_init_wan(const char *listen_addr_str, const char *conn_str,
         return (ret);
     }
     dspaces_init_margo(client, listen_addr_str);
+    if(ret != 0) {
+        return(ret);
+    }
 
     choose_server(client);
     init_ss_info(client);
@@ -762,7 +771,10 @@ int dspaces_init_wan_mpi(const char *listen_addr_str, const char *conn_str,
     if(ret != 0) {
         return (ret);
     }
-    dspaces_init_margo(client, listen_addr_str);
+    ret = dspaces_init_margo(client, listen_addr_str);
+    if(ret != 0) {
+        return(ret);
+    }
 
     choose_server(client);
     init_ss_info_mpi(client, comm);

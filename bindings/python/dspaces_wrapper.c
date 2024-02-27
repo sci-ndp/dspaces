@@ -14,13 +14,20 @@
 PyObject *wrapper_dspaces_init(int rank)
 {
     dspaces_client_t *clientp;
+    char err_str[100];
+    int ret;
 
     import_array();
     import_mpi4py();
 
     clientp = malloc(sizeof(*clientp));
 
-    dspaces_init(rank, clientp);
+    ret = dspaces_init(rank, clientp);
+    if(ret != 0) {
+        sprintf(err_str, "dspaces_init_mpi() failed with %i", ret);
+        PyErr_SetString(PyExc_RuntimeError, err_str);
+        return NULL;
+    }
 
     PyObject *client = PyLong_FromVoidPtr((void *)clientp);
 
@@ -31,6 +38,8 @@ PyObject *wrapper_dspaces_init_mpi(PyObject *commpy)
 {
     MPI_Comm *comm_p = NULL;
     dspaces_client_t *clientp;
+    char err_str[100];
+    int ret;
 
     import_array();
     import_mpi4py();
@@ -42,6 +51,11 @@ PyObject *wrapper_dspaces_init_mpi(PyObject *commpy)
     clientp = malloc(sizeof(*clientp));
 
     dspaces_init_mpi(*comm_p, clientp);
+    if(ret != 0) {
+        sprintf(err_str, "dspaces_init_mpi() failed with %i", ret);
+        PyErr_SetString(PyExc_RuntimeError, err_str);
+        return NULL;
+    }
 
     PyObject *client = PyLong_FromVoidPtr((void *)clientp);
 
@@ -51,13 +65,20 @@ PyObject *wrapper_dspaces_init_mpi(PyObject *commpy)
 PyObject *wrapper_dspaces_init_wan(const char *listen_str, const char *conn, int rank)
 {
     dspaces_client_t *clientp;
+    char err_str[100];
+    int ret;
 
     import_array();
     import_mpi4py();
 
     clientp = malloc(sizeof(*clientp));
 
-    dspaces_init_wan(listen_str, conn, rank, clientp);
+    ret = dspaces_init_wan(listen_str, conn, rank, clientp);
+    if(ret != 0) {
+        sprintf(err_str, "dspaces_init_wan() failed with %i", ret);
+        PyErr_SetString(PyExc_RuntimeError, err_str);
+        return NULL;
+    }
 
     PyObject *client = PyLong_FromVoidPtr((void *)clientp);
 
@@ -68,6 +89,8 @@ PyObject *wrapper_dspaces_init_wan_mpi(const char *listen_str, const char *conn,
 {
     MPI_Comm *comm_p = NULL;
     dspaces_client_t *clientp;
+    char err_str[100];
+    int ret;
 
     import_array();
     import_mpi4py();
@@ -78,7 +101,13 @@ PyObject *wrapper_dspaces_init_wan_mpi(const char *listen_str, const char *conn,
     }
     clientp = malloc(sizeof(*clientp));
 
-    dspaces_init_wan_mpi(listen_str, conn, *comm_p, clientp);
+    ret = dspaces_init_wan_mpi(listen_str, conn, *comm_p, clientp);
+    if(ret != 0) {
+        sprintf(err_str, "dspaces_init_wan_mpi() failed with %i", ret);
+        PyErr_SetString(PyExc_RuntimeError, err_str);
+        return NULL;
+    }    
+
 
     PyObject *client = PyLong_FromVoidPtr((void *)clientp);
 
@@ -90,6 +119,8 @@ PyObject *wrapper_dspaces_server_init(const char *listen_str, PyObject *commpy,
 {
     MPI_Comm *comm_p = NULL;
     dspaces_provider_t *serverp;
+    char err_str[100];
+    int ret;
 
     import_array();
     import_mpi4py();
@@ -100,7 +131,12 @@ PyObject *wrapper_dspaces_server_init(const char *listen_str, PyObject *commpy,
     }
     serverp = malloc(sizeof(*serverp));
 
-    dspaces_server_init(listen_str, *comm_p, conf, serverp);
+    ret = dspaces_server_init(listen_str, *comm_p, conf, serverp);
+    if(ret != 0) {
+        sprintf(err_str, "dspaces_init_mpi() failed with %i", ret);
+        PyErr_SetString(PyExc_RuntimeError, err_str);
+        return NULL;
+    }
 
     PyObject *server = PyLong_FromVoidPtr((void *)serverp);
 
@@ -247,6 +283,7 @@ PyObject *wrapper_dspaces_pexec(PyObject *clientppy, const char *name,
     if(data_size > 0) { 
         result = PyBytes_FromStringAndSize(data, data_size);
     } else {
+        Py_INCREF(Py_None);
         result = Py_None;
     }
 
