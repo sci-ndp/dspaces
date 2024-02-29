@@ -24,7 +24,7 @@ PyObject *wrapper_dspaces_init(int rank)
 
     ret = dspaces_init(rank, clientp);
     if(ret != 0) {
-        sprintf(err_str, "dspaces_init_mpi() failed with %i", ret);
+        sprintf(err_str, "dspaces_init() failed with %i", ret);
         PyErr_SetString(PyExc_RuntimeError, err_str);
         return NULL;
     }
@@ -50,7 +50,7 @@ PyObject *wrapper_dspaces_init_mpi(PyObject *commpy)
     }
     clientp = malloc(sizeof(*clientp));
 
-    dspaces_init_mpi(*comm_p, clientp);
+    ret = dspaces_init_mpi(*comm_p, clientp);
     if(ret != 0) {
         sprintf(err_str, "dspaces_init_mpi() failed with %i", ret);
         PyErr_SetString(PyExc_RuntimeError, err_str);

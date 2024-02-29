@@ -1849,6 +1849,7 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
             fprintf(stderr, "ERROR: (%s): margo_bulk_create() failed\n", __func__);
             return dspaces_ERR_MERCURY;
         }
+        DEBUG_OUT("created fn tranfer buffer\n");
     }
 
     get_server_address(client, &server_addr);
