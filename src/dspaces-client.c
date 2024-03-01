@@ -1669,6 +1669,8 @@ int dspaces_aget(dspaces_client_t client, const char *var_name,
     else {
         DEBUG_OUT("not setting element size because there are no result "
                   "descriptors.");
+        *data = NULL;
+        return(ret);
     }
     odsc.size = elem_size;
     DEBUG_OUT("element size is %zi\n", odsc.size);

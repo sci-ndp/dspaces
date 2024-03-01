@@ -220,6 +220,11 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
     dspaces_aget(*clientp, name, version, ndim, lb, ub, &data, &tag, timeout);
     Py_END_ALLOW_THREADS
 
+    if(data == NULL) {
+        Py_INCREF(Py_None);
+        return(Py_None);
+    }
+
     if(dtype == Py_None) {
         descr = PyArray_DescrNewFromType(tag); 
     } else {
