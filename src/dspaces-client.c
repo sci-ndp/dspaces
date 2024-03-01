@@ -1920,8 +1920,8 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
     } else {
         *size = 0;
         *data = NULL;
-        margo_free_output(handle, &out);
     }
+    margo_free_output(handle, &out);
     margo_destroy(handle);
     DEBUG_OUT("done with handling pexec\n");
     return(dspaces_SUCCESS);
