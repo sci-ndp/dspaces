@@ -2190,7 +2190,6 @@ static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
         DEBUG_OUT("no peers in global space, handling with modules only\n");
         odsc_tabs = malloc(sizeof(*odsc_tabs));
         odsc_nums = calloc(sizeof(*odsc_nums), 1);
-        route_request(server, q_odsc, q_gdim);
         self_id_num = 0;
     }
 
