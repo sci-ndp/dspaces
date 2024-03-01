@@ -822,6 +822,24 @@ static struct sspace *lookup_sspace(dspaces_provider_t server,
     return ssd_entry->ssd;
 }
 
+static void obj_update_local_dht(dspaces_provider_t server, obj_descriptor *odsc, struct sspace *ssd, obj_update_t type)
+{
+    DEBUG_OUT("Add in local_dht %d\n", server->dsg->rank);
+    ABT_mutex_lock(server->dht_mutex);
+    switch(type) {
+    case DS_OBJ_NEW:
+        dht_add_entry(ssd->ent_self, odsc);
+        break;
+    case DS_OBJ_OWNER:
+        dht_update_owner(ssd->ent_self, odsc, 1);
+        break;
+    default:
+        fprintf(stderr, "ERROR: (%s): unknown object update type.\n",
+            __func__);
+    }
+    ABT_mutex_unlock(server->dht_mutex);
+}
+
 static int obj_update_dht(dspaces_provider_t server, struct obj_data *od,
                           obj_update_t type)
 {
@@ -838,32 +856,14 @@ static int obj_update_dht(dspaces_provider_t server, struct obj_data *od,
 
     /* Compute object distribution to nodes in the space. */
     num_de = ssd_hash(ssd, &odsc->bb, dht_tab);
-    // TODO route_requests circumvent some of the indexing
-    /*
     if(num_de == 0) {
-        fprintf(stderr,
-                "'%s()': this should not happen, num_de == 0 ?! od = %s\n",
-                __func__, obj_desc_sprint(odsc));
+        DEBUG_OUT("Could not distribute the object in a spatial index. Storing locally.\n");
+        obj_update_local_dht(server, odsc, ssd, type);
     }
-    */
-    /* Update object descriptors on the corresponding nodes. */
+
     for(i = 0; i < num_de; i++) {
         if(dht_tab[i]->rank == server->dsg->rank) {
-            DEBUG_OUT("Add in local_dht %d\n", server->dsg->rank);
-            ABT_mutex_lock(server->dht_mutex);
-            switch(type) {
-            case DS_OBJ_NEW:
-                dht_add_entry(ssd->ent_self, odsc);
-                break;
-            case DS_OBJ_OWNER:
-                dht_update_owner(ssd->ent_self, odsc, 1);
-                break;
-            default:
-                fprintf(stderr, "ERROR: (%s): unknown object update type.\n",
-                        __func__);
-            }
-            ABT_mutex_unlock(server->dht_mutex);
-            DEBUG_OUT("I am self, added in local dht %d\n", server->dsg->rank);
+            obj_update_local_dht(server, odsc, ssd, type);
             continue;
         }
 
@@ -2104,6 +2104,8 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
             od_odsc->tag = res->tag;
             od = obj_data_alloc_no_data(od_odsc, res->data);
             memcpy(&od->gdim, gdim, sizeof(struct global_dimension));
+            DEBUG_OUT("adding object to local storage: %s\n",
+                    obj_desc_sprint(od_odsc));
             ABT_mutex_lock(server->ls_mutex);
             ls_add_obj(server->dsg->ls, od);
             ABT_mutex_unlock(server->ls_mutex);
