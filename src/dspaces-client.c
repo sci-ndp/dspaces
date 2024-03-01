@@ -479,7 +479,7 @@ static int dspaces_init_margo(dspaces_client_t client,
 
     margo_set_environment(NULL);
     sprintf(margo_conf,
-            "{ \"use_progress_thread\" : false, \"rpc_thread_count\" : 0, \"handle_cache_size\" : 512}");
+            "{ \"use_progress_thread\" : false, \"rpc_thread_count\" : 0, \"handle_cache_size\" : 64}");
     hii.request_post_init = 1024;
     hii.auto_sm = 0;
     mii.hg_init_info = &hii;
@@ -1916,7 +1916,6 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
         }
         DEBUG_OUT("sent\n");
         *size = rdma_size;
-        margo_free_output(cond_handle, &out);
         margo_destroy(cond_handle);
     } else {
         *size = 0;
