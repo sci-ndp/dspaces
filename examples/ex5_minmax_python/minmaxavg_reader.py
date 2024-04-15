@@ -30,7 +30,7 @@ for ts in range(num_ts):
     data = client.Get("ex5_sample_data", version=ts,
                     lb = ((local_size * rank),),
                     ub = ((local_size * rank + local_size - 1),),
-                    timeout = -1, dtype = int)
+                    timeout = -1)
     local_min = np.ndarray(1, dtype=int)
     local_max = np.ndarray(1, dtype=int)
     local_sum = np.ndarray(1, dtype=int)
