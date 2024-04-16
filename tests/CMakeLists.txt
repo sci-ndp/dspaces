@@ -30,7 +30,7 @@ target_link_libraries(test_writer_server dspaces dspaces-server)
 add_executable(test_calc test_calc.c)
 target_link_libraries(test_calc dspaces)
 
-install(TARGETS dspaces_server terminator
+install(TARGETS dspaces_server terminator dspaces_ls
   DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
