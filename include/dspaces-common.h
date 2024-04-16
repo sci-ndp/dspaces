@@ -27,6 +27,13 @@ extern "C" {
 
 #define DS_OBJ_RESIZE 0x02
 
+/**
+ * Wrapping your function call with ignore_result makes it more clear to
+ * readers, compilers and linters that you are, in fact, ignoring the
+ * function's return value on purpose.
+ */
+static inline void ignore_result(int unused_result) { (void)unused_result; }
+
 #if defined(__cplusplus)
 }
 #endif

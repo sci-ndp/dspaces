@@ -12,6 +12,7 @@
 
 #include "bbox.h"
 #include "list.h"
+#include "str_hash.h"
 #include <margo.h>
 #include <mercury.h>
 #include <mercury_atomic.h>
@@ -98,6 +99,7 @@ struct meta_sub_list_entry {
 typedef struct {
     int num_obj;
     int size_hash;
+    ds_str_hash *var_dict;
     struct list_head *meta_hash;
     ABT_mutex *meta_mutex;
     ABT_cond *meta_cond;
@@ -321,6 +323,56 @@ static inline hg_return_t hg_proc_dsp_buf_t(hg_proc_t proc, void *data)
     return ret;
 }
 
+typedef struct name_list {
+    hg_size_t count;
+    hg_string_t *names;
+} name_list_t;
+
+static inline hg_return_t hg_proc_name_list_t(hg_proc_t proc, void *data)
+{
+    hg_return_t ret;
+    name_list_t *nlist = (name_list_t *)data;
+    int i;
+
+    switch(hg_proc_get_op(proc)) {
+    case HG_ENCODE:
+        ret = hg_proc_hg_size_t(proc, &nlist->count);
+        if(ret != HG_SUCCESS) {
+            break;
+        }
+        for(i = 0; i < nlist->count; i++) {
+            ret = hg_proc_hg_string_t(proc, &nlist->names[i]);
+            if(ret != HG_SUCCESS) {
+                break;
+            }
+        }
+        break;
+    case HG_DECODE:
+        ret = hg_proc_hg_size_t(proc, &nlist->count);
+        if(ret != HG_SUCCESS) {
+            break;
+        }
+        nlist->names = malloc(sizeof(*nlist->names) * nlist->count);
+        for(i = 0; i < nlist->count; i++) {
+            ret = hg_proc_hg_string_t(proc, &nlist->names[i]);
+            if(ret != HG_SUCCESS) {
+                break;
+            }
+        }
+        break;
+    case HG_FREE:
+        for(i = 0; i < nlist->count; i++) {
+            ret = hg_proc_hg_size_t(proc, &nlist->names[i]);
+        }
+        free(nlist->names);
+
+        ret = HG_SUCCESS;
+        break;
+    }
+
+    return (ret);
+}
+
 MERCURY_GEN_PROC(bulk_gdim_t, ((odsc_hdr_with_gdim)(odsc))((hg_bulk_t)(handle)))
 MERCURY_GEN_PROC(bulk_in_t, ((odsc_hdr)(odsc))((hg_bulk_t)(handle)))
 MERCURY_GEN_PROC(bulk_out_t, ((int32_t)(ret))((hg_size_t)(len)))
@@ -334,10 +386,13 @@ MERCURY_GEN_PROC(peek_meta_out_t, ((int32_t)(res)))
 MERCURY_GEN_PROC(odsc_gdim_t,
                  ((odsc_hdr_with_gdim)(odsc_gdim))((int32_t)(param)))
 MERCURY_GEN_PROC(odsc_list_t, ((odsc_hdr)(odsc_list))((int32_t)(param)))
-MERCURY_GEN_PROC(pexec_in_t, ((odsc_hdr)(odsc))((hg_bulk_t)(handle))((int32_t)(length))((hg_string_t)(fn_name)))
-MERCURY_GEN_PROC(pexec_out_t, ((hg_bulk_t)(handle))((int32_t)(length))((uint64_t)(mtxp))((uint64_t)(condp)))
+MERCURY_GEN_PROC(pexec_in_t, ((odsc_hdr)(odsc))((hg_bulk_t)(handle))(
+                                 (int32_t)(length))((hg_string_t)(fn_name)))
+MERCURY_GEN_PROC(pexec_out_t, ((hg_bulk_t)(handle))((int32_t)(length))(
+                                  (uint64_t)(mtxp))((uint64_t)(condp)))
 MERCURY_GEN_PROC(ss_information, ((odsc_hdr)(ss_buf))((hg_string_t)(chk_str)))
 MERCURY_GEN_PROC(cond_in_t, ((uint64_t)(mtxp))((uint64_t)(condp)))
+MERCURY_GEN_PROC(get_var_objs_in_t, ((hg_string_t)(var_name))((int32_t)(src)))
 
 char *obj_desc_sprint(obj_descriptor *);
 //
@@ -380,6 +435,7 @@ struct obj_data *ls_find(ss_storage *, obj_descriptor *);
 struct obj_data *ls_find_od(ss_storage *, obj_descriptor *);
 int ls_find_ods(ss_storage *ls, obj_descriptor *odsc, obj_descriptor ***od_tab);
 struct obj_data *ls_find_no_version(ss_storage *, obj_descriptor *);
+int ls_get_var_names(ss_storage *, char ***);
 
 struct obj_data *obj_data_alloc(obj_descriptor *);
 struct obj_data *obj_data_alloc_no_data(obj_descriptor *, void *);

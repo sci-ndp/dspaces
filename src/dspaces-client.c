@@ -104,6 +104,8 @@ struct dspaces_client {
     hg_id_t do_ops_id;
     hg_id_t pexec_id;
     hg_id_t cond_id;
+    hg_id_t get_vars_id;
+    hg_id_t get_var_objs_id;
     struct dc_gspace *dcg;
     char **server_address;
     char **node_names;
@@ -336,28 +338,29 @@ static int read_conf(dspaces_client_t client, char **listen_addr_str)
         goto fini;
     }
 
-    fscanf(fd, "%d\n", &client->size_sp);
+    ignore_result(fscanf(fd, "%d\n", &client->size_sp));
     client->server_address =
         malloc(client->size_sp * sizeof(*client->server_address));
     client->node_names = malloc(client->size_sp * sizeof(*client->node_names));
     for(i = 0; i < client->size_sp; i++) {
         fgetpos(fd, &lstart);
-        fscanf(fd, "%*s%n", &size);
+        ignore_result(fscanf(fd, "%*s%n", &size));
         client->node_names[i] = malloc(size + 1);
-        fscanf(fd, "%*s%n\n", &size);
+        ignore_result(fscanf(fd, "%*s%n\n", &size));
         client->server_address[i] = malloc(size + 1);
         fsetpos(fd, &lstart);
-        fscanf(fd, "%s %s\n", client->node_names[i], client->server_address[i]);
+        ignore_result(fscanf(fd, "%s %s\n", client->node_names[i],
+                             client->server_address[i]));
     }
     fgetpos(fd, &lstart);
-    fscanf(fd, "%*s%n\n", &size);
+    ignore_result(fscanf(fd, "%*s%n\n", &size));
     fsetpos(fd, &lstart);
     *listen_addr_str = malloc(size + 1);
-    fscanf(fd, "%s\n", *listen_addr_str);
+    ignore_result(fscanf(fd, "%s\n", *listen_addr_str));
 
 #ifdef HAVE_DRC
     fgetpos(fd, &lstart);
-    fscanf(fd, "%" SCNu32, &client->drc_credential_id);
+    ignore_result(fscanf(fd, "%" SCNu32, &client->drc_credential_id));
 #endif
     fclose(fd);
 
@@ -395,32 +398,32 @@ static int read_conf_mpi(dspaces_client_t client, MPI_Comm comm,
     }
     file_buf = malloc(file_len);
     if(rank == 0) {
-        fread(file_buf, 1, file_len, fd);
+        ignore_result(fread(file_buf, 1, file_len, fd));
         fclose(fd);
     }
     MPI_Bcast(file_buf, file_len, MPI_BYTE, 0, comm);
 
     conf = fmemopen(file_buf, file_len, "r");
-    fscanf(conf, "%d\n", &client->size_sp);
+    ignore_result(fscanf(conf, "%d\n", &client->size_sp));
     client->server_address =
         malloc(client->size_sp * sizeof(*client->server_address));
     client->node_names = malloc(client->size_sp * sizeof(*client->node_names));
     for(i = 0; i < client->size_sp; i++) {
         fgetpos(conf, &lstart);
         fgetpos(conf, &lstart);
-        fscanf(conf, "%*s%n", &size);
+        ignore_result(fscanf(conf, "%*s%n", &size));
         client->node_names[i] = malloc(size + 1);
-        fscanf(conf, "%*s%n\n", &size);
+        ignore_result(fscanf(conf, "%*s%n\n", &size));
         client->server_address[i] = malloc(size + 1);
         fsetpos(conf, &lstart);
-        fscanf(conf, "%s %s\n", client->node_names[i],
-               client->server_address[i]);
+        ignore_result(fscanf(conf, "%s %s\n", client->node_names[i],
+                             client->server_address[i]));
     }
     fgetpos(conf, &lstart);
-    fscanf(conf, "%*s%n\n", &size);
+    ignore_result(fscanf(conf, "%*s%n\n", &size));
     fsetpos(conf, &lstart);
     *listen_addr_str = malloc(size + 1);
-    fscanf(conf, "%s\n", *listen_addr_str);
+    ignore_result(fscanf(conf, "%s\n", *listen_addr_str));
 
 #ifdef HAVE_DRC
     fgetpos(conf, &lstart);
@@ -479,7 +482,8 @@ static int dspaces_init_margo(dspaces_client_t client,
 
     margo_set_environment(NULL);
     sprintf(margo_conf,
-            "{ \"use_progress_thread\" : false, \"rpc_thread_count\" : 0, \"handle_cache_size\" : 64}");
+            "{ \"use_progress_thread\" : false, \"rpc_thread_count\" : 0, "
+            "\"handle_cache_size\" : 64}");
     hii.request_post_init = 1024;
     hii.auto_sm = 0;
     mii.hg_init_info = &hii;
@@ -573,8 +577,13 @@ static int dspaces_init_margo(dspaces_client_t client,
                               &client->query_meta_id, &flag);
         margo_registered_name(client->mid, "do_ops_rpc", &client->do_ops_id,
                               &flag);
-        margo_registered_name(client->mid, "pexec_rpc", &client->pexec_id, &flag);
+        margo_registered_name(client->mid, "pexec_rpc", &client->pexec_id,
+                              &flag);
         margo_registered_name(client->mid, "cond_rpc", &client->cond_id, &flag);
+        margo_registered_name(client->mid, "get_vars_rpc", &client->get_vars_id,
+                              &flag);
+        margo_registered_name(client->mid, "get_var_objs_rpc",
+                              &client->get_var_objs_id, &flag);
     } else {
         client->put_id = MARGO_REGISTER(client->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, NULL);
@@ -624,11 +633,16 @@ static int dspaces_init_margo(dspaces_client_t client,
                                           HG_TRUE);
         client->do_ops_id = MARGO_REGISTER(client->mid, "do_ops_rpc",
                                            do_ops_in_t, bulk_out_t, NULL);
-        client->pexec_id = MARGO_REGISTER(client->mid, "pexec_rpc",
-                                            pexec_in_t, pexec_out_t, NULL);
-        client->cond_id = MARGO_REGISTER(client->mid, "cond_rpc",
-                                            cond_in_t, void, NULL);
-        margo_registered_disable_response(client->mid, client->cond_id, HG_TRUE);
+        client->pexec_id = MARGO_REGISTER(client->mid, "pexec_rpc", pexec_in_t,
+                                          pexec_out_t, NULL);
+        client->cond_id =
+            MARGO_REGISTER(client->mid, "cond_rpc", cond_in_t, void, NULL);
+        margo_registered_disable_response(client->mid, client->cond_id,
+                                          HG_TRUE);
+        client->get_vars_id = MARGO_REGISTER(client->mid, "get_vars_rpc",
+                                             int32_t, name_list_t, NULL);
+        client->get_var_objs_id = MARGO_REGISTER(
+            client->mid, "get_var_objs_rpc", get_var_objs_in_t, odsc_hdr, NULL);
     }
 
     return (dspaces_SUCCESS);
@@ -668,7 +682,7 @@ int dspaces_init(int rank, dspaces_client_t *c)
 
     free(listen_addr_str);
     if(ret != 0) {
-        return(ret);
+        return (ret);
     }
 
     choose_server(client);
@@ -701,7 +715,7 @@ int dspaces_init_mpi(MPI_Comm comm, dspaces_client_t *c)
     ret = dspaces_init_margo(client, listen_addr_str);
     free(listen_addr_str);
     if(ret != 0) {
-        return(ret);
+        return (ret);
     }
 
     choose_server(client);
@@ -741,7 +755,7 @@ int dspaces_init_wan(const char *listen_addr_str, const char *conn_str,
     }
     dspaces_init_margo(client, listen_addr_str);
     if(ret != 0) {
-        return(ret);
+        return (ret);
     }
 
     choose_server(client);
@@ -773,7 +787,7 @@ int dspaces_init_wan_mpi(const char *listen_addr_str, const char *conn_str,
     }
     ret = dspaces_init_margo(client, listen_addr_str);
     if(ret != 0) {
-        return(ret);
+        return (ret);
     }
 
     choose_server(client);
@@ -970,13 +984,13 @@ int dspaces_put(dspaces_client_t client, const char *var_name, unsigned int ver,
                 int elem_size, int ndim, uint64_t *lb, uint64_t *ub,
                 const void *data)
 {
-    return(dspaces_put_tag(client, var_name, ver, elem_size, 0, ndim, lb, ub, data));
+    return (dspaces_put_tag(client, var_name, ver, elem_size, 0, ndim, lb, ub,
+                            data));
 }
 
-
-int dspaces_put_tag(dspaces_client_t client, const char *var_name, unsigned int ver,
-                int elem_size, int tag, int ndim, uint64_t *lb, uint64_t *ub,
-                const void *data)
+int dspaces_put_tag(dspaces_client_t client, const char *var_name,
+                    unsigned int ver, int elem_size, int tag, int ndim,
+                    uint64_t *lb, uint64_t *ub, const void *data)
 {
     hg_addr_t server_addr;
     hg_handle_t handle;
@@ -1670,7 +1684,7 @@ int dspaces_aget(dspaces_client_t client, const char *var_name,
         DEBUG_OUT("not setting element size because there are no result "
                   "descriptors.");
         *data = NULL;
-        return(ret);
+        return (ret);
     }
     odsc.size = elem_size;
     DEBUG_OUT("element size is %zi\n", odsc.size);
@@ -1818,8 +1832,9 @@ err_hg:
 }
 
 int dspaces_pexec(dspaces_client_t client, const char *var_name,
-        unsigned int ver, int ndim, uint64_t *lb, uint64_t *ub,
-        const char *fn, unsigned int fnsz, const char *fn_name, void **data, int *size)
+                  unsigned int ver, int ndim, uint64_t *lb, uint64_t *ub,
+                  const char *fn, unsigned int fnsz, const char *fn_name,
+                  void **data, int *size)
 {
     obj_descriptor odsc = {0};
     hg_addr_t server_addr;
@@ -1836,7 +1851,7 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
     fill_odsc(client, var_name, ver, 0, ndim, lb, ub, &odsc);
 
     DEBUG_OUT("Doing remote pexec on %s\n", obj_desc_sprint(&odsc));
-    
+
     in.odsc.size = sizeof(odsc);
     in.odsc.raw_odsc = (char *)&odsc;
 
@@ -1846,9 +1861,11 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
     in.length = fnsz;
     if(rdma_size > 0) {
         DEBUG_OUT("sending fn\n");
-        hret = margo_bulk_create(client->mid, 1, (void **)&fn, &rdma_size, HG_BULK_READ_ONLY, &in.handle);
+        hret = margo_bulk_create(client->mid, 1, (void **)&fn, &rdma_size,
+                                 HG_BULK_READ_ONLY, &in.handle);
         if(hret != HG_SUCCESS) {
-            fprintf(stderr, "ERROR: (%s): margo_bulk_create() failed\n", __func__);
+            fprintf(stderr, "ERROR: (%s): margo_bulk_create() failed\n",
+                    __func__);
             return dspaces_ERR_MERCURY;
         }
         DEBUG_OUT("created fn tranfer buffer\n");
@@ -1885,16 +1902,19 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
     rdma_size = out.length;
     if(rdma_size > 0) {
         *data = malloc(out.length);
-        hret = margo_bulk_create(client->mid, 1, (void **)data, &rdma_size, HG_BULK_WRITE_ONLY, &bulk_handle);
+        hret = margo_bulk_create(client->mid, 1, (void **)data, &rdma_size,
+                                 HG_BULK_WRITE_ONLY, &bulk_handle);
         if(hret != HG_SUCCESS) {
             // TODO notify server of failure (server is waiting)
             margo_free_output(handle, &out);
             margo_destroy(handle);
             return dspaces_ERR_MERCURY;
         }
-        hret = margo_bulk_transfer(client->mid, HG_BULK_PULL, server_addr, out.handle, 0, bulk_handle, 0, rdma_size);
+        hret = margo_bulk_transfer(client->mid, HG_BULK_PULL, server_addr,
+                                   out.handle, 0, bulk_handle, 0, rdma_size);
         if(hret != HG_SUCCESS) {
-            fprintf(stderr, "ERROR: (%s): margo_bulk_transfer failed!\n", __func__);
+            fprintf(stderr, "ERROR: (%s): margo_bulk_transfer failed!\n",
+                    __func__);
             margo_free_output(handle, &out);
             margo_destroy(handle);
             return dspaces_ERR_MERCURY;
@@ -1902,14 +1922,17 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
         margo_bulk_free(bulk_handle);
         in2.mtxp = out.mtxp;
         in2.condp = out.condp;
-        hret = margo_create(client->mid, server_addr, client->cond_id, &cond_handle);
+        hret = margo_create(client->mid, server_addr, client->cond_id,
+                            &cond_handle);
 
         if(hret != HG_SUCCESS) {
             fprintf(stderr, "ERROR: (%s): margo_create() failed\n", __func__);
             return dspaces_ERR_MERCURY;
         }
 
-        DEBUG_OUT("sending cond_rpc with condp = %" PRIu64 ", mtxp = %" PRIu64 "\n", in2.condp, in2.mtxp);
+        DEBUG_OUT("sending cond_rpc with condp = %" PRIu64 ", mtxp = %" PRIu64
+                  "\n",
+                  in2.condp, in2.mtxp);
         hret = margo_iforward(cond_handle, &in2, &req);
         if(hret != HG_SUCCESS) {
             fprintf(stderr, "ERROR: (%s): margo_iforward() failed\n", __func__);
@@ -1926,7 +1949,7 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
     margo_free_output(handle, &out);
     margo_destroy(handle);
     DEBUG_OUT("done with handling pexec\n");
-    return(dspaces_SUCCESS);
+    return (dspaces_SUCCESS);
 }
 
 static void get_local_rpc(hg_handle_t handle)
@@ -2501,13 +2524,11 @@ int dspaces_cancel_sub(dspaces_client_t client, dspaces_sub_t subh)
 
 void dspaces_kill(dspaces_client_t client)
 {
-    uint32_t in;
+    uint32_t in = -1;
     hg_addr_t server_addr;
     hg_handle_t h;
     margo_request req;
     hg_return_t hret;
-
-    in = -1;
 
     DEBUG_OUT("sending kill signal to servers.\n");
 
@@ -2587,4 +2608,52 @@ void dspaces_set_namespace(dspaces_client_t client, const char *nspace)
     }
 
     client->nspace = strdup(nspace);
+}
+
+int dspaces_get_var_names(dspaces_client_t client, char ***var_names)
+{
+    uint32_t in = -1;
+    hg_addr_t server_addr;
+    hg_handle_t h;
+    name_list_t out;
+    int i, ret;
+    hg_return_t hret;
+
+    DEBUG_OUT("requesting variables names from server.\n");
+
+    get_server_address(client, &server_addr);
+    hret = margo_create(client->mid, server_addr, client->get_vars_id, &h);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_create() failed\n", __func__);
+        margo_addr_free(client->mid, server_addr);
+        return (-1);
+    }
+
+    hret = margo_forward(h, &in);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_forward() failed\n", __func__);
+        margo_destroy(h);
+        return (-1);
+    }
+
+    hret = margo_get_output(h, &out);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_get_output() failed\n", __func__);
+        margo_destroy(h);
+        return (-1);
+    }
+
+    DEBUG_OUT("Received %zi variables in reply\n", out.count);
+
+    *var_names = malloc(sizeof(*var_names) * out.count);
+    for(i = 0; i < out.count; i++) {
+        (*var_names)[i] = strdup(out.names[i]);
+    }
+    ret = out.count;
+
+    margo_free_output(h, &out);
+    margo_addr_free(client->mid, server_addr);
+    margo_destroy(h);
+
+    return (ret);
 }

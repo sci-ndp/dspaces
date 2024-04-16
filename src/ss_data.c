@@ -775,8 +775,7 @@ char *obj_desc_sprint(obj_descriptor *odsc)
 
     return str;
 }
-/*
- */
+
 int ssd_copy(struct obj_data *to_obj, struct obj_data *from_obj)
 {
     struct matrix to_mat, from_mat;
@@ -810,6 +809,9 @@ ss_storage *ls_alloc(int max_versions)
     }
 
     memset(ls, 0, sizeof(*ls));
+
+    ls->var_dict = ds_str_hash_init();
+
     ls->meta_hash = malloc(sizeof(struct list_head) * max_versions);
     // extra cond/mutex/sub for the no version subs
     ls->meta_cond = malloc(sizeof(*ls->meta_cond) * (max_versions + 1));
@@ -839,6 +841,8 @@ void ls_free(ss_storage *ls)
     struct meta_data *mdata, *tm;
     struct list_head *list;
     int i;
+
+    ds_str_hash_free(ls->var_dict);
 
     for(i = 0; i < ls->size_hash; i++) {
         list = &ls->obj_hash[i];
@@ -946,6 +950,9 @@ void ls_add_obj(ss_storage *ls, struct obj_data *od)
 
     // ABT_rwlock_create(&od->lock);
     // ABT_rwlock_wrlock(&od->lock);
+
+    // duplicate is noop
+    ds_str_hash_add(ls->var_dict, od->obj_desc.name);
 
     od_existing = ls_find_no_version(ls, &od->obj_desc);
     if(od_existing) {
@@ -1082,6 +1089,11 @@ struct obj_data *ls_find_no_version(ss_storage *ls, obj_descriptor *odsc)
     }
 
     return NULL;
+}
+
+int ls_get_var_names(ss_storage *ls, char ***names)
+{
+    return (ds_str_hash_get_all(ls->var_dict, names));
 }
 
 /*

@@ -146,4 +146,15 @@ elif [ $1 -eq 12 ] ; then
         @MPIEXEC_EXECUTABLE@ @MPIEXEC_NUMPROC_FLAG@ 1 terminator
         wait $serverproc || exit 1
         wait $wproc
+elif [ $1 -eq 13 ] ; then
+        @MPIEXEC_EXECUTABLE@ @MPIEXEC_NUMPROC_FLAG@ 1 dspaces_server sockets &
+        @MPIEXEC_EXECUTABLE@ @MPIEXEC_NUMPROC_FLAG@ 1 test_writer 1 1 64 5 -s 8 -m $storage_mode -t &
+        wproc=$!
+        if [ $? != 0 ] ; then
+            exit 1
+        fi
+        dspaces_ls
+        @MPIEXEC_EXECUTABLE@ @MPIEXEC_NUMPROC_FLAG@ 1 terminator
+        wait $serverproc || exit 1
+        wait $wproc
 fi
