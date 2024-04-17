@@ -2574,6 +2574,7 @@ static void get_rpc(hg_handle_t handle)
     bulk_out_t out;
     hg_bulk_t bulk_handle;
     int csize;
+    int suppress_compression;
     void *cbuffer;
 
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
@@ -2591,6 +2592,8 @@ static void get_rpc(hg_handle_t handle)
         margo_destroy(handle);
         return;
     }
+
+    suppress_compression = ~(in.flags & DS_NO_COMPRESS);
 
     obj_descriptor in_odsc;
     memcpy(&in_odsc, in.odsc.raw_odsc, sizeof(in_odsc));
@@ -2626,12 +2629,22 @@ static void get_rpc(hg_handle_t handle)
         return;
     }
 
-    csize = LZ4_compress_default(od->data, cbuffer, size, size);
+    csize = 0;
+    if(!suppress_compression) {
+        /* things like CPU->GPU transfer don't support compression, but we need
+         * the client to tell us. */
+        csize = LZ4_compress_default(od->data, cbuffer, size, size);
+        DEBUG_OUT("compressed result from %li to %i bytes.\n", size, csize);
+        if(!csize) {
+            DEBUG_OUT(
+                "compressed result could not fit in dst buffer - longer than "
+                "original! Sending uncompressed.\n");
+        }
+    } else {
+        DEBUG_OUT("Compression suppression flag set. Skipping lz4.\n");
+    }
 
-    DEBUG_OUT("compressed result from %li to %i bytes.\n", size, csize);
     if(!csize) {
-        DEBUG_OUT("compressed result could not fit in dst buffer - longer than "
-                  "original! Sending uncompressed.\n");
         memcpy(cbuffer, od->data, size);
     }
 
