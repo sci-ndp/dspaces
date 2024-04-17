@@ -140,9 +140,9 @@ int dspaces_put(dspaces_client_t client, const char *var_name, unsigned int ver,
  * @return  0 indicates success.
  */
 
-int dspaces_put_tag(dspaces_client_t client, const char *var_name, unsigned int ver,
-                int size, int tag, int ndim, uint64_t *lb, uint64_t *ub,
-                const void *data);
+int dspaces_put_tag(dspaces_client_t client, const char *var_name,
+                    unsigned int ver, int size, int tag, int ndim, uint64_t *lb,
+                    uint64_t *ub, const void *data);
 
 /**
  * @brief Non-blocking query of the space to insert data specified by a
@@ -311,9 +311,9 @@ struct dspaces_req {
 };
 
 int dspaces_pexec(dspaces_client_t client, const char *var_name,
-                unsigned int ver, int ndim, uint64_t *lb, uint64_t *ub,
-                const char *fn, unsigned int fnsz, const char *fn_name, 
-                void **data, int *data_size);
+                  unsigned int ver, int ndim, uint64_t *lb, uint64_t *ub,
+                  const char *fn, unsigned int fnsz, const char *fn_name,
+                  void **data, int *data_size);
 
 typedef int (*dspaces_sub_fn)(dspaces_client_t, struct dspaces_req *, void *);
 typedef struct dspaces_sub_handle *dspaces_sub_t;
@@ -440,6 +440,19 @@ int dspaces_op_calc(dspaces_client_t client, struct ds_data_expr *expr,
                     void **buf);
 
 void dspaces_set_namespace(dspaces_client_t client, const char *nspace);
+
+typedef struct dspaces_obj {
+    char *name;
+    int version;
+    int ndim;
+    uint64_t *lb;
+    uint64_t *ub;
+} dspaces_obj_t;
+
+int dspaces_get_var_names(dspaces_client_t client, char ***var_names);
+
+int dspaces_get_var_objs(dspaces_client_t client, const char *name,
+                         struct dspaces_obj **objs);
 
 #if defined(__cplusplus)
 }

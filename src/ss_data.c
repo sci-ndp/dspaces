@@ -1030,6 +1030,28 @@ struct obj_data *ls_find(ss_storage *ls, obj_descriptor *odsc)
     return NULL;
 }
 
+int ls_find_all_no_version(ss_storage *ls, const char *var_name,
+                           obj_descriptor ***odscs)
+{
+    struct obj_data *od;
+    struct list_head *list;
+    int i, n = 0;
+
+    *odscs = malloc(sizeof(**odscs) * ls->num_obj);
+
+    for(i = 0; i < ls->size_hash; i++) {
+        list = &ls->obj_hash[i];
+        list_for_each_entry(od, list, struct obj_data, obj_entry)
+        {
+            if(strcmp(od->obj_desc.name, var_name) == 0) {
+                (*odscs)[n++] = &od->obj_desc;
+            }
+        }
+    }
+
+    return (n);
+}
+
 /*
  * Do two object descriptors have the same name and version?
  */

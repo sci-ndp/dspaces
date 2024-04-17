@@ -436,6 +436,8 @@ struct obj_data *ls_find_od(ss_storage *, obj_descriptor *);
 int ls_find_ods(ss_storage *ls, obj_descriptor *odsc, obj_descriptor ***od_tab);
 struct obj_data *ls_find_no_version(ss_storage *, obj_descriptor *);
 int ls_get_var_names(ss_storage *, char ***);
+int ls_find_all_no_version(ss_storage *ls, const char *var_name,
+                           obj_descriptor ***odscs);
 
 struct obj_data *obj_data_alloc(obj_descriptor *);
 struct obj_data *obj_data_alloc_no_data(obj_descriptor *, void *);

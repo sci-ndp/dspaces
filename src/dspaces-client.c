@@ -2657,3 +2657,74 @@ int dspaces_get_var_names(dspaces_client_t client, char ***var_names)
 
     return (ret);
 }
+
+int dspaces_get_var_objs(dspaces_client_t client, const char *name,
+                         struct dspaces_obj **objs)
+{
+    get_var_objs_in_t in;
+    hg_addr_t server_addr;
+    hg_handle_t h;
+    odsc_hdr out;
+    obj_descriptor *odscs, *odsc;
+    int num_odsc;
+    int ndim;
+    struct dspaces_obj *obj;
+    int i, j, ret;
+    hg_return_t hret;
+
+    DEBUG_OUT("Retrieving description of available objects for %s\n", name);
+
+    in.src = -1;
+    in.var_name = strdup(name);
+
+    get_server_address(client, &server_addr);
+    hret = margo_create(client->mid, server_addr, client->get_var_objs_id, &h);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_create() failed\n", __func__);
+        margo_addr_free(client->mid, server_addr);
+        free(in.var_name);
+        return (-1);
+    }
+
+    ret = margo_forward(h, &in);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_forward() failed\n", __func__);
+        margo_destroy(h);
+        free(in.var_name);
+        return (-1);
+    }
+
+    hret = margo_get_output(h, &out);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_get_output() failed\n", __func__);
+        margo_destroy(h);
+        free(in.var_name);
+        return (-1);
+    }
+
+    odscs = (obj_descriptor *)out.raw_odsc;
+    num_odsc = out.size / sizeof(*odscs);
+    *objs = malloc(sizeof(**objs) * num_odsc);
+    for(i = 0; i < num_odsc; i++) {
+        obj = &((*objs)[i]);
+        odsc = &odscs[i];
+        obj->name = strdup(name);
+        obj->version = odsc->version;
+        obj->ndim = odsc->bb.num_dims;
+        ndim = obj->ndim;
+        obj->lb = malloc(sizeof(*obj->lb) * ndim);
+        obj->ub = malloc(sizeof(*obj->ub) * ndim);
+        for(j = 0; j < ndim; j++) {
+            obj->lb[j] = odsc->bb.lb.c[j];
+            obj->ub[j] = odsc->bb.ub.c[j];
+        }
+    }
+    ret = num_odsc;
+
+    margo_free_output(h, &out);
+    margo_addr_free(client->mid, server_addr);
+    margo_destroy(h);
+    free(in.var_name);
+
+    return (ret);
+}

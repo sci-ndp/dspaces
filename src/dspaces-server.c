@@ -3277,13 +3277,13 @@ static void cond_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(cond_rpc)
 
-static void send_get_vars_rpc(dspaces_provider_t server, int target, int *rank,
-                              hg_addr_t *addr, hg_handle_t *h,
-                              margo_request *req)
+static void send_tgt_rpc(dspaces_provider_t server, hg_id_t rpc_id, int target,
+                         void *in, hg_addr_t *addr, hg_handle_t *h,
+                         margo_request *req)
 {
     margo_addr_lookup(server->mid, server->server_address[target], addr);
-    margo_create(server->mid, *addr, server->kill_id, h);
-    margo_iforward(*h, rank, req);
+    margo_create(server->mid, *addr, rpc_id, h);
+    margo_iforward(*h, in, req);
 }
 
 static void get_vars_rpc(hg_handle_t handle)
@@ -3314,17 +3314,20 @@ static void get_vars_rpc(hg_handle_t handle)
 
     if((src == -1 || src > rank) && rank > 0) {
         DEBUG_OUT("querying parent %d\n", parent);
-        send_get_vars_rpc(server, parent, &rank, &addr[0], &hndl[0], &req[0]);
+        send_tgt_rpc(server, server->get_vars_id, parent, &rank, &addr[0],
+                     &hndl[0], &req[0]);
         sent_rpc[0] = 1;
     }
     if((child1 != src && child1 < server->dsg->size_sp)) {
         DEBUG_OUT("querying child %d\n", child1);
-        send_get_vars_rpc(server, parent, &rank, &addr[1], &hndl[1], &req[1]);
+        send_tgt_rpc(server, server->get_vars_id, child1, &rank, &addr[1],
+                     &hndl[1], &req[1]);
         sent_rpc[1] = 1;
     }
     if((child2 != src && child2 < server->dsg->size_sp)) {
         DEBUG_OUT("querying child %d\n", child2);
-        send_get_vars_rpc(server, parent, &rank, &addr[2], &hndl[2], &req[2]);
+        send_tgt_rpc(server, server->get_vars_id, child2, &rank, &addr[2],
+                     &hndl[2], &req[2]);
         sent_rpc[2] = 1;
     }
 
@@ -3359,12 +3362,103 @@ static void get_vars_rpc(hg_handle_t handle)
     for(i = 0; i < rout.count; i++) {
         free(rout.names[i]);
     }
-    free(rout.names);
+    if(rout.count > 0) {
+        free(rout.names);
+    }
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(get_vars_rpc)
 
-static void get_var_objs_rpc(hg_handle_t handle) {}
+static void get_var_objs_rpc(hg_handle_t handle)
+{
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    const struct hg_info *info = margo_get_info(handle);
+    dspaces_provider_t server =
+        (dspaces_provider_t)margo_registered_data(mid, info->id);
+    get_var_objs_in_t in, tgt_in;
+    int32_t src, rank, parent, child1, child2;
+    int sent_rpc[3] = {0};
+    hg_addr_t addr[3];
+    hg_handle_t hndl[3];
+    margo_request req[3];
+    odsc_hdr out[3];
+    obj_descriptor **odsc_tab;
+    int i;
+    int num_odscs;
+    odsc_hdr rout;
+    hg_return_t hret;
+
+    margo_get_input(handle, &in);
+    src = in.src;
+
+    DEBUG_OUT("Received request for all objects of '%s' from %d\n", in.var_name,
+              src);
+
+    rank = server->dsg->rank;
+    parent = (rank - 1) / 2;
+    child1 = (rank * 2) + 1;
+    child2 = child1 + 1;
+
+    tgt_in.src = rank;
+    tgt_in.var_name = in.var_name;
+
+    if((src == -1 || src > rank) && rank > 0) {
+        DEBUG_OUT("querying parent %d\n", parent);
+        send_tgt_rpc(server, server->get_var_objs_id, parent, &tgt_in, &addr[0],
+                     &hndl[0], &req[0]);
+        sent_rpc[0] = 1;
+    }
+    if((child1 != src && child1 < server->dsg->size_sp)) {
+        DEBUG_OUT("querying child %d\n", child1);
+        send_tgt_rpc(server, server->get_var_objs_id, child1, &tgt_in, &addr[1],
+                     &hndl[1], &req[1]);
+        sent_rpc[1] = 1;
+    }
+    if((child2 != src && child2 < server->dsg->size_sp)) {
+        DEBUG_OUT("querying child %d\n", child2);
+        send_tgt_rpc(server, server->get_var_objs_id, child2, &tgt_in, &addr[2],
+                     &hndl[2], &req[2]);
+        sent_rpc[2] = 1;
+    }
+
+    ABT_mutex_lock(server->ls_mutex);
+    num_odscs = ls_find_all_no_version(server->dsg->ls, in.var_name, &odsc_tab);
+    rout.size = num_odscs * sizeof(obj_descriptor);
+    if(rout.size > 0) {
+        rout.raw_odsc = malloc(rout.size);
+        for(i = 0; i < num_odscs; i++) {
+            ((obj_descriptor *)rout.raw_odsc)[i] = *(odsc_tab[i]);
+        }
+        free(odsc_tab);
+    } else {
+        rout.raw_odsc = NULL;
+    }
+    ABT_mutex_unlock(server->ls_mutex);
+
+    DEBUG_OUT("found %d object descriptors locally.\n", num_odscs);
+
+    for(i = 0; i < 3; i++) {
+        if(sent_rpc[i]) {
+            margo_wait(req[i]);
+            margo_get_output(hndl[i], &out[i]);
+            rout.raw_odsc = realloc(rout.raw_odsc, rout.size + out[i].size);
+            memcpy(rout.raw_odsc + rout.size, out[i].raw_odsc, out[i].size);
+            rout.size += out[i].size;
+            margo_free_output(hndl[i], &out);
+            margo_addr_free(server->mid, addr[i]);
+            margo_destroy(hndl[i]);
+        }
+    }
+
+    DEBUG_OUT("returning %zi objects.\n", rout.size / sizeof(obj_descriptor));
+    margo_respond(handle, &rout);
+
+    if(rout.size) {
+        free(rout.raw_odsc);
+    }
+
+    margo_destroy(handle);
+}
 DEFINE_MARGO_RPC_HANDLER(get_var_objs_rpc)
 
 void dspaces_server_fini(dspaces_provider_t server)
