@@ -1,6 +1,14 @@
+from dataclasses import dataclass
 from dspaces.dspaces_wrapper import *
 import numpy as np
 import dill as pickle
+
+@dataclass
+class DSObject:
+    name: str
+    version: int
+    lb: tuple[int, ...]
+    ub: tuple[int, ...]
 
 class DSServer:
     def __init__(self, conn = "sockets", comm = None, conf = "dataspaces.conf"):
@@ -63,6 +71,23 @@ class DSClient:
 
     def DefineGDim(self, name, gdim):
         wrapper_dspaces_define_gdim(self.client, (self.nspace + name).encode('ascii'), gdim)
+
+    def GetVars(self):
+        return wrapper_dspaces_get_vars(self.client)
+
+    def GetObjVars(self, var_name):
+        ret_objs = []
+        wrapper_results =  wrapper_dspaces_get_var_objs(self.client, var_name.encode('ascii'))
+        for obj in wrapper_results:
+            ret_objs.append(
+                DSObject(
+                    name = obj['name'],
+                    version = obj['version'],
+                    lb = obj['lb'],
+                    ub = obj['ub']
+                )
+            )
+        return(ret_objs)
 
 def _get_expr(obj, client):
     if isinstance(obj, DSExpr):
