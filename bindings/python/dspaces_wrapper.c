@@ -184,10 +184,11 @@ void wrapper_dspaces_put(PyObject *clientppy, PyObject *obj, const char *name,
     PyObject *item;
     int i;
 
+    //Reverse order of indices
     for(i = 0; i < ndim; i++) {
         item = PyTuple_GetItem(offset, i);
-        lb[i] = PyLong_AsLong(item);
-        ub[i] = lb[i] + ((long)shape[i] - 1);
+        lb[(ndim-1) - i] = PyLong_AsLong(item);
+        ub[(ndim-1) - i] = lb[(ndim-1) - i] + ((long)shape[i] - 1);
     }
     dspaces_put_tag(*clientp, name, version, size, tag, ndim, lb, ub, data);
 
@@ -210,11 +211,12 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
     npy_intp dims[ndim];
     int i;
 
+     //Reverse order of indices
     for(i = 0; i < ndim; i++) {
         item = PyTuple_GetItem(lbt, i);
-        lb[i] = PyLong_AsLong(item);
+        lb[(ndim-1) - i] = PyLong_AsLong(item);
         item = PyTuple_GetItem(ubt, i);
-        ub[i] = PyLong_AsLong(item);
+        ub[(ndim-1) - i] = PyLong_AsLong(item);
     }
 
     Py_BEGIN_ALLOW_THREADS dspaces_aget(*clientp, name, version, ndim, lb, ub,
@@ -234,7 +236,7 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
     }
 
     for(i = 0; i < ndim; i++) {
-        dims[i] = ((ub[i] - lb[i]) + 1);
+        dims[(ndim-1) - i] = ((ub[i] - lb[i]) + 1);
     }
 
     arr = PyArray_NewFromDescr(&PyArray_Type, descr, ndim, dims, NULL, data, 0,
@@ -271,11 +273,12 @@ PyObject *wrapper_dspaces_pexec(PyObject *clientppy, const char *name,
 
     lb = malloc(sizeof(*lb) * ndim);
     ub = malloc(sizeof(*ub) * ndim);
+    //Reverse order of indices
     for(i = 0; i < ndim; i++) {
         item = PyTuple_GetItem(lbt, i);
-        lb[i] = PyLong_AsLong(item);
+        lb[(ndim-1) - i] = PyLong_AsLong(item);
         item = PyTuple_GetItem(ubt, i);
-        ub[i] = PyLong_AsLong(item);
+        ub[(ndim-1) - i] = PyLong_AsLong(item);
     }
 
     if(!PyBytes_Check(fn)) {
@@ -311,7 +314,7 @@ void wrapper_dspaces_define_gdim(PyObject *clientppy, const char *name,
 
     for(i = 0; i < ndim; i++) {
         item = PyTuple_GetItem(gdimt, i);
-        gdim[i] = PyLong_AsLong(item);
+        gdim[(ndim-1) - i] = PyLong_AsLong(item);
     }
 
     dspaces_define_gdim(*clientp, name, ndim, gdim);
