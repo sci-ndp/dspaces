@@ -1590,20 +1590,23 @@ static int get_odscs(dspaces_client_t client, obj_descriptor *odsc, int timeout,
     in.odsc_gdim.size = sizeof(*odsc);
     in.odsc_gdim.raw_odsc = (char *)odsc;
     in.param = timeout;
-
+  
+    DEBUG_OUT("starting query.\n"); 
     set_global_dimension(&(client->dcg->gdim_list), odsc->name,
                          &(client->dcg->default_gdim), &od_gdim);
     in.odsc_gdim.gdim_size = sizeof(od_gdim);
     in.odsc_gdim.raw_gdim = (char *)(&od_gdim);
+    DEBUG_OUT("Found gdims.\n");
 
     get_server_address(client, &server_addr);
-
+     
     hret = margo_create(client->mid, server_addr, client->query_id, &handle);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: %s: margo_create() failed with %d.\n", __func__,
                 hret);
         return (0);
     }
+    DEBUG_OUT("Forwarding RPC.\n");
     hret = margo_forward(handle, &in);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: %s: margo_forward() failed with %d.\n",

@@ -2361,7 +2361,7 @@ static void query_rpc(hg_handle_t handle)
         get_query_odscs(server, &in, timeout, &results, req_id);
 
     out.odsc_list.raw_odsc = (char *)results;
-    DEBUG_OUT("Responding with %li results.\n", out.odsc_list.size / sizeof(obj_descriptor));
+    DEBUG_OUT("Responding with %li result(s).\n", out.odsc_list.size / sizeof(obj_descriptor));
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
     margo_destroy(handle);
