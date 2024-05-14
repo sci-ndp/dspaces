@@ -1293,7 +1293,7 @@ static int get_data(dspaces_client_t client, int num_odscs,
     int ret;
     hg_return_t hret;
 
-    in = (bulk_in_t *)malloc(sizeof(bulk_in_t) * num_odscs);
+    in = (bulk_in_t *)calloc(sizeof(bulk_in_t), num_odscs);
     od = malloc(num_odscs * sizeof(struct obj_data *));
     hndl = (hg_handle_t *)malloc(sizeof(hg_handle_t) * num_odscs);
     serv_req = (margo_request *)malloc(sizeof(margo_request) * num_odscs);
