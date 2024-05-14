@@ -1558,6 +1558,7 @@ int dspaces_put_local(dspaces_client_t client, const char *var_name,
         margo_destroy(handle);
         return dspaces_ERR_MERCURY;
     }
+    DEBUG_OUT("RPC sent, awaiting response.\n");
 
     hret = margo_get_output(handle, &out);
     if(hret != HG_SUCCESS) {
@@ -1610,6 +1611,7 @@ static int get_odscs(dspaces_client_t client, obj_descriptor *odsc, int timeout,
         margo_destroy(handle);
         return (0);
     }
+    DEBUG_OUT("RPC sent, awaiting reply.\n");
     hret = margo_get_output(handle, &out);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: %s: margo_get_output() failed with %d.\n",
