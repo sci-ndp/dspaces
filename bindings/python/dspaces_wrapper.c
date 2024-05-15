@@ -23,9 +23,9 @@ PyObject *wrapper_dspaces_init(int rank)
     clientp = malloc(sizeof(*clientp));
 
     // clang-format off
-    Py_BEGIN_ALLOW_THREADS
+    //Py_BEGIN_ALLOW_THREADS
     ret = dspaces_init(rank, clientp);
-    Py_END_ALLOW_THREADS
+    //Py_END_ALLOW_THREADS
     // clang-format on
     if(ret != 0) {
         sprintf(err_str, "dspaces_init() failed with %i", ret);
@@ -55,9 +55,9 @@ PyObject *wrapper_dspaces_init_mpi(PyObject *commpy)
     clientp = malloc(sizeof(*clientp));
 
     // clang-format off
-    Py_BEGIN_ALLOW_THREADS
+    //Py_BEGIN_ALLOW_THREADS
     ret = dspaces_init_mpi(*comm_p, clientp);
-    Py_END_ALLOW_THREADS
+    //Py_END_ALLOW_THREADS
     // clang-format on
     if(ret != 0) {
         sprintf(err_str, "dspaces_init_mpi() failed with %i", ret);
@@ -83,9 +83,9 @@ PyObject *wrapper_dspaces_init_wan(const char *listen_str, const char *conn,
     clientp = malloc(sizeof(*clientp));
 
     // clang-format off
-    Py_BEGIN_ALLOW_THREADS
+    //Py_BEGIN_ALLOW_THREADS
     ret = dspaces_init_wan(listen_str, conn, rank, clientp);
-    Py_END_ALLOW_THREADS
+    //Py_END_ALLOW_THREADS
     // clang-format on
     if(ret != 0) {
         sprintf(err_str, "dspaces_init_wan() failed with %i", ret);
@@ -116,9 +116,9 @@ PyObject *wrapper_dspaces_init_wan_mpi(const char *listen_str, const char *conn,
     clientp = malloc(sizeof(*clientp));
 
     // clang-format off
-    Py_BEGIN_ALLOW_THREADS
+    //Py_BEGIN_ALLOW_THREADS
     ret = dspaces_init_wan_mpi(listen_str, conn, *comm_p, clientp);
-    Py_END_ALLOW_THREADS
+    //Py_END_ALLOW_THREADS
     // clang-format on
     if(ret != 0) {
         sprintf(err_str, "dspaces_init_wan_mpi() failed with %i", ret);
@@ -149,9 +149,9 @@ PyObject *wrapper_dspaces_server_init(const char *listen_str, PyObject *commpy,
     serverp = malloc(sizeof(*serverp));
 
     // clang-format off
-    Py_BEGIN_ALLOW_THREADS
+    //Py_BEGIN_ALLOW_THREADS
     ret = dspaces_server_init(listen_str, *comm_p, conf, serverp);
-    Py_END_ALLOW_THREADS
+    //Py_END_ALLOW_THREADS
     // clang-format on
     if(ret != 0) {
         sprintf(err_str, "dspaces_init_mpi() failed with %i", ret);
@@ -212,9 +212,9 @@ void wrapper_dspaces_put(PyObject *clientppy, PyObject *obj, const char *name,
     }
 
     // clang-format off
-    Py_BEGIN_ALLOW_THREADS
+    //Py_BEGIN_ALLOW_THREADS
     dspaces_put_tag(*clientp, name, version, size, tag, ndim, lb, ub, data);
-    Py_END_ALLOW_THREADS
+    //Py_END_ALLOW_THREADS
     // clang-format on
 
     return;
@@ -246,10 +246,10 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
 
 
     // clang-format off
-    Py_BEGIN_ALLOW_THREADS 
+    //Py_BEGIN_ALLOW_THREADS 
     dspaces_aget(*clientp, name, version, ndim, lb, ub,
                                         &data, &tag, timeout);
-    Py_END_ALLOW_THREADS
+    //Py_END_ALLOW_THREADS
     // clang-format on
 
         if(data == NULL)
