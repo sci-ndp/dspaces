@@ -440,6 +440,7 @@ struct obj_data *ls_find_no_version(ss_storage *, obj_descriptor *);
 int ls_get_var_names(ss_storage *, char ***);
 int ls_find_all_no_version(ss_storage *ls, const char *var_name,
                            obj_descriptor ***odscs);
+int ls_find_all(ss_storage *ls, obj_descriptor *odsc, struct obj_data ***ods);
 
 struct obj_data *obj_data_alloc(obj_descriptor *);
 struct obj_data *obj_data_alloc_no_data(obj_descriptor *, void *);

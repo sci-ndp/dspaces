@@ -1052,6 +1052,35 @@ int ls_find_all_no_version(ss_storage *ls, const char *var_name,
     return (n);
 }
 
+int ls_find_all(ss_storage *ls, obj_descriptor *odsc, struct obj_data ***ods)
+{
+    struct obj_data *od;
+    struct list_head *list;
+    int i, index, n = 0;
+    long num_elem;
+    struct bbox isect;
+
+    num_elem = bbox_volume(&odsc->bb);
+    *ods =  malloc(sizeof(**ods) * ls->num_obj);
+    index = odsc->version % ls->size_hash;
+    list = &ls->obj_hash[index];
+
+    list_for_each_entry(od, list, struct obj_data, obj_entry)
+    {
+         if(obj_desc_equals_intersect(odsc, &od->obj_desc)) {
+            (*ods)[n++] = od;
+            bbox_intersect(&odsc->bb, &od->obj_desc.bb, &isect);
+            num_elem -= bbox_volume(&isect);
+         }
+    }
+    if(num_elem != 0) {
+        free(*ods);
+        return(-1);
+    }
+    
+    return(n);
+}
+
 /*
  * Do two object descriptors have the same name and version?
  */

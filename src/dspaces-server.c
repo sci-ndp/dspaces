@@ -3127,14 +3127,16 @@ static void pexec_rpc(hg_handle_t handle)
     pexec_out_t out;
     hg_return_t hret;
     hg_bulk_t bulk_handle;
-    obj_descriptor in_odsc;
+    obj_descriptor in_odsc, odsc;
     hg_size_t rdma_size;
     void *fn = NULL, *res_data;
-    struct obj_data *od, *from_obj;
+    struct obj_data *od, *arg_obj, **od_tab, **from_objs = NULL;
+    int num_obj;
     PyObject *array, *fnp, *arg, *pres, *pres_bytes;
     static PyObject *pklmod = NULL;
     ABT_cond cond;
     ABT_mutex mtx;
+    int i;
 
     hret = margo_get_input(handle, &in);
     if(hret != HG_SUCCESS) {
@@ -3181,8 +3183,25 @@ static void pexec_rpc(hg_handle_t handle)
     margo_bulk_free(bulk_handle);
     route_request(server, &in_odsc, &(server->dsg->default_gdim));
 
-    from_obj = ls_find(server->dsg->ls, &in_odsc);
-    if(!from_obj) {
+    ABT_mutex_lock(server->ls_mutex);
+    num_obj = ls_find_all(server->dsg->ls, &in_odsc, &from_objs);
+    if(num_obj > 0) {
+        DEBUG_OUT("found %i objects in local storage to populate input\n", num_obj);
+        arg_obj = obj_data_alloc(&in_odsc);
+        od_tab = malloc(num_obj * sizeof(*od_tab));
+        for(i = 0; i < num_obj; i++) {
+            // Can we skip the intermediate copy?
+            odsc = from_objs[i]->obj_desc;
+            bbox_intersect(&in_odsc.bb, &odsc.bb, &odsc.bb);
+            od_tab[i] = obj_data_alloc(&odsc);
+            ssd_copy(od_tab[i], from_objs[i]);
+            ssd_copy(arg_obj, od_tab[i]);
+            obj_data_free(od_tab[i]);
+        }
+        free(od_tab);
+    }
+    ABT_mutex_unlock(server->ls_mutex);
+    if(num_obj < 1) {
         DEBUG_OUT("could not find input object\n");   
         out.length = 0;
         out.handle = 0;
@@ -3190,8 +3209,10 @@ static void pexec_rpc(hg_handle_t handle)
         margo_free_input(handle, &in);
         margo_destroy(handle);
         return;
+    } else if(from_objs) {
+        free(from_objs);
     }
-    array = build_ndarray_from_od(from_obj);
+    array = build_ndarray_from_od(arg_obj);
 
     // Race condition? Protect with mutex?
     if((pklmod == NULL) &&
@@ -3273,6 +3294,7 @@ static void pexec_rpc(hg_handle_t handle)
     DEBUG_OUT("done with pexec handling\n");
 
     Py_XDECREF(array);
+    obj_data_free(arg_obj);
 }
 DEFINE_MARGO_RPC_HANDLER(pexec_rpc)
 #endif // DSPACES_HAVE_PYTHON
