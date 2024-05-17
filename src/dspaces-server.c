@@ -3182,6 +3182,15 @@ static void pexec_rpc(hg_handle_t handle)
     route_request(server, &in_odsc, &(server->dsg->default_gdim));
 
     from_obj = ls_find(server->dsg->ls, &in_odsc);
+    if(!from_obj) {
+        DEBUG_OUT("could not find input object\n");   
+        out.length = 0;
+        out.handle = 0;
+        margo_respond(handle, &out);
+        margo_free_input(handle, &in);
+        margo_destroy(handle);
+        return;
+    }
     array = build_ndarray_from_od(from_obj);
 
     // Race condition? Protect with mutex?
@@ -3224,6 +3233,7 @@ static void pexec_rpc(hg_handle_t handle)
             fprintf(stderr, "ERROR: (%s): margo_bulk_create failed with %d.\n",
                     __func__, hret);
             out.length = 0;
+            out.handle = 0;
             margo_respond(handle, &out);
             margo_free_input(handle, &in);
             margo_destroy(handle);
