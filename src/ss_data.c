@@ -782,6 +782,7 @@ int ssd_copy(struct obj_data *to_obj, struct obj_data *from_obj)
     struct bbox bbcom;
     int copied_elems = 0;
 
+    to_obj->obj_desc.tag = from_obj->obj_desc.tag;
     bbox_intersect(&to_obj->obj_desc.bb, &from_obj->obj_desc.bb, &bbcom);
 
     matrix_init(&from_mat, from_obj->obj_desc.st, &from_obj->obj_desc.bb,

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from dspaces.dspaces_wrapper import *
 import numpy as np
 import dill as pickle
+from inspect import signature
 
 @dataclass
 class DSObject:
@@ -9,6 +10,14 @@ class DSObject:
     version: int
     lb: tuple[int, ...]
     ub: tuple[int, ...]
+
+    def toReq(self, nspace):
+        return({
+            'var_name': (nspace + self.name).encode('ascii'),
+            'ver': self.version,
+            'lb': self.lb,
+            'ub': self.ub
+        })
 
 class DSServer:
     def __init__(self, conn = "sockets", comm = None, conf = "dataspaces.conf"):
@@ -63,7 +72,33 @@ class DSClient:
         return wrapper_dspaces_get(self.client, (self.nspace + name).encode('ascii'), version, lb, ub, passed_type, timeout)    
 
     def Exec(self, name, version, lb=None, ub=None, fn=None):
-        res = wrapper_dspaces_pexec(self.client, (self.nspace + name).encode('ascii'), version, lb, ub, pickle.dumps(fn), fn.__name__.encode('ascii'))
+        arg = DSObject(name=name, version=version, lb=lb, ub=ub)
+        return(self.VecExec([arg], fn))
+
+    def VecExec(self, objs:list[DSObject] = [], fn=None):
+        if objs and not hasattr(objs, '__iter__'):
+            raise TypeError('reqs should be a list of arguments, if present')
+        if fn:
+            if objs:
+                test_args = [np.arange(1) for x in objs]
+            else:
+                test_args = []
+            sig = signature(fn)
+            try:
+                sig.bind(*test_args)
+            except:
+                print("Mismatch between fn arguments and number of reqs.")
+                return
+            fn_ser = pickle.dumps(fn)
+            fn_name = fn.__name__.encode('ascii')
+        else:
+            fn_ser = None
+            fn_name = None
+        if objs:
+            args = [obj.toReq(self.nspace) for obj in objs]
+        else:
+            args = []
+        res = wrapper_dspaces_pexec(self.client, args, fn_ser, fn_name)
         if res:
             return pickle.loads(res)
         else:

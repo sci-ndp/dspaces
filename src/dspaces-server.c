@@ -134,6 +134,7 @@ struct dspaces_provider {
     hg_id_t notify_id;
     hg_id_t do_ops_id;
     hg_id_t pexec_id;
+    hg_id_t mpexec_id;
     hg_id_t cond_id;
     hg_id_t get_vars_id;
     hg_id_t get_var_objs_id;
@@ -187,27 +188,11 @@ DECLARE_MARGO_RPC_HANDLER(sub_rpc)
 DECLARE_MARGO_RPC_HANDLER(do_ops_rpc)
 #ifdef DSPACES_HAVE_PYTHON
 DECLARE_MARGO_RPC_HANDLER(pexec_rpc)
+DECLARE_MARGO_RPC_HANDLER(mpexec_rpc)
 #endif // DSPACES_HAVE_PYTHON
 DECLARE_MARGO_RPC_HANDLER(cond_rpc)
 DECLARE_MARGO_RPC_HANDLER(get_vars_rpc);
 DECLARE_MARGO_RPC_HANDLER(get_var_objs_rpc);
-
-static void put_rpc(hg_handle_t h);
-static void put_local_rpc(hg_handle_t h);
-static void put_meta_rpc(hg_handle_t h);
-static void get_rpc(hg_handle_t h);
-static void query_rpc(hg_handle_t h);
-static void query_meta_rpc(hg_handle_t h);
-static void obj_update_rpc(hg_handle_t h);
-static void odsc_internal_rpc(hg_handle_t h);
-static void ss_rpc(hg_handle_t h);
-static void kill_rpc(hg_handle_t h);
-static void sub_rpc(hg_handle_t h);
-static void do_ops_rpc(hg_handle_t h);
-static void pexec_rpc(hg_handle_t h);
-static void cond_rpc(hg_handle_t h);
-static void get_vars_rpc(hg_handle_t h);
-static void get_vars_obj_rpc(hg_handle_t h);
 
 /* Server configuration parameters */
 static struct {
@@ -1050,7 +1035,7 @@ static int dspaces_init_py_mods(dspaces_provider_t server,
         pmods[i].type = DSPACES_MOD_PY;
         pName = PyUnicode_DecodeFSDefault(static_pmods[i][1]);
         pmods[i].pModule = PyImport_Import(pName);
-        if(pmods[0].pModule == NULL) {
+        if(pmods[i].pModule == NULL) {
             fprintf(stderr,
                 "WARNING: could not load %s mod from %s. File missing? Any "
                 "%s accesses will fail.\n",
@@ -1267,6 +1252,10 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                               &flag);
         DS_HG_REGISTER(hg, server->pexec_id, pexec_in_t, pexec_out_t,
                        pexec_rpc);
+        margo_registered_name(server->mid, "mpexec_rpc", &server->mpexec_id,
+                              &flag);
+        DS_HG_REGISTER(hg, server->mpexec_id, pexec_in_t, pexec_out_t,
+                       pexec_rpc);
 #endif // DSPACES_HAVE_PYTHON
         margo_registered_name(server->mid, "cond_rpc", &server->cond_id, &flag);
         DS_HG_REGISTER(hg, server->cond_id, cond_in_t, void, cond_rpc);
@@ -1352,6 +1341,10 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
         server->pexec_id = MARGO_REGISTER(server->mid, "pexec_rpc", pexec_in_t,
                                           pexec_out_t, pexec_rpc);
         margo_register_data(server->mid, server->pexec_id, (void *)server,
+                            NULL);
+        server->mpexec_id = MARGO_REGISTER(server->mid, "mpexec_rpc", pexec_in_t,
+                                          pexec_out_t, mpexec_rpc);
+        margo_register_data(server->mid, server->mpexec_id, (void *)server,
                             NULL);
 #endif // DSPACES_HAVE_PYTHON
         server->cond_id =
@@ -2139,7 +2132,8 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
             free(res->data);
         } else {
             odsc->size = res->elem_size;
-            if(odsc->bb.num_dims == 0) {
+            if(odsc->bb.num_dims != res->ndim) {
+                DEBUG_OUT("change in dimensionality.\n");
                 odsc->bb.num_dims = res->ndim;
                 obj_data_resize(odsc, res->dim);
             } else if((odsc->size * res->len) != obj_data_size(odsc)) {
@@ -2150,6 +2144,9 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
             memcpy(od_odsc, odsc, sizeof(*od_odsc));
             odsc_take_ownership(server, od_odsc);
             od_odsc->tag = res->tag;
+            if(odsc->tag == 0) {
+                odsc->tag = res->tag;
+            }
             od = obj_data_alloc_no_data(od_odsc, res->data);
             memcpy(&od->gdim, gdim, sizeof(struct global_dimension));
             DEBUG_OUT("adding object to local storage: %s\n",
@@ -2610,7 +2607,7 @@ static void get_rpc(hg_handle_t handle)
         return;
     }
 
-    suppress_compression = ~(in.flags & DS_NO_COMPRESS);
+    suppress_compression = in.flags & DS_NO_COMPRESS;
 
     obj_descriptor in_odsc;
     memcpy(&in_odsc, in.odsc.raw_odsc, sizeof(in_odsc));
@@ -3313,6 +3310,234 @@ static void pexec_rpc(hg_handle_t handle)
     obj_data_free(arg_obj);
 }
 DEFINE_MARGO_RPC_HANDLER(pexec_rpc)
+
+static void mpexec_rpc(hg_handle_t handle)
+{
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    const struct hg_info *info = margo_get_info(handle);
+    dspaces_provider_t server =
+        (dspaces_provider_t)margo_registered_data(mid, info->id);
+    pexec_in_t in;
+    pexec_out_t out;
+    hg_return_t hret;
+    hg_bulk_t bulk_handle;
+    obj_descriptor *in_odsc, *in_odscs, odsc;
+    int num_args;
+    hg_size_t rdma_size;
+    void *fn = NULL, *res_data;
+    struct obj_data *od, **arg_objs, *arg_obj, **od_tab, **from_objs = NULL;
+    int num_obj;
+    PyObject **arg_arrays, *fnp, *arg, *args, *pres, *pres_bytes;
+    static PyObject *pklmod = NULL;
+    ABT_cond cond;
+    ABT_mutex mtx;
+    int i, j;
+
+    hret = margo_get_input(handle, &in);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr,
+                "DATASPACES: ERROR handling %s: margo_get_input() failed with "
+                "%d.\n",
+                __func__, hret);
+        margo_destroy(handle);
+        return;
+    }
+    in_odscs = (obj_descriptor *)in.odsc.raw_odsc;
+    num_args = in.odsc.size / sizeof(*in_odscs);
+
+    DEBUG_OUT("received mpexec request with %i args\n", num_args);
+    rdma_size = in.length;
+    if(rdma_size > 0) {
+        DEBUG_OUT("function included, length %" PRIu32 " bytes\n", in.length);
+        fn = malloc(rdma_size);
+        hret = margo_bulk_create(mid, 1, (void **)&(fn), &rdma_size,
+                                 HG_BULK_WRITE_ONLY, &bulk_handle);
+
+        if(hret != HG_SUCCESS) {
+            // TODO: communicate failure
+            fprintf(stderr, "ERROR: (%s): margo_bulk_create failed!\n",
+                    __func__);
+            margo_respond(handle, &out);
+            margo_free_input(handle, &in);
+            margo_destroy(handle);
+            return;
+        }
+
+        hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr, in.handle, 0,
+                                   bulk_handle, 0, rdma_size);
+        if(hret != HG_SUCCESS) {
+            fprintf(stderr, "ERROR: (%s): margo_bulk_transfer failed!\n",
+                    __func__);
+            margo_respond(handle, &out);
+            margo_free_input(handle, &in);
+            margo_bulk_free(bulk_handle);
+            margo_destroy(handle);
+            return;
+        }
+    }
+    margo_bulk_free(bulk_handle);
+
+    arg_objs = calloc(num_args, sizeof(*arg_objs));
+    arg_arrays = calloc(num_args, sizeof(*arg_arrays));
+    for(i = 0; i < num_args; i++) {
+        route_request(server, &in_odscs[i], &(server->dsg->default_gdim));
+        
+        in_odsc = &in_odscs[i];
+        DEBUG_OUT("searching for local storage objects to satisfy %s\n", obj_desc_sprint(in_odsc));
+        ABT_mutex_lock(server->ls_mutex);
+        num_obj = ls_find_all(server->dsg->ls, in_odsc, &from_objs);
+        if(num_obj > 0) {
+            // need one source of information - metadata case?
+            if(in_odsc->size == 0) {
+                in_odsc->size = from_objs[0]->obj_desc.size;
+            }
+            DEBUG_OUT("found %i objects in local storage to populate input\n", num_obj);
+            arg_objs[i] = obj_data_alloc(in_odsc);
+            od_tab = malloc(num_obj * sizeof(*od_tab));
+            for(j = 0; j < num_obj; j++) {
+                // Can we skip the intermediate copy?
+                odsc = from_objs[j]->obj_desc;
+                DEBUG_OUT("getting data from %s\n", obj_desc_sprint(&odsc));
+                bbox_intersect(&in_odsc->bb, &odsc.bb, &odsc.bb);
+                od_tab[j] = obj_data_alloc(&odsc);
+                DEBUG_OUT("overlap = %s\n", obj_desc_sprint(&od_tab[j]->obj_desc));
+                ssd_copy(od_tab[j], from_objs[j]);
+                ssd_copy(arg_objs[i], od_tab[j]);
+                obj_data_free(od_tab[j]);
+            }
+            free(od_tab);
+        }
+        ABT_mutex_unlock(server->ls_mutex);
+        if(num_obj < 1) {
+            DEBUG_OUT("could not find input object\n");   
+            out.length = 0;
+            out.handle = 0;
+            margo_respond(handle, &out);
+            margo_free_input(handle, &in);
+            margo_destroy(handle);
+            free(arg_arrays);
+            for(j = 0; j < i; j++) {
+                obj_data_free(arg_objs[j]);
+            }
+            free(arg_objs);
+            return;
+        } else if(from_objs) {
+            free(from_objs);
+        }
+
+        arg_arrays[i] = build_ndarray_from_od(arg_objs[i]);
+        DEBUG_OUT("created ndarray for %s\n", obj_desc_sprint(&arg_objs[i]->obj_desc));
+    }
+
+    // Race condition? Protect with mutex?
+    if((pklmod == NULL) &&
+       (pklmod = PyImport_ImportModuleNoBlock("dill")) == NULL) {
+        out.length = 0;
+        out.handle = 0;
+        margo_respond(handle, &out);
+        margo_free_input(handle, &in);
+        margo_destroy(handle);
+        free(arg_arrays);
+        free(arg_objs);
+        margo_respond(handle, &out);
+        margo_free_input(handle, &in);
+        margo_destroy(handle);
+        return;
+    }
+    arg = PyBytes_FromStringAndSize(fn, rdma_size);
+    fnp = PyObject_CallMethodObjArgs(pklmod, PyUnicode_FromString("loads"), arg,
+                                     NULL);
+    Py_XDECREF(arg);
+
+    args = PyTuple_New(num_args);
+    for(i = 0; i < num_args; i++) {
+        PyTuple_SetItem(args, i, arg_arrays[i]);
+    }
+    if(fnp && PyCallable_Check(fnp)) {
+        pres = PyObject_CallObject(fnp, args);
+    } else {
+        if(!fnp) {
+            PyErr_Print();
+        }
+        fprintf(stderr,
+                "ERROR: (%s): provided function could either not be loaded, or "
+                "is not callable.\n",
+                __func__);
+        out.length = 0;
+        out.handle = 0;
+        margo_respond(handle, &out);
+        margo_free_input(handle, &in);
+        margo_destroy(handle);
+        free(arg_arrays);
+        free(arg_objs);
+        margo_respond(handle, &out);
+        margo_free_input(handle, &in);
+        margo_destroy(handle);
+        return;
+    }
+
+    if(pres && (pres != Py_None)) {
+        pres_bytes = PyObject_CallMethodObjArgs(
+            pklmod, PyUnicode_FromString("dumps"), pres, NULL);
+        Py_XDECREF(pres);
+        res_data = PyBytes_AsString(pres_bytes);
+        rdma_size = PyBytes_Size(pres_bytes) + 1;
+        hret = margo_bulk_create(mid, 1, (void **)&res_data, &rdma_size,
+                                 HG_BULK_READ_ONLY, &out.handle);
+        if(hret != HG_SUCCESS) {
+            fprintf(stderr, "ERROR: (%s): margo_bulk_create failed with %d.\n",
+                    __func__, hret);
+            out.length = 0;
+            out.handle = 0;
+            margo_respond(handle, &out);
+            margo_free_input(handle, &in);
+            margo_destroy(handle);
+            return;
+        }
+        out.length = rdma_size;
+    } else {
+        if(!pres) {
+            PyErr_Print();
+        }
+        out.length = 0;
+    }
+
+    if(out.length > 0) {
+        ABT_cond_create(&cond);
+        ABT_mutex_create(&mtx);
+        out.condp = (uint64_t)(&cond);
+        out.mtxp = (uint64_t)(&mtx);
+        DEBUG_OUT("sending out.condp = %" PRIu64 " and out.mtxp = %" PRIu64
+                  "\n",
+                  out.condp, out.mtxp);
+        ABT_mutex_lock(mtx);
+        margo_respond(handle, &out);
+        ABT_cond_wait(cond, mtx);
+        DEBUG_OUT("signaled on condition\n");
+        ABT_mutex_unlock(mtx);
+        ABT_mutex_free(&mtx);
+        ABT_cond_free(&cond);
+    } else {
+        out.handle = 0;
+        margo_respond(handle, &out);
+    }
+
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+
+    DEBUG_OUT("done with pexec handling\n");
+
+    Py_XDECREF(args);
+    free(arg_arrays);
+    if(num_args) {
+        for(i = 0; i < num_args; i++) {
+            obj_data_free(arg_objs[i]);
+        }
+        free(arg_objs);
+    }
+}
+DEFINE_MARGO_RPC_HANDLER(mpexec_rpc)
+
 #endif // DSPACES_HAVE_PYTHON
 
 static void cond_rpc(hg_handle_t handle)

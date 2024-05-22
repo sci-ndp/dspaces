@@ -308,12 +308,18 @@ struct dspaces_req {
     int ndim;
     uint64_t *lb, *ub;
     void *buf;
+    int tag;
 };
+
+int dspaces_get_req(dspaces_client_t client, struct dspaces_req *in_req, struct dspaces_req *out_req, int timeout);
 
 int dspaces_pexec(dspaces_client_t client, const char *var_name,
                   unsigned int ver, int ndim, uint64_t *lb, uint64_t *ub,
                   const char *fn, unsigned int fnsz, const char *fn_name,
                   void **data, int *data_size);
+
+int dspaces_mpexec(dspaces_client_t client, int num_args, struct dspaces_req *args, const char *fn, unsigned int fnsz, const char *fn_name,
+                  void **data, int *size);
 
 typedef int (*dspaces_sub_fn)(dspaces_client_t, struct dspaces_req *, void *);
 typedef struct dspaces_sub_handle *dspaces_sub_t;

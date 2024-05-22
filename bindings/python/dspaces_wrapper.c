@@ -225,6 +225,7 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
                               PyObject *dtype, int timeout)
 {
     dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
+    struct dspaces_req in_req = {0}, out_req = {0};
     int ndim = PyTuple_GET_SIZE(lbt);
     uint64_t lb[ndim];
     uint64_t ub[ndim];
@@ -244,28 +245,36 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
         ub[(ndim-1) - i] = PyLong_AsLong(item);
     }
 
+    in_req.var_name = strdup(name);
+    in_req.ver = version;
+    in_req.ndim = ndim;
+    in_req.lb = lb;
+    in_req.ub = ub; 
 
     // clang-format off
     //Py_BEGIN_ALLOW_THREADS 
-    dspaces_aget(*clientp, name, version, ndim, lb, ub,
-                                        &data, &tag, timeout);
+    dspaces_get_req(*clientp, &in_req, &out_req, timeout);
     //Py_END_ALLOW_THREADS
     // clang-format on
+    data = out_req.buf;
 
-        if(data == NULL)
+    free(in_req.var_name);
+
+    if(data == NULL)
     {
         Py_INCREF(Py_None);
         return (Py_None);
     }
 
     if(dtype == Py_None) {
-        descr = PyArray_DescrNewFromType(tag);
+        descr = PyArray_DescrNewFromType(out_req.tag);
     } else {
         descr = PyArray_DescrNew((PyArray_Descr *)dtype);
     }
 
+    ndim = out_req.ndim;
     for(i = 0; i < ndim; i++) {
-        dims[(ndim-1) - i] = ((ub[i] - lb[i]) + 1);
+        dims[(ndim-1) - i] = ((out_req.ub[i] - out_req.lb[i]) + 1);
     }
 
     arr = PyArray_NewFromDescr(&PyArray_Type, descr, ndim, dims, NULL, data, 0,
@@ -274,53 +283,69 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
     return (arr);
 }
 
-PyObject *wrapper_dspaces_pexec(PyObject *clientppy, const char *name,
-                                int version, PyObject *lbt, PyObject *ubt,
+PyObject *wrapper_dspaces_pexec(PyObject *clientppy, PyObject *req_list,
                                 PyObject *fn, const char *fn_name)
 {
     dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
     PyObject *item;
-    int ndim = 0;
+    PyObject *req_dict, *lbt, *ubt;
     uint64_t *lb, *ub;
+    int ndim;
     void *data;
     int data_size;
     PyObject *result;
-    int i;
+    struct dspaces_req *reqs;
+    int num_reqs;
+    int i, j;
 
-    if(lbt == Py_None || ubt == Py_None) {
-        if(lbt != ubt) {
-            PyErr_SetString(PyExc_TypeError,
+    num_reqs = PyList_Size(req_list);
+    reqs = calloc(num_reqs, sizeof(*reqs));
+
+    for(i = 0; i < num_reqs; i++) {
+        req_dict = PyList_GetItem(req_list, i);
+        char *teststr = PyDict_GetItemString(req_dict, "var_name");
+        reqs[i].var_name = strdup(PyBytes_AsString(PyDict_GetItemString(req_dict, "var_name")));
+        reqs[i].ver = PyLong_AsLong(PyDict_GetItemString(req_dict, "ver"));
+        lbt = PyDict_GetItemString(req_dict, "lb");
+        ubt = PyDict_GetItemString(req_dict, "ub");
+        
+        if(lbt == Py_None || ubt == Py_None) {
+            if(lbt != ubt) {
+                PyErr_SetString(PyExc_TypeError,
                             "both lb and ub must be set or neither");
+                return (NULL);
+            }
+        } else if(PyTuple_GET_SIZE(lbt) != PyTuple_GET_SIZE(ubt)) {
+            PyErr_SetString(PyExc_TypeError, "lb and ub must have the same length");
+            return (NULL);
+        } else if(lbt == Py_None) {
+            reqs[i].ndim = 0;
+        } else {
+            reqs[i].ndim = PyTuple_GET_SIZE(lbt);
+        }
+        ndim = reqs[i].ndim;
+
+        lb = malloc(sizeof(*lb) * ndim);
+        ub = malloc(sizeof(*ub) * ndim);
+        //Reverse order of indices
+        for(j = 0; j < ndim; j++) {
+            item = PyTuple_GetItem(lbt, j);
+            lb[(ndim-1) - j] = PyLong_AsLong(item);
+            item = PyTuple_GetItem(ubt, j);
+            ub[(ndim-1) - j] = PyLong_AsLong(item);
+        }
+        reqs[i].lb = lb;
+        reqs[i].ub = ub;
+
+        if(!PyBytes_Check(fn)) {
+            PyErr_SetString(PyExc_TypeError,
+                        "fn must be serialized as a a byte string");
             return (NULL);
         }
-    } else if(PyTuple_GET_SIZE(lbt) != PyTuple_GET_SIZE(ubt)) {
-        PyErr_SetString(PyExc_TypeError, "lb and ub must have the same lenght");
-        return (NULL);
-    } else {
-        ndim = PyTuple_GET_SIZE(lbt);
     }
-
-    lb = malloc(sizeof(*lb) * ndim);
-    ub = malloc(sizeof(*ub) * ndim);
-    //Reverse order of indices
-    for(i = 0; i < ndim; i++) {
-        item = PyTuple_GetItem(lbt, i);
-        lb[(ndim-1) - i] = PyLong_AsLong(item);
-        item = PyTuple_GetItem(ubt, i);
-        ub[(ndim-1) - i] = PyLong_AsLong(item);
-    }
-
-    if(!PyBytes_Check(fn)) {
-        PyErr_SetString(PyExc_TypeError,
-                        "fn must be serialized as a a byte string");
-        return (NULL);
-    }
-
-    dspaces_pexec(*clientp, name, version, ndim, lb, ub, PyBytes_AsString(fn),
+    dspaces_mpexec(*clientp, num_reqs, reqs, PyBytes_AsString(fn),
                   PyBytes_Size(fn) + 1, fn_name, &data, &data_size);
-
-    free(lb);
-    free(ub);
+        
 
     if(data_size > 0) {
         result = PyBytes_FromStringAndSize(data, data_size);
@@ -328,6 +353,13 @@ PyObject *wrapper_dspaces_pexec(PyObject *clientppy, const char *name,
         Py_INCREF(Py_None);
         result = Py_None;
     }
+
+    for(i = 0; i < num_reqs; i++) {
+        free(reqs[i].var_name);
+        free(reqs[i].lb);
+        free(reqs[i].ub);
+    }
+    free(reqs);
 
     return (result);
 }

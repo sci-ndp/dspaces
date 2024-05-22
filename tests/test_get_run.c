@@ -109,6 +109,7 @@ static int couple_read_nd(dspaces_client_t client, unsigned int ts,
     unsigned int meta_len;
     int next_ver;
     uint64_t lb[10] = {0}, ub[10] = {0};
+    struct dspaces_req in_req = {0}, out_req = {0};
     for(i = 0; i < dims; i++) {
         lb[i] = off[i];
         ub[i] = off[i] + sp[i] - 1;
@@ -166,8 +167,16 @@ static int couple_read_nd(dspaces_client_t client, unsigned int ts,
     for(i = 0; i < num_vars; i++) {
         sprintf(var_name, "mnd_%d", i);
         if(allocate) {
-            err = dspaces_aget(client, var_name, ts, dims, lb, ub,
-                               (void **)&data_tab[i], NULL, -1);
+            //err = dspaces_aget(client, var_name, ts, dims, lb, ub,
+            //                   (void **)&data_tab[i], NULL, -1);
+            in_req.var_name = var_name;
+            in_req.ver = ts;
+            in_req.ndim = dims;
+            in_req.lb = lb;
+            in_req.ub = ub;
+            err = dspaces_get_req(client, &in_req, &out_req, -1);
+            data_tab[i] = out_req.buf;
+            
         } else {
             err = dspaces_get(client, var_name, ts, elem_size, dims, lb, ub,
                               data_tab[i], -1);
