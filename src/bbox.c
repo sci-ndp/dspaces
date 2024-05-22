@@ -41,7 +41,7 @@
 #include "sfc.h"
 
 // static inline unsigned int
-static inline uint64_t coord_dist(struct coord *c0, struct coord *c1, int dim)
+static inline uint64_t coord_dist(const struct coord *c0, const struct coord *c1, int dim)
 {
     return (c1->c[dim] - c0->c[dim] + 1);
 }
@@ -181,7 +181,7 @@ int bbox_equals(const struct bbox *bb0, const struct bbox *bb1)
     return 0;
 }
 
-uint64_t bbox_volume(struct bbox *bb)
+uint64_t bbox_volume(const struct bbox *bb)
 {
     uint64_t n = 1;
     int ndims = bb->num_dims;

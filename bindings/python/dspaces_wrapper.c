@@ -303,7 +303,6 @@ PyObject *wrapper_dspaces_pexec(PyObject *clientppy, PyObject *req_list,
 
     for(i = 0; i < num_reqs; i++) {
         req_dict = PyList_GetItem(req_list, i);
-        char *teststr = PyDict_GetItemString(req_dict, "var_name");
         reqs[i].var_name = strdup(PyBytes_AsString(PyDict_GetItemString(req_dict, "var_name")));
         reqs[i].ver = PyLong_AsLong(PyDict_GetItemString(req_dict, "ver"));
         lbt = PyDict_GetItemString(req_dict, "lb");

@@ -99,6 +99,7 @@ struct dspaces_module_ret {
     int ndim;
     int tag;
     int elem_size;
+    enum storage_type st;
     void *data;
 };
 
@@ -440,6 +441,8 @@ static int parse_conf_toml(const char *fname, struct list_head *dir_list,
     toml_free(conf);
 }
 
+const char *hash_strings[] = {"Dynamic", "Unitary", "SFC", "Bisection"};
+
 static int init_sspace(dspaces_provider_t server, struct bbox *default_domain,
                        struct ds_gspace *dsg_l)
 {
@@ -450,8 +453,8 @@ static int init_sspace(dspaces_provider_t server, struct bbox *default_domain,
         goto err_out;
 
     if(ds_conf.hash_version == ssd_hash_version_auto) {
-        DEBUG_OUT("server selected hash version %i for default space\n",
-                  dsg_l->ssd->hash_version);
+        DEBUG_OUT("server selected hash type %s for default space\n",
+                  hash_strings[dsg_l->ssd->hash_version]);
     }
 
     err = ssd_init(dsg_l->ssd, dsg_l->rank);
@@ -591,8 +594,6 @@ error:
     return (ret);
 }
 
-const char *hash_strings[] = {"Dynamic", "SFC", "Bisection"};
-
 void print_conf()
 {
     int i;
@@ -613,6 +614,7 @@ void print_conf()
         printf(" RUN UNTIL KILLED\n");
     }
     printf("=========================\n");
+    fflush(stdout);
 }
 
 static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
@@ -1908,22 +1910,33 @@ static struct dspaces_module_ret *py_res_buf(PyObject *pResult)
     PyArrayObject *pArray;
     struct dspaces_module_ret *ret = malloc(sizeof(*ret));
     size_t data_len;
+    int flags;
     npy_intp *dims;
     int i;
 
     pArray = (PyArrayObject *)pResult;
+    flags = PyArray_FLAGS(pArray);
+    if(flags & NPY_ARRAY_C_CONTIGUOUS) {
+        ret->st = row_major;
+    } else if(flags & NPY_ARRAY_F_CONTIGUOUS) {
+        ret->st = column_major;
+    } else {
+        fprintf(stderr, "WARNING: bad array alignment in %s\n", __func__);
+        return(NULL);
+    }
     ret->ndim = PyArray_NDIM(pArray);
     ret->dim = malloc(sizeof(*ret->dim * ret->ndim));
     dims = PyArray_DIMS(pArray);
     ret->len = 1;
     for(i = 0; i < ret->ndim; i++) {
-        ret->dim[i] = dims[i];
+        ret->dim[ret->st==column_major?i:(ret->ndim-i)-1] = dims[i];
         ret->len *= dims[i];
     }
     ret->tag = PyArray_TYPE(pArray);
     ret->elem_size = PyArray_ITEMSIZE(pArray);
     data_len = ret->len * ret->elem_size;
     ret->data = malloc(data_len);
+
     memcpy(ret->data, PyArray_DATA(pArray), data_len);
 
     return (ret);
@@ -3121,7 +3134,7 @@ static PyObject *build_ndarray_from_od(struct obj_data *od)
     int i;
 
     for(i = 0; i < ndim; i++) {
-        dims[i] = (odsc->bb.ub.c[i] - odsc->bb.lb.c[i]) + 1;
+        dims[(ndim-i)-1] = (odsc->bb.ub.c[i] - odsc->bb.lb.c[i]) + 1;
     }
 
     arr = PyArray_NewFromDescr(&PyArray_Type, descr, ndim, dims, NULL, data, 0,
@@ -3760,6 +3773,7 @@ void dspaces_server_fini(dspaces_provider_t server)
     if(err < 0) {
         fprintf(stderr, "ERROR: Python finalize failed with %d\n", err);
     }
+    DEBUG_OUT("fnalize complete\n");
     free(server);
 }
 

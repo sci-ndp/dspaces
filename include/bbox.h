@@ -43,7 +43,7 @@ int bbox_does_intersect(const struct bbox *, const struct bbox *);
 void bbox_intersect(const struct bbox *, const struct bbox *, struct bbox *);
 int bbox_equals(const struct bbox *, const struct bbox *);
 
-uint64_t bbox_volume(struct bbox *);
+uint64_t bbox_volume(const struct bbox *);
 void bbox_to_intv(const struct bbox *, uint64_t, int, struct intv **, int *);
 void bbox_to_intv2(const struct bbox *, uint64_t, int, struct intv **, int *);
 void bbox_to_origin(struct bbox *, const struct bbox *);
