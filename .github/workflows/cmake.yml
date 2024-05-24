@@ -13,11 +13,11 @@ jobs:
     # cross-platform coverage.
     # See: https://docs.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow#configuring-a-build-matrix
     runs-on: ubuntu-latest
-    container: philipdavis/dspaces-deps:v23052024
+    container: philipdavis/dspaces-ci:v2405202
 
     defaults:
       run:
-        shell: . /entrypoint.sh && bash -l {0}
+        shell: bash -l {0}
 
     steps:
     - uses: actions/checkout@v2
