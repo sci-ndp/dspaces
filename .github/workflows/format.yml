@@ -6,7 +6,7 @@ on: [push, pull_request]
 jobs:
     format:
         runs-on: ubuntu-latest
-        container: philipdavis/dspaces:bionic-margo-plus             
+        container: philipdavis/dspaces-deps:v23052024 
     
         steps:
         - uses: actions/checkout@v2
