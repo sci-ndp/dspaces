@@ -1807,7 +1807,6 @@ int dht_find_entry_all(struct dht_entry *de, obj_descriptor *q_odsc,
 
     n = q_odsc->version % de->odsc_size;
     num_elem = ssh_hash_elem_count(de->ss, &q_odsc->bb);
-    fprintf(stderr, "num_elem = %li\n", num_elem);
     if(sub) {
         ABT_mutex_lock(de->hash_mutex[n]);
     }
