@@ -2055,7 +2055,11 @@ static int build_module_args_from_odsc(obj_descriptor *odsc,
         args[2].len = ndims;
         args[2].iarray = malloc(sizeof(*args[2].iarray) * ndims);
         for(i = 0; i < ndims; i++) {
-            args[2].iarray[i] = odsc->bb.lb.c[i];
+            if(odsc->st == row_major) {
+                args[2].iarray[i] = odsc->bb.lb.c[i];
+            } else {
+                args[2].iarray[(ndims-i)-1] = odsc->bb.lb.c[i];
+            }
         }
     } else {
         args[2].type = DSPACES_ARG_NONE;
@@ -2068,7 +2072,11 @@ static int build_module_args_from_odsc(obj_descriptor *odsc,
         args[3].len = ndims;
         args[3].iarray = malloc(sizeof(*args[3].iarray) * ndims);
         for(i = 0; i < ndims; i++) {
-            args[3].iarray[i] = odsc->bb.ub.c[i];
+            if(odsc->st == row_major) {
+                args[3].iarray[i] = odsc->bb.ub.c[i];
+            } else {
+                args[3].iarray[(ndims-i)-1] = odsc->bb.ub.c[i];
+            }
         }
     } else {
         args[3].type = DSPACES_ARG_NONE;

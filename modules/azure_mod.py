@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from urllib.request import urlretrieve
 from bitstring import Bits, pack
 from datetime import date, timedelta
+import sys
 
 base_date = date(1950, 1, 1)
 present_date = date(2015, 1, 1)
@@ -102,10 +103,7 @@ def _get_cmip6_data(model, scenario, variable, start_date, end_date, lb, ub):
         end_gidx = (item_end - start_date).days + 1
         start_iidx = (item_start - date(year, 1 , 1)).days
         end_iidx = (item_end - date(year, 1, 1)).days + 1
-        print(lb, ub, shape)
         result[start_gidx:end_gidx,:,:] = data[start_iidx:end_iidx,lb[0]:ub[0],lb[1]:ub[1]]
-        print(data[:,:,:].max())
-        print(result)
     return(result)
 
 def query(name, version, lb, ub):
@@ -119,7 +117,10 @@ if __name__ == '__main__':
     e = date(2013, 5, 2)
     start = (s - base_date).days
     span = (e - s).days
+    lb = (0,0)
+    ub = (599,1399)
     version = pack('uint:16, uint:16', start, span).uint
-    query('m:ACCESS-CM2,v:huss', version, (), ())
+    res = query(name='cmip6-planetary\\m:ACCESS-ESM1-5,v:tas', version=1, lb=lb, ub=ub)
+    print(res.shape)
 
 
