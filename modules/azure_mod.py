@@ -15,14 +15,19 @@ present_date = date(2015, 1, 1)
 last_date = date(2100, 12, 31)
 cache_base='.azrcache'
 
-catalog = pystac_client.Client.open(
-    "https://planetarycomputer-test.microsoft.com/stac",
-    modifier=planetary_computer.sign_inplace,
-)
-collection = catalog.get_collection("nasa-nex-gddp-cmip6")
-variable_list=collection.summaries.get_list("cmip6:variable")
-model_list=collection.summaries.get_list("cmip6:model")[:10]
-scenario_list=collection.summaries.get_list("cmip6:scenario")
+try:
+    catalog = pystac_client.Client.open(
+        "https://planetarycomputer.microsoft.com/api/stac/v1",
+        modifier=planetary_computer.sign_inplace,
+    )
+    collection = catalog.get_collection("nasa-nex-gddp-cmip6")
+    variable_list=collection.summaries.get_list("cmip6:variable")
+    model_list=collection.summaries.get_list("cmip6:model")[:10]
+    scenario_list=collection.summaries.get_list("cmip6:scenario")
+    have_pc = True
+except pystac_client.exceptions.APIError:
+    print("don't have planetary computer api access")
+    have_pc = False
 
 def _get_gddp_time_ranges(version):
     bits = Bits(uint=version, length=32)
@@ -45,15 +50,15 @@ def _get_gddp_params(name):
     for part in name_parts:
         if part[0] == 'm':
             model = part[2:]
-            if model not in model_list:
+            if have_pc and model not in model_list:
                 raise ValueError(f"model {model} not available.") 
         if part[0] == 's':
             scenario = part[2:]
-            if scenario not in scenario_list:
+            if have_pc and scenario not in scenario_list:
                 raise ValueError(f"scenario {scenario} not available.")
         if part[0] == 'v':
             variable = part[2:]
-            if variable not in variable_list:
+            if have_pc and variable not in variable_list:
                 raise ValueError(f"variable {variable} not available.")
     if variable == None:
         raise ValueError('No variable name specified')
@@ -72,24 +77,29 @@ def _get_dataset(url):
 def _get_cmip6_data(model, scenario, variable, start_date, end_date, lb, ub):
     result = None
     result_days = (end_date - start_date).days + 1
-    search = catalog.search(
-            collections=["nasa-nex-gddp-cmip6"],
-            datetime=f'{start_date}/{end_date}',
-            query = {
-                "cmip6:model": {
-                    "eq": model
+    if have_pc:
+        search = catalog.search(
+                collections=["nasa-nex-gddp-cmip6"],
+                datetime=f'{start_date}/{end_date}',
+                query = {
+                    "cmip6:model": {
+                        "eq": model
+                    },
+                    "cmip6:scenario": {
+                        "in": ['historical', scenario]
+                    },  
                 },
-                "cmip6:scenario": {
-                    "in": ['historical', scenario]
-                },
-            },
-            sortby=[{'field':'cmip6:year','direction':'asc'}]
-    )
-    items = search.item_collection()
+                sortby=[{'field':'cmip6:year','direction':'asc'}]
+        )
+        items = search.item_collection()
+            
     for item in items:
-        year = item.properties['cmip6:year']
-        url = item.assets[variable].href
-        ds = _get_dataset(url)
+        if have_pc:
+            year = item.properties['cmip6:year']
+            url = item.assets[variable].href
+            ds = _get_dataset(url)
+        else:
+            pass
         data = ds[variable]
         if result is None:
             if lb[0] >= data[0].shape[0] or lb[1] >= data[0].shape[1]:
