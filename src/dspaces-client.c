@@ -107,6 +107,7 @@ struct dspaces_client {
     hg_id_t cond_id;
     hg_id_t get_vars_id;
     hg_id_t get_var_objs_id;
+    hg_id_t reg_id;
     struct dc_gspace *dcg;
     char **server_address;
     char **node_names;
@@ -587,6 +588,7 @@ static int dspaces_init_margo(dspaces_client_t client,
                               &flag);
         margo_registered_name(client->mid, "get_var_objs_rpc",
                               &client->get_var_objs_id, &flag);
+        margo_registered_name(client->mid, "reg_rpc", &client->reg_id, &flag);
     } else {
         client->put_id = MARGO_REGISTER(client->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, NULL);
@@ -638,8 +640,8 @@ static int dspaces_init_margo(dspaces_client_t client,
                                            do_ops_in_t, bulk_out_t, NULL);
         client->pexec_id = MARGO_REGISTER(client->mid, "pexec_rpc", pexec_in_t,
                                           pexec_out_t, NULL);
-        client->mpexec_id = MARGO_REGISTER(client->mid, "mpexec_rpc", pexec_in_t,
-                                          pexec_out_t, NULL);
+        client->mpexec_id = MARGO_REGISTER(client->mid, "mpexec_rpc",
+                                           pexec_in_t, pexec_out_t, NULL);
         client->cond_id =
             MARGO_REGISTER(client->mid, "cond_rpc", cond_in_t, void, NULL);
         margo_registered_disable_response(client->mid, client->cond_id,
@@ -648,6 +650,8 @@ static int dspaces_init_margo(dspaces_client_t client,
                                              int32_t, name_list_t, NULL);
         client->get_var_objs_id = MARGO_REGISTER(
             client->mid, "get_var_objs_rpc", get_var_objs_in_t, odsc_hdr, NULL);
+        client->reg_id =
+            MARGO_REGISTER(client->mid, "reg_rpc", reg_in_t, uint64_t, NULL);
     }
 
     return (dspaces_SUCCESS);
@@ -1595,8 +1599,8 @@ static int get_odscs(dspaces_client_t client, obj_descriptor *odsc, int timeout,
     in.odsc_gdim.size = sizeof(*odsc);
     in.odsc_gdim.raw_odsc = (char *)odsc;
     in.param = timeout;
-  
-    DEBUG_OUT("starting query.\n"); 
+
+    DEBUG_OUT("starting query.\n");
     set_global_dimension(&(client->dcg->gdim_list), odsc->name,
                          &(client->dcg->default_gdim), &od_gdim);
     in.odsc_gdim.gdim_size = sizeof(od_gdim);
@@ -1604,7 +1608,7 @@ static int get_odscs(dspaces_client_t client, obj_descriptor *odsc, int timeout,
     DEBUG_OUT("Found gdims.\n");
 
     get_server_address(client, &server_addr);
-     
+
     hret = margo_create(client->mid, server_addr, client->query_id, &handle);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: %s: margo_create() failed with %d.\n", __func__,
@@ -1657,17 +1661,20 @@ static void fill_odsc(dspaces_client_t client, const char *var_name,
     copy_var_name_to_odsc(client, var_name, odsc);
 }
 
-static void odsc_from_req(dspaces_client_t client, struct dspaces_req *req, obj_descriptor *odsc)
+static void odsc_from_req(dspaces_client_t client, struct dspaces_req *req,
+                          obj_descriptor *odsc)
 {
-    fill_odsc(client, req->var_name, req->ver, req->elem_size, req->ndim, req->lb, req->ub, odsc);
+    fill_odsc(client, req->var_name, req->ver, req->elem_size, req->ndim,
+              req->lb, req->ub, odsc);
 }
 
-static void fill_req(dspaces_client_t client, obj_descriptor *odsc, void *data, struct dspaces_req *req)
+static void fill_req(dspaces_client_t client, obj_descriptor *odsc, void *data,
+                     struct dspaces_req *req)
 {
     int i;
 
     if(client->nspace) {
-        req->var_name = strdup(&odsc->name[strlen(client->nspace)+2]);
+        req->var_name = strdup(&odsc->name[strlen(client->nspace) + 2]);
     } else {
         req->var_name = strdup(odsc->name);
     }
@@ -1684,7 +1691,8 @@ static void fill_req(dspaces_client_t client, obj_descriptor *odsc, void *data, 
     req->tag = odsc->tag;
 }
 
-int dspaces_get_req(dspaces_client_t client, struct dspaces_req *in_req, struct dspaces_req *out_req, int timeout)
+int dspaces_get_req(dspaces_client_t client, struct dspaces_req *in_req,
+                    struct dspaces_req *out_req, int timeout)
 {
     obj_descriptor odsc = {0};
     obj_descriptor *odsc_tab;
@@ -1730,15 +1738,14 @@ int dspaces_get_req(dspaces_client_t client, struct dspaces_req *in_req, struct 
     odsc.tag = odsc_tab[0].tag;
     for(i = 1; i < num_odscs; i++) {
         if(odsc_tab[i].tag != odsc_tab[0].tag) {
-            fprintf(stderr,
-                "WARNING: multiple distinct tag values returned in "
-                "query result. Returning first one.\n");
-                break;
+            fprintf(stderr, "WARNING: multiple distinct tag values returned in "
+                            "query result. Returning first one.\n");
+            break;
         }
     }
 
     if(in_req->buf == NULL) {
-        data =  malloc(num_elem * elem_size);
+        data = malloc(num_elem * elem_size);
     } else {
         data = in_req->buf;
     }
@@ -1936,8 +1943,9 @@ err_hg:
     return dspaces_ERR_MERCURY;
 }
 
-int dspaces_mpexec(dspaces_client_t client, int num_args, struct dspaces_req *args, const char *fn, unsigned int fnsz, const char *fn_name,
-                  void **data, int *size)
+int dspaces_mpexec(dspaces_client_t client, int num_args,
+                   struct dspaces_req *args, const char *fn, unsigned int fnsz,
+                   const char *fn_name, void **data, int *size)
 {
     obj_descriptor *arg_odscs;
     hg_addr_t server_addr;
@@ -1960,7 +1968,7 @@ int dspaces_mpexec(dspaces_client_t client, int num_args, struct dspaces_req *ar
         DEBUG_OUT("Remote args %i is %s\n", i, obj_desc_sprint(&arg_odscs[i]));
     }
 
-     in.fn_name = strdup(fn_name);
+    in.fn_name = strdup(fn_name);
 
     rdma_size = fnsz;
     in.length = fnsz;
@@ -1979,13 +1987,6 @@ int dspaces_mpexec(dspaces_client_t client, int num_args, struct dspaces_req *ar
     get_server_address(client, &server_addr);
 
     hret = margo_create(client->mid, server_addr, client->mpexec_id, &handle);
-
-    if(hret != HG_SUCCESS) {
-        fprintf(stderr, "ERROR: (%s): margo_create() failed\n", __func__);
-        margo_bulk_free(in.handle);
-        return dspaces_ERR_MERCURY;
-    }
-
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s): margo_create() failed\n", __func__);
         margo_bulk_free(in.handle);
@@ -2183,6 +2184,51 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
     margo_destroy(handle);
     DEBUG_OUT("done with handling pexec\n");
     return (dspaces_SUCCESS);
+}
+
+long dspaces_register(dspaces_client_t client, const char *type,
+                      const char *name, const char *reg_data)
+{
+    hg_addr_t server_addr;
+    hg_return_t hret;
+    reg_in_t in;
+    uint64_t out;
+    hg_handle_t handle;
+    long reg_handle;
+
+    in.type = strdup(type);
+    in.name = strdup(name);
+    in.reg_data = strdup(reg_data);
+    in.src = -1;
+
+    get_server_address(client, &server_addr);
+
+    hret = margo_create(client->mid, server_addr, client->reg_id, &handle);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_create() failed\n", __func__);
+        return dspaces_ERR_MERCURY;
+    }
+
+    hret = margo_forward(handle, &in);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_forward() failed\n", __func__);
+        margo_destroy(handle);
+        return dspaces_ERR_MERCURY;
+    }
+
+    hret = margo_get_output(handle, &out);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_get_output() failed\n", __func__);
+        margo_destroy(handle);
+        return dspaces_ERR_MERCURY;
+    }
+
+    reg_handle = out;
+
+    margo_free_output(handle, &out);
+    margo_destroy(handle);
+
+    return (reg_handle);
 }
 
 static void get_local_rpc(hg_handle_t handle)

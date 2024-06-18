@@ -396,6 +396,9 @@ MERCURY_GEN_PROC(pexec_out_t, ((hg_bulk_t)(handle))((int32_t)(length))(
 MERCURY_GEN_PROC(ss_information, ((odsc_hdr)(ss_buf))((hg_string_t)(chk_str)))
 MERCURY_GEN_PROC(cond_in_t, ((uint64_t)(mtxp))((uint64_t)(condp)))
 MERCURY_GEN_PROC(get_var_objs_in_t, ((hg_string_t)(var_name))((int32_t)(src)))
+MERCURY_GEN_PROC(reg_in_t,
+                 ((hg_string_t)(type))((hg_string_t)(name))(
+                     (hg_string_t)(reg_data))((int32_t)(src))((uint64_t)(id)))
 
 char *obj_desc_sprint(obj_descriptor *);
 //

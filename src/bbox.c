@@ -41,7 +41,8 @@
 #include "sfc.h"
 
 // static inline unsigned int
-static inline uint64_t coord_dist(const struct coord *c0, const struct coord *c1, int dim)
+static inline uint64_t coord_dist(const struct coord *c0,
+                                  const struct coord *c1, int dim)
 {
     return (c1->c[dim] - c0->c[dim] + 1);
 }

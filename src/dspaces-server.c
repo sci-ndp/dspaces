@@ -139,6 +139,7 @@ struct dspaces_provider {
     hg_id_t cond_id;
     hg_id_t get_vars_id;
     hg_id_t get_var_objs_id;
+    hg_id_t reg_id;
     int nmods;
     struct dspaces_module *mods;
     struct ds_gspace *dsg;
@@ -194,6 +195,7 @@ DECLARE_MARGO_RPC_HANDLER(mpexec_rpc)
 DECLARE_MARGO_RPC_HANDLER(cond_rpc)
 DECLARE_MARGO_RPC_HANDLER(get_vars_rpc);
 DECLARE_MARGO_RPC_HANDLER(get_var_objs_rpc);
+DECLARE_MARGO_RPC_HANDLER(reg_rpc);
 
 /* Server configuration parameters */
 static struct {
@@ -1003,11 +1005,9 @@ static void *bootstrap_python()
 static int dspaces_init_py_mods(dspaces_provider_t server,
                                 struct dspaces_module **pmodsp)
 {
-    static const char *static_pmods[][2] = {
-        {"goes17", "s3nc_mod"},
-        {"planetary", "azure_mod"},
-        {"cmips3", "s3cmip_mod"}
-    };
+    static const char *static_pmods[][2] = {{"goes17", "s3nc_mod"},
+                                            {"planetary", "azure_mod"},
+                                            {"cmips3", "s3cmip_mod"}};
     char *pypath = getenv("PYTHONPATH");
     char *new_pypath;
     int pypath_len;
@@ -1039,12 +1039,12 @@ static int dspaces_init_py_mods(dspaces_provider_t server,
         pmods[i].pModule = PyImport_Import(pName);
         if(pmods[i].pModule == NULL) {
             fprintf(stderr,
-                "WARNING: could not load %s mod from %s. File missing? Any "
-                "%s accesses will fail.\n",
-                static_pmods[i][1], xstr(DSPACES_MOD_DIR), pmods[i].name);
+                    "WARNING: could not load %s mod from %s. File missing? Any "
+                    "%s accesses will fail.\n",
+                    static_pmods[i][1], xstr(DSPACES_MOD_DIR), pmods[i].name);
         }
         Py_DECREF(pName);
-    }   
+    }
     free(new_pypath);
 
     *pmodsp = pmods;
@@ -1269,6 +1269,8 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                               &server->get_var_objs_id, &flag);
         DS_HG_REGISTER(hg, server->get_var_objs_id, get_var_objs_in_t, odsc_hdr,
                        get_var_objs_rpc);
+        margo_registered_name(server->mid, "reg_rpc", &server->reg_id, &flag);
+        DS_HG_REGISTER(hg, server->reg_id, reg_in_t, uint64_t, reg_rpc);
     } else {
         server->put_id = MARGO_REGISTER(server->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, put_rpc);
@@ -1344,8 +1346,8 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                                           pexec_out_t, pexec_rpc);
         margo_register_data(server->mid, server->pexec_id, (void *)server,
                             NULL);
-        server->mpexec_id = MARGO_REGISTER(server->mid, "mpexec_rpc", pexec_in_t,
-                                          pexec_out_t, mpexec_rpc);
+        server->mpexec_id = MARGO_REGISTER(server->mid, "mpexec_rpc",
+                                           pexec_in_t, pexec_out_t, mpexec_rpc);
         margo_register_data(server->mid, server->mpexec_id, (void *)server,
                             NULL);
 #endif // DSPACES_HAVE_PYTHON
@@ -1363,6 +1365,9 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                            odsc_hdr, get_var_objs_rpc);
         margo_register_data(server->mid, server->get_var_objs_id,
                             (void *)server, NULL);
+        server->reg_id =
+            MARGO_REGISTER(server->mid, "reg_rpc", reg_in_t, uint64_t, reg_rpc);
+        margo_register_data(server->mid, server->reg_id, (void *)server, NULL);
     }
     int err = dsg_alloc(server, conf_file, comm);
     if(err) {
@@ -1922,14 +1927,14 @@ static struct dspaces_module_ret *py_res_buf(PyObject *pResult)
         ret->st = column_major;
     } else {
         fprintf(stderr, "WARNING: bad array alignment in %s\n", __func__);
-        return(NULL);
+        return (NULL);
     }
     ret->ndim = PyArray_NDIM(pArray);
     ret->dim = malloc(sizeof(*ret->dim * ret->ndim));
     dims = PyArray_DIMS(pArray);
     ret->len = 1;
     for(i = 0; i < ret->ndim; i++) {
-        ret->dim[ret->st==column_major?i:(ret->ndim-i)-1] = dims[i];
+        ret->dim[ret->st == column_major ? i : (ret->ndim - i) - 1] = dims[i];
         ret->len *= dims[i];
     }
     ret->tag = PyArray_TYPE(pArray);
@@ -2058,7 +2063,7 @@ static int build_module_args_from_odsc(obj_descriptor *odsc,
             if(odsc->st == row_major) {
                 args[2].iarray[i] = odsc->bb.lb.c[i];
             } else {
-                args[2].iarray[(ndims-i)-1] = odsc->bb.lb.c[i];
+                args[2].iarray[(ndims - i) - 1] = odsc->bb.lb.c[i];
             }
         }
     } else {
@@ -2075,7 +2080,7 @@ static int build_module_args_from_odsc(obj_descriptor *odsc,
             if(odsc->st == row_major) {
                 args[3].iarray[i] = odsc->bb.ub.c[i];
             } else {
-                args[3].iarray[(ndims-i)-1] = odsc->bb.ub.c[i];
+                args[3].iarray[(ndims - i) - 1] = odsc->bb.ub.c[i];
             }
         }
     } else {
@@ -2120,8 +2125,7 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
         {"goes17\\", "goes17"},
         {"cmip6-planetary\\", "planetary"},
         {"cmip6-s3\\", "cmips3"},
-        {NULL, NULL}
-    };
+        {NULL, NULL}};
     const char *s3nc_nspace = "goes17\\";
     const char *azure_nspace = "cmip6-planetary\\";
     const char *s3cmip_nspace = "cmip6-s3\\";
@@ -2135,11 +2139,12 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
 
     DEBUG_OUT("Routing '%s'\n", odsc->name);
 
-    for(mod_desc = (char **)module_nspaces[0]; mod_desc[0] != NULL; mod_desc+=2) {
+    for(mod_desc = (char **)module_nspaces[0]; mod_desc[0] != NULL;
+        mod_desc += 2) {
         if(strstr(odsc->name, mod_desc[0]) == odsc->name) {
-             nargs = build_module_args_from_odsc(odsc, &args);
-             res = dspaces_module_exec(server, mod_desc[1], "query", args,
-                                        nargs, DSPACES_MOD_RET_ARRAY);
+            nargs = build_module_args_from_odsc(odsc, &args);
+            res = dspaces_module_exec(server, mod_desc[1], "query", args, nargs,
+                                      DSPACES_MOD_RET_ARRAY);
         }
     }
 
@@ -2186,6 +2191,88 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
 static int local_responsibility(dspaces_provider_t server, obj_descriptor *odsc)
 {
     return (!server->remotes || ls_lookup(server->dsg->ls, odsc->name));
+}
+
+static void send_tgt_rpc(dspaces_provider_t server, hg_id_t rpc_id, int target,
+                         void *in, hg_addr_t *addr, hg_handle_t *h,
+                         margo_request *req)
+{
+    DEBUG_OUT("sending rpc_id %lu to rank %i\n", rpc_id, target);
+    margo_addr_lookup(server->mid, server->server_address[target], addr);
+    margo_create(server->mid, *addr, rpc_id, h);
+    margo_iforward(*h, in, req);
+}
+
+struct ibcast_state {
+    int sent_rpc[3];
+    hg_addr_t addr[3];
+    hg_handle_t hndl[3];
+    margo_request req[3];
+};
+
+static struct ibcast_state *ibcast_rpc_start(dspaces_provider_t server,
+                                             hg_id_t rpc_id, int32_t src,
+                                             void *in)
+{
+    struct ibcast_state *bcast;
+    int32_t rank, parent, child1, child2;
+
+    rank = server->dsg->rank;
+    parent = (rank - 1) / 2;
+    child1 = (rank * 2) + 1;
+    child2 = child1 + 1;
+
+    if(server->dsg->size_sp == 1 ||
+       (src == parent && child1 >= server->dsg->size_sp)) {
+        return NULL;
+    }
+
+    bcast = calloc(1, sizeof(*bcast));
+
+    if((src == -1 || src > rank) && rank > 0) {
+        DEBUG_OUT("sending to parent (%i)\n", parent);
+        send_tgt_rpc(server, rpc_id, parent, in, &bcast->addr[0],
+                     &bcast->hndl[0], &bcast->req[0]);
+        bcast->sent_rpc[0] = 1;
+    }
+    if((child1 != src && child1 < server->dsg->size_sp)) {
+        DEBUG_OUT("sending to child 1 (%i)\n", child1);
+        send_tgt_rpc(server, rpc_id, child1, in, &bcast->addr[1],
+                     &bcast->hndl[1], &bcast->req[1]);
+        bcast->sent_rpc[1] = 1;
+    }
+    if((child2 != src && child2 < server->dsg->size_sp)) {
+        DEBUG_OUT("sending to child 2 (%i)\n", child2);
+        send_tgt_rpc(server, rpc_id, child2, in, &bcast->addr[2],
+                     &bcast->hndl[2], &bcast->req[2]);
+        bcast->sent_rpc[2] = 1;
+    }
+
+    return (bcast);
+}
+
+static void ibcast_get_output(struct ibcast_state *bcast, unsigned int idx,
+                              void *out)
+{
+    if(idx > 2 || !bcast->sent_rpc[idx]) {
+        return;
+    }
+
+    margo_wait(bcast->req[idx]);
+    margo_get_output(bcast->hndl[idx], out);
+}
+
+static void ibcast_finish(dspaces_provider_t server, struct ibcast_state *bcast)
+{
+    int i;
+
+    for(i = 0; i < 3; i++) {
+        if(bcast->sent_rpc[i]) {
+            margo_addr_free(server->mid, bcast->addr[i]);
+            margo_destroy(bcast->hndl[i]);
+        }
+    }
+    free(bcast);
 }
 
 static int get_query_odscs(dspaces_provider_t server, odsc_gdim_t *query,
@@ -2395,7 +2482,8 @@ static void query_rpc(hg_handle_t handle)
         get_query_odscs(server, &in, timeout, &results, req_id);
 
     out.odsc_list.raw_odsc = (char *)results;
-    DEBUG_OUT("Responding with %li result(s).\n", out.odsc_list.size / sizeof(obj_descriptor));
+    DEBUG_OUT("Responding with %li result(s).\n",
+              out.odsc_list.size / sizeof(obj_descriptor));
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
     margo_destroy(handle);
@@ -2905,16 +2993,14 @@ static void kill_rpc(hg_handle_t handle)
     const struct hg_info *info = margo_get_info(handle);
     dspaces_provider_t server =
         (dspaces_provider_t)margo_registered_data(mid, info->id);
-    int32_t src, rank, parent, child1, child2;
+    struct ibcast_state *bcast;
+    int32_t src, rank;
     int do_kill = 0;
 
     margo_get_input(handle, &src);
     DEBUG_OUT("Received kill signal from %d.\n", src);
 
     rank = server->dsg->rank;
-    parent = (rank - 1) / 2;
-    child1 = (rank * 2) + 1;
-    child2 = child1 + 1;
 
     ABT_mutex_lock(server->kill_mutex);
     DEBUG_OUT("Kill tokens remaining: %d\n",
@@ -2933,14 +3019,9 @@ static void kill_rpc(hg_handle_t handle)
 
     ABT_mutex_unlock(server->kill_mutex);
 
-    if((src == -1 || src > rank) && rank > 0) {
-        send_kill_rpc(server, parent, &rank);
-    }
-    if((child1 != src && child1 < server->dsg->size_sp)) {
-        send_kill_rpc(server, child1, &rank);
-    }
-    if((child2 != src && child2 < server->dsg->size_sp)) {
-        send_kill_rpc(server, child2, &rank);
+    bcast = ibcast_rpc_start(server, server->kill_id, src, &rank);
+    if(bcast) {
+        ibcast_finish(server, bcast);
     }
 
     margo_free_input(handle, &src);
@@ -3142,7 +3223,7 @@ static PyObject *build_ndarray_from_od(struct obj_data *od)
     int i;
 
     for(i = 0; i < ndim; i++) {
-        dims[(ndim-i)-1] = (odsc->bb.ub.c[i] - odsc->bb.lb.c[i]) + 1;
+        dims[(ndim - i) - 1] = (odsc->bb.ub.c[i] - odsc->bb.lb.c[i]) + 1;
     }
 
     arr = PyArray_NewFromDescr(&PyArray_Type, descr, ndim, dims, NULL, data, 0,
@@ -3220,7 +3301,8 @@ static void pexec_rpc(hg_handle_t handle)
     ABT_mutex_lock(server->ls_mutex);
     num_obj = ls_find_all(server->dsg->ls, &in_odsc, &from_objs);
     if(num_obj > 0) {
-        DEBUG_OUT("found %i objects in local storage to populate input\n", num_obj);
+        DEBUG_OUT("found %i objects in local storage to populate input\n",
+                  num_obj);
         arg_obj = obj_data_alloc(&in_odsc);
         od_tab = malloc(num_obj * sizeof(*od_tab));
         for(i = 0; i < num_obj; i++) {
@@ -3236,7 +3318,7 @@ static void pexec_rpc(hg_handle_t handle)
     }
     ABT_mutex_unlock(server->ls_mutex);
     if(num_obj < 1) {
-        DEBUG_OUT("could not find input object\n");   
+        DEBUG_OUT("could not find input object\n");
         out.length = 0;
         out.handle = 0;
         margo_respond(handle, &out);
@@ -3402,9 +3484,10 @@ static void mpexec_rpc(hg_handle_t handle)
     arg_arrays = calloc(num_args, sizeof(*arg_arrays));
     for(i = 0; i < num_args; i++) {
         route_request(server, &in_odscs[i], &(server->dsg->default_gdim));
-        
+
         in_odsc = &in_odscs[i];
-        DEBUG_OUT("searching for local storage objects to satisfy %s\n", obj_desc_sprint(in_odsc));
+        DEBUG_OUT("searching for local storage objects to satisfy %s\n",
+                  obj_desc_sprint(in_odsc));
         ABT_mutex_lock(server->ls_mutex);
         num_obj = ls_find_all(server->dsg->ls, in_odsc, &from_objs);
         if(num_obj > 0) {
@@ -3412,7 +3495,8 @@ static void mpexec_rpc(hg_handle_t handle)
             if(in_odsc->size == 0) {
                 in_odsc->size = from_objs[0]->obj_desc.size;
             }
-            DEBUG_OUT("found %i objects in local storage to populate input\n", num_obj);
+            DEBUG_OUT("found %i objects in local storage to populate input\n",
+                      num_obj);
             arg_objs[i] = obj_data_alloc(in_odsc);
             od_tab = malloc(num_obj * sizeof(*od_tab));
             for(j = 0; j < num_obj; j++) {
@@ -3421,7 +3505,8 @@ static void mpexec_rpc(hg_handle_t handle)
                 DEBUG_OUT("getting data from %s\n", obj_desc_sprint(&odsc));
                 bbox_intersect(&in_odsc->bb, &odsc.bb, &odsc.bb);
                 od_tab[j] = obj_data_alloc(&odsc);
-                DEBUG_OUT("overlap = %s\n", obj_desc_sprint(&od_tab[j]->obj_desc));
+                DEBUG_OUT("overlap = %s\n",
+                          obj_desc_sprint(&od_tab[j]->obj_desc));
                 ssd_copy(od_tab[j], from_objs[j]);
                 ssd_copy(arg_objs[i], od_tab[j]);
                 obj_data_free(od_tab[j]);
@@ -3430,7 +3515,7 @@ static void mpexec_rpc(hg_handle_t handle)
         }
         ABT_mutex_unlock(server->ls_mutex);
         if(num_obj < 1) {
-            DEBUG_OUT("could not find input object\n");   
+            DEBUG_OUT("could not find input object\n");
             out.length = 0;
             out.handle = 0;
             margo_respond(handle, &out);
@@ -3447,7 +3532,8 @@ static void mpexec_rpc(hg_handle_t handle)
         }
 
         arg_arrays[i] = build_ndarray_from_od(arg_objs[i]);
-        DEBUG_OUT("created ndarray for %s\n", obj_desc_sprint(&arg_objs[i]->obj_desc));
+        DEBUG_OUT("created ndarray for %s\n",
+                  obj_desc_sprint(&arg_objs[i]->obj_desc));
     }
 
     // Race condition? Protect with mutex?
@@ -3585,26 +3671,14 @@ static void cond_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(cond_rpc)
 
-static void send_tgt_rpc(dspaces_provider_t server, hg_id_t rpc_id, int target,
-                         void *in, hg_addr_t *addr, hg_handle_t *h,
-                         margo_request *req)
-{
-    margo_addr_lookup(server->mid, server->server_address[target], addr);
-    margo_create(server->mid, *addr, rpc_id, h);
-    margo_iforward(*h, in, req);
-}
-
 static void get_vars_rpc(hg_handle_t handle)
 {
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
     const struct hg_info *info = margo_get_info(handle);
     dspaces_provider_t server =
         (dspaces_provider_t)margo_registered_data(mid, info->id);
-    int32_t src, rank, parent, child1, child2;
-    int sent_rpc[3] = {0};
-    hg_addr_t addr[3];
-    hg_handle_t hndl[3];
-    margo_request req[3];
+    struct ibcast_state *bcast;
+    int32_t src, rank;
     name_list_t out[3];
     name_list_t rout;
     ds_str_hash *results = ds_str_hash_init();
@@ -3616,28 +3690,7 @@ static void get_vars_rpc(hg_handle_t handle)
     DEBUG_OUT("Received request for all variable names from %d\n", src);
 
     rank = server->dsg->rank;
-    parent = (rank - 1) / 2;
-    child1 = (rank * 2) + 1;
-    child2 = child1 + 1;
-
-    if((src == -1 || src > rank) && rank > 0) {
-        DEBUG_OUT("querying parent %d\n", parent);
-        send_tgt_rpc(server, server->get_vars_id, parent, &rank, &addr[0],
-                     &hndl[0], &req[0]);
-        sent_rpc[0] = 1;
-    }
-    if((child1 != src && child1 < server->dsg->size_sp)) {
-        DEBUG_OUT("querying child %d\n", child1);
-        send_tgt_rpc(server, server->get_vars_id, child1, &rank, &addr[1],
-                     &hndl[1], &req[1]);
-        sent_rpc[1] = 1;
-    }
-    if((child2 != src && child2 < server->dsg->size_sp)) {
-        DEBUG_OUT("querying child %d\n", child2);
-        send_tgt_rpc(server, server->get_vars_id, child2, &rank, &addr[2],
-                     &hndl[2], &req[2]);
-        sent_rpc[2] = 1;
-    }
+    bcast = ibcast_rpc_start(server, server->get_vars_id, src, &rank);
 
     ABT_mutex_lock(server->ls_mutex);
     num_vars = ls_get_var_names(server->dsg->ls, &names);
@@ -3651,17 +3704,14 @@ static void get_vars_rpc(hg_handle_t handle)
     }
     free(names);
 
-    for(i = 0; i < 3; i++) {
-        if(sent_rpc[i]) {
-            margo_wait(req[i]);
-            margo_get_output(hndl[i], &out[i]);
+    if(bcast) {
+        for(i = 0; i < 3; i++) {
+            ibcast_get_output(bcast, i, &out[i]);
             for(j = 0; j < out[i].count; j++) {
                 ds_str_hash_add(results, out[i].names[j]);
             }
-            margo_free_output(hndl[i], &out);
-            margo_addr_free(server->mid, addr[i]);
-            margo_destroy(hndl[i]);
         }
+        ibcast_finish(server, bcast);
     }
 
     rout.count = ds_str_hash_get_all(results, &rout.names);
@@ -3683,12 +3733,9 @@ static void get_var_objs_rpc(hg_handle_t handle)
     const struct hg_info *info = margo_get_info(handle);
     dspaces_provider_t server =
         (dspaces_provider_t)margo_registered_data(mid, info->id);
-    get_var_objs_in_t in, tgt_in;
-    int32_t src, rank, parent, child1, child2;
-    int sent_rpc[3] = {0};
-    hg_addr_t addr[3];
-    hg_handle_t hndl[3];
-    margo_request req[3];
+    get_var_objs_in_t in, bcast_in;
+    struct ibcast_state *bcast;
+    int32_t src, rank;
     odsc_hdr out[3];
     obj_descriptor **odsc_tab;
     int i;
@@ -3703,31 +3750,11 @@ static void get_var_objs_rpc(hg_handle_t handle)
               src);
 
     rank = server->dsg->rank;
-    parent = (rank - 1) / 2;
-    child1 = (rank * 2) + 1;
-    child2 = child1 + 1;
 
-    tgt_in.src = rank;
-    tgt_in.var_name = in.var_name;
+    bcast_in.src = rank;
+    bcast_in.var_name = in.var_name;
 
-    if((src == -1 || src > rank) && rank > 0) {
-        DEBUG_OUT("querying parent %d\n", parent);
-        send_tgt_rpc(server, server->get_var_objs_id, parent, &tgt_in, &addr[0],
-                     &hndl[0], &req[0]);
-        sent_rpc[0] = 1;
-    }
-    if((child1 != src && child1 < server->dsg->size_sp)) {
-        DEBUG_OUT("querying child %d\n", child1);
-        send_tgt_rpc(server, server->get_var_objs_id, child1, &tgt_in, &addr[1],
-                     &hndl[1], &req[1]);
-        sent_rpc[1] = 1;
-    }
-    if((child2 != src && child2 < server->dsg->size_sp)) {
-        DEBUG_OUT("querying child %d\n", child2);
-        send_tgt_rpc(server, server->get_var_objs_id, child2, &tgt_in, &addr[2],
-                     &hndl[2], &req[2]);
-        sent_rpc[2] = 1;
-    }
+    bcast = ibcast_rpc_start(server, server->get_var_objs_id, src, &bcast_in);
 
     ABT_mutex_lock(server->ls_mutex);
     num_odscs = ls_find_all_no_version(server->dsg->ls, in.var_name, &odsc_tab);
@@ -3745,17 +3772,14 @@ static void get_var_objs_rpc(hg_handle_t handle)
 
     DEBUG_OUT("found %d object descriptors locally.\n", num_odscs);
 
-    for(i = 0; i < 3; i++) {
-        if(sent_rpc[i]) {
-            margo_wait(req[i]);
-            margo_get_output(hndl[i], &out[i]);
+    if(bcast) {
+        for(i = 0; i < 3; i++) {
+            ibcast_get_output(bcast, i, &out[i]);
             rout.raw_odsc = realloc(rout.raw_odsc, rout.size + out[i].size);
             memcpy(rout.raw_odsc + rout.size, out[i].raw_odsc, out[i].size);
             rout.size += out[i].size;
-            margo_free_output(hndl[i], &out);
-            margo_addr_free(server->mid, addr[i]);
-            margo_destroy(hndl[i]);
         }
+        ibcast_finish(server, bcast);
     }
 
     DEBUG_OUT("returning %zi objects.\n", rout.size / sizeof(obj_descriptor));
@@ -3768,6 +3792,37 @@ static void get_var_objs_rpc(hg_handle_t handle)
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(get_var_objs_rpc)
+
+static void reg_rpc(hg_handle_t handle)
+{
+    static uint64_t local_id = 0;
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    const struct hg_info *info = margo_get_info(handle);
+    dspaces_provider_t server =
+        (dspaces_provider_t)margo_registered_data(mid, info->id);
+    hg_return_t hret;
+    reg_in_t in;
+    uint64_t id;
+
+    mid = margo_hg_handle_get_instance(handle);
+    info = margo_get_info(handle);
+    server = (dspaces_provider_t)margo_registered_data(mid, info->id);
+    hret = margo_get_input(handle, &in);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr,
+                "DATASPACES: ERROR handling %s: margo_get_input() failed with "
+                "%d.\n",
+                __func__, hret);
+        margo_destroy(handle);
+        return;
+    }
+
+    if(in.src == -1) {
+        id = __sync_fetch_and_add(&local_id, 1);
+        id += (uint64_t)server->rank << 40;
+    }
+}
+DEFINE_MARGO_RPC_HANDLER(reg_rpc);
 
 void dspaces_server_fini(dspaces_provider_t server)
 {

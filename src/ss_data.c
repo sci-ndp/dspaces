@@ -388,7 +388,8 @@ static int dht_construct_hash(struct dht *dht, struct sspace *ssd)
     return err;
 }
 
-static struct sspace *ssd_alloc_v0(const struct bbox *bb_domain, int max_versions)
+static struct sspace *ssd_alloc_v0(const struct bbox *bb_domain,
+                                   int max_versions)
 {
     struct sspace *ssd;
     int err = -ENOMEM;
@@ -411,11 +412,10 @@ static struct sspace *ssd_alloc_v0(const struct bbox *bb_domain, int max_version
 err_out:
     fprintf(stderr, "'%s()': failed with %d\n", __func__, err);
     return NULL;
-
 }
 
 static int ssd_hash_v0(struct sspace *ss, const struct bbox *bb,
-                        struct dht_entry *de_tab[])
+                       struct dht_entry *de_tab[])
 {
     de_tab[0] = ss->dht->ent_tab[0];
     return 1;
@@ -1101,24 +1101,24 @@ int ls_find_all(ss_storage *ls, obj_descriptor *odsc, struct obj_data ***ods)
     struct bbox isect;
 
     num_elem = bbox_volume(&odsc->bb);
-    *ods =  malloc(sizeof(**ods) * ls->num_obj);
+    *ods = malloc(sizeof(**ods) * ls->num_obj);
     index = odsc->version % ls->size_hash;
     list = &ls->obj_hash[index];
 
     list_for_each_entry(od, list, struct obj_data, obj_entry)
     {
-         if(obj_desc_equals_intersect(odsc, &od->obj_desc)) {
+        if(obj_desc_equals_intersect(odsc, &od->obj_desc)) {
             (*ods)[n++] = od;
             bbox_intersect(&odsc->bb, &od->obj_desc.bb, &isect);
             num_elem -= bbox_volume(&isect);
-         }
+        }
     }
     if(num_elem != 0) {
         free(*ods);
-        return(-1);
+        return (-1);
     }
-    
-    return(n);
+
+    return (n);
 }
 
 /*
@@ -1376,7 +1376,7 @@ int ssd_choose_hash(const struct bbox *bb_domain)
 
     if(bb_domain->num_dims == 1 && bb_domain->ub.c[i] == 0) {
         // flag for no hashing
-        return(ssd_hash_version_v0); 
+        return (ssd_hash_version_v0);
     }
 
     for(i = 0; i < bb_domain->num_dims; i++) {
@@ -1463,7 +1463,7 @@ void ssd_free(struct sspace *ss)
 
 long ssh_hash_elem_count_v0(struct sspace *ss, const struct bbox *bb)
 {
-    return(bbox_volume(bb));
+    return (bbox_volume(bb));
 }
 
 long ssh_hash_elem_count_v1(struct sspace *ss, const struct bbox *bb)
