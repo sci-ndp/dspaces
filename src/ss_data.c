@@ -988,9 +988,6 @@ void ls_add_obj(ss_storage *ls, struct obj_data *od)
     struct list_head *bin;
     struct obj_data *od_existing;
 
-    // ABT_rwlock_create(&od->lock);
-    // ABT_rwlock_wrlock(&od->lock);
-
     // duplicate is noop
     ds_str_hash_add(ls->var_dict, od->obj_desc.name);
 
@@ -1010,7 +1007,6 @@ void ls_add_obj(ss_storage *ls, struct obj_data *od)
     /* NOTE: new object comes first in the list. */
     list_add(&od->obj_entry, bin);
     ls->num_obj++;
-    // ABT_rwlock_unlock(&od->lock);
 }
 
 struct obj_data *ls_lookup(ss_storage *ls, char *name)

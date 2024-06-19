@@ -6,6 +6,7 @@
  */
 #include "dspaces-server.h"
 #include "dspaces-ops.h"
+#include "dspaces-conf.h"
 #include "dspaces-storage.h"
 #include "dspaces.h"
 #include "dspacesp.h"
@@ -68,12 +69,6 @@ struct addr_list_entry {
     char *addr;
 };
 
-struct remote {
-    char *name;
-    char addr_str[128];
-    dspaces_client_t conn;
-};
-
 #define DSPACES_ARG_REAL 0
 #define DSPACES_ARG_INT 1
 #define DSPACES_ARG_STR 2
@@ -115,6 +110,7 @@ struct dspaces_module {
 };
 
 struct dspaces_provider {
+    struct ds_conf conf;
     struct list_head dirs;
     margo_instance_id mid;
     hg_id_t put_id;
@@ -197,264 +193,16 @@ DECLARE_MARGO_RPC_HANDLER(get_vars_rpc);
 DECLARE_MARGO_RPC_HANDLER(get_var_objs_rpc);
 DECLARE_MARGO_RPC_HANDLER(reg_rpc);
 
-/* Server configuration parameters */
-static struct {
-    int ndim;
-    struct coord dims;
-    int max_versions;
-    int hash_version; /* 1 - ssd_hash_version_v1, 2 - ssd_hash_version_v2 */
-    int num_apps;
-} ds_conf;
-
-static struct {
-    const char *opt;
-    int *pval;
-} options[] = {{"ndim", &ds_conf.ndim},
-               {"dims", (int *)&ds_conf.dims},
-               {"max_versions", &ds_conf.max_versions},
-               {"hash_version", &ds_conf.hash_version},
-               {"num_apps", &ds_conf.num_apps}};
-
-static void eat_spaces(char *line)
-{
-    char *t = line;
-
-    while(t && *t) {
-        if(*t != ' ' && *t != '\t' && *t != '\n')
-            *line++ = *t;
-        t++;
-    }
-    if(line)
-        *line = '\0';
-}
-
-static int parse_line(int lineno, char *line)
-{
-    char *t;
-    int i, n;
-
-    /* Comment line ? */
-    if(line[0] == '#')
-        return 0;
-
-    t = strstr(line, "=");
-    if(!t) {
-        eat_spaces(line);
-        if(strlen(line) == 0)
-            return 0;
-        else
-            return -EINVAL;
-    }
-
-    t[0] = '\0';
-    eat_spaces(line);
-    t++;
-
-    n = sizeof(options) / sizeof(options[0]);
-
-    for(i = 0; i < n; i++) {
-        if(strcmp(line, options[1].opt) == 0) { /**< when "dims" */
-            // get coordinates
-            int idx = 0;
-            char *crd;
-            crd = strtok(t, ",");
-            while(crd != NULL) {
-                ((struct coord *)options[1].pval)->c[idx] = atoll(crd);
-                crd = strtok(NULL, ",");
-                idx++;
-            }
-            if(idx != *(int *)options[0].pval) {
-                fprintf(stderr, "ERROR: (%s): dimensionality mismatch.\n",
-                        __func__);
-                fprintf(stderr, "ERROR: index=%d, ndims=%d\n", idx,
-                        *(int *)options[0].pval);
-                return -EINVAL;
-            }
-            break;
-        }
-        if(strcmp(line, options[i].opt) == 0) {
-            eat_spaces(line);
-            *(int *)options[i].pval = atoi(t);
-            break;
-        }
-    }
-
-    if(i == n) {
-        fprintf(stderr, "WARNING: (%s): unknown option '%s' at line %d.\n",
-                __func__, line, lineno);
-    }
-    return 0;
-}
-
-static int parse_conf(const char *fname)
-{
-    FILE *fin;
-    char buff[1024];
-    int lineno = 1, err;
-
-    fin = fopen(fname, "rt");
-    if(!fin) {
-        fprintf(stderr, "ERROR: could not open configuration file '%s'.\n",
-                fname);
-        return -errno;
-    }
-
-    while(fgets(buff, sizeof(buff), fin) != NULL) {
-        err = parse_line(lineno++, buff);
-        if(err < 0) {
-            fclose(fin);
-            return err;
-        }
-    }
-
-    fclose(fin);
-    return 0;
-}
-
-static int parse_conf_toml(const char *fname, struct list_head *dir_list,
-                           struct remote **rem_array, int *nremote)
-{
-    FILE *fin;
-    toml_table_t *conf;
-    toml_table_t *storage;
-    toml_table_t *conf_dir;
-    toml_table_t *server;
-    toml_table_t *remotes;
-    toml_table_t *remote;
-    toml_datum_t dat;
-    toml_array_t *arr;
-    struct dspaces_dir *dir;
-    struct dspaces_file *file;
-    char errbuf[200];
-    char *ip;
-    int port;
-    int ndim = 0;
-    int ndir, nfile;
-    int i, j, n;
-
-    fin = fopen(fname, "r");
-    if(!fin) {
-        fprintf(stderr, "ERROR: could not open configuration file '%s'.\n",
-                fname);
-        return -errno;
-    }
-
-    conf = toml_parse_file(fin, errbuf, sizeof(errbuf));
-    fclose(fin);
-
-    if(!conf) {
-        fprintf(stderr, "could not parse %s, %s.\n", fname, errbuf);
-        return -1;
-    }
-
-    server = toml_table_in(conf, "server");
-    if(!server) {
-        fprintf(stderr, "missing [server] block from %s\n", fname);
-        return -1;
-    }
-
-    n = sizeof(options) / sizeof(options[0]);
-    for(i = 0; i < n; i++) {
-        if(strcmp(options[i].opt, "dims") == 0) {
-            arr = toml_array_in(server, "dims");
-            if(arr) {
-                while(1) {
-                    dat = toml_int_at(arr, ndim);
-                    if(!dat.ok) {
-                        break;
-                    }
-                    ((struct coord *)options[i].pval)->c[ndim] = dat.u.i;
-                    ndim++;
-                }
-            }
-            for(j = 0; j < n; j++) {
-                if(strcmp(options[j].opt, "ndim") == 0) {
-                    *(int *)options[j].pval = ndim;
-                }
-            }
-        } else {
-            dat = toml_int_in(server, options[i].opt);
-            if(dat.ok) {
-                *(int *)options[i].pval = dat.u.i;
-            }
-        }
-    }
-
-    remotes = toml_table_in(conf, "remotes");
-    if(remotes) {
-        *nremote = toml_table_ntab(remotes);
-        *rem_array = malloc(sizeof(**rem_array) * *nremote);
-        for(i = 0; i < *nremote; i++) {
-            // remote = toml_table_at(remotes, i);
-            (*rem_array)[i].name = strdup(toml_key_in(remotes, i));
-            remote = toml_table_in(remotes, (*rem_array)[i].name);
-            dat = toml_string_in(remote, "ip");
-            ip = dat.u.s;
-            dat = toml_int_in(remote, "port");
-            port = dat.u.i;
-            sprintf((*rem_array)[i].addr_str, "sockets://%s:%i", ip, port);
-            free(ip);
-        }
-    }
-
-    storage = toml_table_in(conf, "storage");
-    if(storage) {
-        ndir = toml_table_ntab(storage);
-        for(i = 0; i < ndir; i++) {
-            dir = malloc(sizeof(*dir));
-            dir->name = strdup(toml_key_in(storage, i));
-            conf_dir = toml_table_in(storage, dir->name);
-            dat = toml_string_in(conf_dir, "directory");
-            dir->path = strdup(dat.u.s);
-            free(dat.u.s);
-            if(0 != (arr = toml_array_in(conf_dir, "files"))) {
-                INIT_LIST_HEAD(&dir->files);
-                nfile = toml_array_nelem(arr);
-                for(j = 0; j < nfile; j++) {
-                    dat = toml_string_at(arr, j);
-                    file = malloc(sizeof(*file));
-                    file->type = DS_FILE_NC;
-                    file->name = strdup(dat.u.s);
-                    free(dat.u.s);
-                    list_add(&file->entry, &dir->files);
-                }
-            } else {
-                dat = toml_string_in(conf_dir, "files");
-                if(dat.ok) {
-                    if(strcmp(dat.u.s, "all") == 0) {
-                        dir->cont_type = DS_FILE_ALL;
-                    } else {
-                        fprintf(stderr,
-                                "ERROR: %s: invalid value for "
-                                "storage.%s.files: %s\n",
-                                __func__, dir->name, dat.u.s);
-                    }
-                    free(dat.u.s);
-                } else {
-                    fprintf(stderr,
-                            "ERROR: %s: no readable 'files' key for '%s'.\n",
-                            __func__, dir->name);
-                }
-            }
-            list_add(&dir->entry, dir_list);
-        }
-    }
-
-    toml_free(conf);
-}
-
-const char *hash_strings[] = {"Dynamic", "Unitary", "SFC", "Bisection"};
-
 static int init_sspace(dspaces_provider_t server, struct bbox *default_domain,
                        struct ds_gspace *dsg_l)
 {
     int err = -ENOMEM;
-    dsg_l->ssd = ssd_alloc(default_domain, dsg_l->size_sp, ds_conf.max_versions,
-                           ds_conf.hash_version);
+    dsg_l->ssd = ssd_alloc(default_domain, dsg_l->size_sp, server->conf.max_versions,
+                        server->conf.hash_version);
     if(!dsg_l->ssd)
         goto err_out;
 
-    if(ds_conf.hash_version == ssd_hash_version_auto) {
+    if(server->conf.hash_version == ssd_hash_version_auto) {
         DEBUG_OUT("server selected hash type %s for default space\n",
                   hash_strings[dsg_l->ssd->hash_version]);
     }
@@ -463,10 +211,10 @@ static int init_sspace(dspaces_provider_t server, struct bbox *default_domain,
     if(err < 0)
         goto err_out;
 
-    dsg_l->default_gdim.ndim = ds_conf.ndim;
+    dsg_l->default_gdim.ndim = server->conf.ndim;
     int i;
-    for(i = 0; i < ds_conf.ndim; i++) {
-        dsg_l->default_gdim.sizes.c[i] = ds_conf.dims.c[i];
+    for(i = 0; i < server->conf.ndim; i++) {
+        dsg_l->default_gdim.sizes.c[i] = server->conf.dims.c[i];
     }
 
     INIT_LIST_HEAD(&dsg_l->sspace_list);
@@ -596,29 +344,6 @@ error:
     return (ret);
 }
 
-void print_conf()
-{
-    int i;
-
-    printf("DataSpaces server config:\n");
-    printf("=========================\n");
-    printf(" Default global dimensions: (");
-    printf("%" PRIu64, ds_conf.dims.c[0]);
-    for(i = 1; i < ds_conf.ndim; i++) {
-        printf(", %" PRIu64, ds_conf.dims.c[i]);
-    }
-    printf(")\n");
-    printf(" MAX STORED VERSIONS: %i\n", ds_conf.max_versions);
-    printf(" HASH TYPE: %s\n", hash_strings[ds_conf.hash_version]);
-    if(ds_conf.num_apps >= 0) {
-        printf(" APPS EXPECTED: %i\n", ds_conf.num_apps);
-    } else {
-        printf(" RUN UNTIL KILLED\n");
-    }
-    printf("=========================\n");
-    fflush(stdout);
-}
-
 static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
                      MPI_Comm comm)
 {
@@ -627,55 +352,57 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     int err = -ENOMEM;
 
     /* Default values */
-    ds_conf.max_versions = 255;
-    ds_conf.hash_version = ssd_hash_version_auto;
-    ds_conf.num_apps = -1;
+    server->conf.max_versions = 255;
+    server->conf.hash_version = ssd_hash_version_auto;
+    server->conf.num_apps = -1;
 
     INIT_LIST_HEAD(&server->dirs);
 
     ext = strrchr(conf_name, '.');
     if(!ext || strcmp(ext, ".toml") != 0) {
-        err = parse_conf(conf_name);
+        err = parse_conf(conf_name, &server->conf);
     } else {
-        err = parse_conf_toml(conf_name, &server->dirs, &server->remotes,
-                              &server->nremote);
+        server->conf.dirs = &server->dirs;
+        server->conf.remotes = &server->remotes;
+        err = parse_conf_toml(conf_name, &server->conf);
+        server->nremote = server->conf.nremote;
     }
     if(err < 0) {
         goto err_out;
     }
 
     // Check number of dimension
-    if(ds_conf.ndim > BBOX_MAX_NDIM) {
+    if(server->conf.ndim > BBOX_MAX_NDIM) {
         fprintf(
             stderr,
             "%s(): ERROR maximum number of array dimension is %d but ndim is %d"
             " in file '%s'\n",
-            __func__, BBOX_MAX_NDIM, ds_conf.ndim, conf_name);
+            __func__, BBOX_MAX_NDIM, server->conf.ndim, conf_name);
         err = -EINVAL;
         goto err_out;
-    } else if(ds_conf.ndim == 0) {
+    } else if(server->conf.ndim == 0) {
         DEBUG_OUT(
             "no global coordinates provided. Setting trivial placeholder.\n");
-        ds_conf.ndim = 1;
-        ds_conf.dims.c[0] = 1;
+        server->conf.ndim = 1;
+        server->conf.dims.c[0] = 1;
     }
 
     // Check hash version
-    if((ds_conf.hash_version < ssd_hash_version_auto) ||
-       (ds_conf.hash_version >= _ssd_hash_version_count)) {
+    if((server->conf.hash_version < ssd_hash_version_auto) ||
+       (server->conf.hash_version >= _ssd_hash_version_count)) {
         fprintf(stderr, "%s(): ERROR unknown hash version %d in file '%s'\n",
-                __func__, ds_conf.hash_version, conf_name);
+                __func__, server->conf.hash_version, conf_name);
         err = -EINVAL;
         goto err_out;
     }
 
     struct bbox domain;
     memset(&domain, 0, sizeof(struct bbox));
-    domain.num_dims = ds_conf.ndim;
+    domain.num_dims = server->conf.ndim;
     int i;
     for(i = 0; i < domain.num_dims; i++) {
         domain.lb.c[i] = 0;
-        domain.ub.c[i] = ds_conf.dims.c[i] - 1;
+        domain.ub.c[i] = server->conf.dims.c[i] - 1;
     }
 
     dsg_l = malloc(sizeof(*dsg_l));
@@ -687,7 +414,7 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     MPI_Comm_rank(comm, &dsg_l->rank);
 
     if(dsg_l->rank == 0) {
-        print_conf();
+        print_conf(&server->conf);
     }
 
     write_conf(server, comm);
@@ -696,20 +423,20 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     if(err < 0) {
         goto err_free;
     }
-    dsg_l->ls = ls_alloc(ds_conf.max_versions);
+    dsg_l->ls = ls_alloc(server->conf.max_versions);
     if(!dsg_l->ls) {
         fprintf(stderr, "%s(): ERROR ls_alloc() failed\n", __func__);
         goto err_free;
     }
 
     // proxy storage
-    dsg_l->ps = ls_alloc(ds_conf.max_versions);
+    dsg_l->ps = ls_alloc(server->conf.max_versions);
     if(!dsg_l->ps) {
         fprintf(stderr, "%s(): ERROR ls_alloc() failed\n", __func__);
         goto err_free;
     }
 
-    dsg_l->num_apps = ds_conf.num_apps;
+    dsg_l->num_apps = server->conf.num_apps;
 
     INIT_LIST_HEAD(&dsg_l->obj_desc_drain_list);
 
@@ -794,15 +521,15 @@ static struct sspace *lookup_sspace(dspaces_provider_t server,
     memcpy(&ssd_entry->gdim, &gdim, sizeof(struct global_dimension));
 
     DEBUG_OUT("allocate the ssd.\n");
-    ssd_entry->ssd = ssd_alloc(&domain, dsg_l->size_sp, ds_conf.max_versions,
-                               ds_conf.hash_version);
+    ssd_entry->ssd = ssd_alloc(&domain, dsg_l->size_sp, server->conf.max_versions,
+                               server->conf.hash_version);
     if(!ssd_entry->ssd) {
         fprintf(stderr, "%s(): ssd_alloc failed for '%s'\n", __func__,
                 var_name);
         return dsg_l->ssd;
     }
 
-    if(ds_conf.hash_version == ssd_hash_version_auto) {
+    if(server->conf.hash_version == ssd_hash_version_auto) {
         DEBUG_OUT("server selected hash version %i for var %s\n",
                   ssd_entry->ssd->hash_version, var_name);
     }
@@ -2951,16 +2678,16 @@ static void ss_rpc(hg_handle_t handle)
     DEBUG_OUT("received ss_rpc\n");
 
     ss_info_hdr ss_data;
-    ss_data.num_dims = ds_conf.ndim;
+    ss_data.num_dims = server->conf.ndim;
     ss_data.num_space_srv = server->dsg->size_sp;
-    ss_data.max_versions = ds_conf.max_versions;
-    ss_data.hash_version = ds_conf.hash_version;
-    ss_data.default_gdim.ndim = ds_conf.ndim;
+    ss_data.max_versions = server->conf.max_versions;
+    ss_data.hash_version = server->conf.hash_version;
+    ss_data.default_gdim.ndim = server->conf.ndim;
 
-    for(int i = 0; i < ds_conf.ndim; i++) {
+    for(int i = 0; i < server->conf.ndim; i++) {
         ss_data.ss_domain.lb.c[i] = 0;
-        ss_data.ss_domain.ub.c[i] = ds_conf.dims.c[i] - 1;
-        ss_data.default_gdim.sizes.c[i] = ds_conf.dims.c[i];
+        ss_data.ss_domain.ub.c[i] = server->conf.dims.c[i] - 1;
+        ss_data.default_gdim.sizes.c[i] = server->conf.dims.c[i];
     }
 
     out.ss_buf.size = sizeof(ss_info_hdr);
@@ -3155,11 +2882,13 @@ static void do_ops_rpc(hg_handle_t handle)
     buffer = malloc(res_buf_size);
     cbuffer = malloc(res_buf_size);
     if(expr->type == DS_VAL_INT) {
+        DEBUG_OUT("Executing integer operation on %li elements\n", res_buf_size / sizeof(int));
 #pragma omp for
         for(i = 0; i < res_buf_size / sizeof(int); i++) {
             ((int *)buffer)[i] = ds_op_calc_ival(expr, i, &err);
         }
     } else if(expr->type == DS_VAL_REAL) {
+        DEBUG_OUT("Executing real operation on %li elements\n", res_buf_size / sizeof(double));
 #pragma omp for
         for(i = 0; i < res_buf_size / sizeof(double); i++) {
             ((double *)buffer)[i] = ds_op_calc_rval(expr, i, &err);
@@ -3793,6 +3522,11 @@ static void get_var_objs_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(get_var_objs_rpc)
 
+static void route_registration(dspaces_provider_t server, const char *type, const char *name, const char *reg_data)
+{
+    // TODO
+}
+
 static void reg_rpc(hg_handle_t handle)
 {
     static uint64_t local_id = 0;
@@ -3802,7 +3536,9 @@ static void reg_rpc(hg_handle_t handle)
         (dspaces_provider_t)margo_registered_data(mid, info->id);
     hg_return_t hret;
     reg_in_t in;
-    uint64_t id;
+    uint64_t out;
+    struct ibcast_state *bcast;
+    int i;
 
     mid = margo_hg_handle_get_instance(handle);
     info = margo_get_info(handle);
@@ -3818,9 +3554,24 @@ static void reg_rpc(hg_handle_t handle)
     }
 
     if(in.src == -1) {
-        id = __sync_fetch_and_add(&local_id, 1);
-        id += (uint64_t)server->rank << 40;
+        in.id = __sync_fetch_and_add(&local_id, 1);
+        in.id += (uint64_t)server->dsg->rank << 40;
     }
+    bcast = ibcast_rpc_start(server, server->reg_id, in.src, &in);
+    if(bcast) {
+        for(i = 0; i < 3; i++) {
+            ibcast_get_output(bcast, i, &out);
+        }
+        ibcast_finish(server, bcast);
+    }
+    out = in.id;
+
+    route_registration(server, in.type, in.name, in.reg_data);
+
+    margo_free_input(handle, &in);
+    margo_respond(handle, &out);
+    margo_destroy(handle);
+
 }
 DEFINE_MARGO_RPC_HANDLER(reg_rpc);
 

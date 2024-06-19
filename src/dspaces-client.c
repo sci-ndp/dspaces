@@ -2838,6 +2838,8 @@ int dspaces_op_calc(dspaces_client_t client, struct ds_data_expr *expr,
     hg_return_t hret;
     int ret;
 
+    DEBUG_OUT("Sending expression type %i\n", expr->type);
+
     in.expr = expr;
     cbuf = malloc(expr->size);
 
