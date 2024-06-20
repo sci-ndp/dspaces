@@ -7,6 +7,8 @@
 #include "dspaces-server.h"
 #include "dspaces-ops.h"
 #include "dspaces-conf.h"
+#include "dspaces-modules.h"
+#include "dspaces-remote.h"
 #include "dspaces-storage.h"
 #include "dspaces.h"
 #include "dspacesp.h"
@@ -69,46 +71,6 @@ struct addr_list_entry {
     char *addr;
 };
 
-#define DSPACES_ARG_REAL 0
-#define DSPACES_ARG_INT 1
-#define DSPACES_ARG_STR 2
-#define DSPACES_ARG_NONE 3
-struct dspaces_module_args {
-    char *name;
-    int type;
-    int len;
-    union {
-        double rval;
-        long ival;
-        double *rarray;
-        long *iarray;
-        char *strval;
-    };
-};
-
-#define DSPACES_MOD_RET_ARRAY 0
-struct dspaces_module_ret {
-    int type;
-    int len;
-    uint64_t *dim;
-    int ndim;
-    int tag;
-    int elem_size;
-    enum storage_type st;
-    void *data;
-};
-
-#define DSPACES_MOD_PY 0
-struct dspaces_module {
-    char *name;
-    int type;
-    union {
-#ifdef DSPACES_HAVE_PYTHON
-        PyObject *pModule;
-#endif // DSPACES_HAVE_PYTHON
-    };
-};
-
 struct dspaces_provider {
     struct ds_conf conf;
     struct list_head dirs;
@@ -136,8 +98,7 @@ struct dspaces_provider {
     hg_id_t get_vars_id;
     hg_id_t get_var_objs_id;
     hg_id_t reg_id;
-    int nmods;
-    struct dspaces_module *mods;
+    struct list_head mods;
     struct ds_gspace *dsg;
     char **server_address;
     char **node_names;
@@ -723,30 +684,20 @@ static void drain_thread(void *arg)
 }
 
 #ifdef DSPACES_HAVE_PYTHON
-static void *bootstrap_python()
+static void *bootstrap_python(dspaces_provider_t server)
 {
-    Py_Initialize();
-    import_array();
-}
-
-static int dspaces_init_py_mods(dspaces_provider_t server,
-                                struct dspaces_module **pmodsp)
-{
-    static const char *static_pmods[][2] = {{"goes17", "s3nc_mod"},
-                                            {"planetary", "azure_mod"},
-                                            {"cmips3", "s3cmip_mod"}};
     char *pypath = getenv("PYTHONPATH");
     char *new_pypath;
     int pypath_len;
-    struct dspaces_module *pmods;
-    int npmods = sizeof(static_pmods) / sizeof(static_pmods[0]);
-    PyObject *pName;
-    int i;
+
+    Py_Initialize();
+    import_array();
 
     pypath_len = strlen(xstr(DSPACES_MOD_DIR)) + 1;
     if(pypath) {
         pypath_len += strlen(pypath) + 1;
     }
+
     new_pypath = malloc(pypath_len);
     if(pypath) {
         sprintf(new_pypath, "%s:%s", xstr(DSPACES_MOD_DIR), pypath);
@@ -755,37 +706,8 @@ static int dspaces_init_py_mods(dspaces_provider_t server,
     }
     setenv("PYTHONPATH", new_pypath, 1);
     DEBUG_OUT("New PYTHONPATH is %s\n", new_pypath);
-
-    bootstrap_python();
-
-    pmods = malloc(sizeof(*pmods) * npmods);
-    for(i = 0; i < npmods; i++) {
-        pmods[i].name = strdup(static_pmods[i][0]);
-        pmods[i].type = DSPACES_MOD_PY;
-        pName = PyUnicode_DecodeFSDefault(static_pmods[i][1]);
-        pmods[i].pModule = PyImport_Import(pName);
-        if(pmods[i].pModule == NULL) {
-            fprintf(stderr,
-                    "WARNING: could not load %s mod from %s. File missing? Any "
-                    "%s accesses will fail.\n",
-                    static_pmods[i][1], xstr(DSPACES_MOD_DIR), pmods[i].name);
-        }
-        Py_DECREF(pName);
-    }
-    free(new_pypath);
-
-    *pmodsp = pmods;
-
-    return (npmods);
 }
 #endif // DSPACES_HAVE_PYTHON
-
-void dspaces_init_mods(dspaces_provider_t server)
-{
-#ifdef DSPACES_HAVE_PYTHON
-    server->nmods = dspaces_init_py_mods(server, &server->mods);
-#endif // DSPACES_HAVE_PYTHON
-}
 
 int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                         const char *conf_file, dspaces_provider_t *sv)
@@ -793,6 +715,7 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     const char *envdebug = getenv("DSPACES_DEBUG");
     const char *envnthreads = getenv("DSPACES_NUM_HANDLERS");
     const char *envdrain = getenv("DSPACES_DRAIN");
+    const char *mod_dir_str = xstr(DSPACES_MOD_DIR);
     dspaces_provider_t server;
     hg_class_t *hg;
     static int is_initialized = 0;
@@ -832,10 +755,14 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     MPI_Comm_dup(comm, &server->comm);
     MPI_Comm_rank(comm, &server->rank);
 
-    dspaces_init_mods(server);
+#ifdef DSPACES_HAVE_PYTHON
+    bootstrap_python(server);
+#endif // DSPACES_HAVE_PYTHON
 
-    const char *mod_dir_str = xstr(DSPACES_MOD_DIR);
-    DEBUG_OUT("module directory is %s\n", mod_dir_str);
+    
+    DEBUG_OUT("module directory is %s\n", mod_dir_str); 
+    INIT_LIST_HEAD(&server->mods);
+    dspaces_init_mods(&server->mods);
 
     margo_set_environment(NULL);
     sprintf(margo_conf,
@@ -1586,265 +1513,6 @@ static int query_remotes(dspaces_provider_t server, obj_descriptor *q_odsc,
     }
 }
 
-struct dspaces_module *dspaces_find_mod(dspaces_provider_t server,
-                                        const char *mod_name)
-{
-    int i;
-
-    for(i = 0; i < server->nmods; i++) {
-        if(strcmp(mod_name, server->mods[i].name) == 0) {
-            return (&server->mods[i]);
-        }
-    }
-
-    return (NULL);
-}
-
-#ifdef DSPACES_HAVE_PYTHON
-PyObject *py_obj_from_arg(struct dspaces_module_args *arg)
-{
-    PyObject *pArg;
-    int i;
-
-    switch(arg->type) {
-    case DSPACES_ARG_REAL:
-        if(arg->len == -1) {
-            return (PyFloat_FromDouble(arg->rval));
-        }
-        pArg = PyTuple_New(arg->len);
-        for(i = 0; i < arg->len; i++) {
-            PyTuple_SetItem(pArg, i, PyFloat_FromDouble(arg->rarray[i]));
-        }
-        return (pArg);
-    case DSPACES_ARG_INT:
-        if(arg->len == -1) {
-            return (PyLong_FromLong(arg->ival));
-        }
-        pArg = PyTuple_New(arg->len);
-        for(i = 0; i < arg->len; i++) {
-            PyTuple_SetItem(pArg, i, PyLong_FromLong(arg->iarray[i]));
-        }
-        return (pArg);
-    case DSPACES_ARG_STR:
-        return (PyUnicode_DecodeFSDefault(arg->strval));
-    case DSPACES_ARG_NONE:
-        return (Py_None);
-    default:
-        fprintf(stderr, "ERROR: unknown arg type in %s (%d)\n", __func__,
-                arg->type);
-    }
-
-    return (NULL);
-}
-
-static struct dspaces_module_ret *py_res_buf(PyObject *pResult)
-{
-    PyArrayObject *pArray;
-    struct dspaces_module_ret *ret = malloc(sizeof(*ret));
-    size_t data_len;
-    int flags;
-    npy_intp *dims;
-    int i;
-
-    pArray = (PyArrayObject *)pResult;
-    flags = PyArray_FLAGS(pArray);
-    if(flags & NPY_ARRAY_C_CONTIGUOUS) {
-        ret->st = row_major;
-    } else if(flags & NPY_ARRAY_F_CONTIGUOUS) {
-        ret->st = column_major;
-    } else {
-        fprintf(stderr, "WARNING: bad array alignment in %s\n", __func__);
-        return (NULL);
-    }
-    ret->ndim = PyArray_NDIM(pArray);
-    ret->dim = malloc(sizeof(*ret->dim * ret->ndim));
-    dims = PyArray_DIMS(pArray);
-    ret->len = 1;
-    for(i = 0; i < ret->ndim; i++) {
-        ret->dim[ret->st == column_major ? i : (ret->ndim - i) - 1] = dims[i];
-        ret->len *= dims[i];
-    }
-    ret->tag = PyArray_TYPE(pArray);
-    ret->elem_size = PyArray_ITEMSIZE(pArray);
-    data_len = ret->len * ret->elem_size;
-    ret->data = malloc(data_len);
-
-    memcpy(ret->data, PyArray_DATA(pArray), data_len);
-
-    return (ret);
-}
-
-static struct dspaces_module_ret *py_res_to_ret(PyObject *pResult, int ret_type)
-{
-    struct dspaces_module_ret *ret;
-
-    switch(ret_type) {
-    case DSPACES_MOD_RET_ARRAY:
-        return (py_res_buf(pResult));
-    default:
-        fprintf(stderr, "ERROR: unknown module return type in %s (%d)\n",
-                __func__, ret_type);
-        return (NULL);
-    }
-}
-
-static struct dspaces_module_ret *
-dspaces_module_py_exec(dspaces_provider_t server, struct dspaces_module *mod,
-                       const char *operation, struct dspaces_module_args *args,
-                       int nargs, int ret_type)
-{
-    PyObject *pFunc = PyObject_GetAttrString(mod->pModule, operation);
-    PyObject *pKey, *pArg, *pArgs, *pKWArgs;
-    PyObject *pResult;
-    struct dspaces_module_ret *ret;
-    int i;
-
-    DEBUG_OUT("doing python module exec.\n");
-    if(!pFunc || !PyCallable_Check(pFunc)) {
-        fprintf(
-            stderr,
-            "ERROR! Could not find executable function '%s' in module '%s'\n",
-            operation, mod->name);
-        return (NULL);
-    }
-    pArgs = PyTuple_New(0);
-    pKWArgs = PyDict_New();
-    for(i = 0; i < nargs; i++) {
-        pKey = PyUnicode_DecodeFSDefault(args[i].name);
-        pArg = py_obj_from_arg(&args[i]);
-        PyDict_SetItem(pKWArgs, pKey, pArg);
-        Py_DECREF(pKey);
-        Py_DECREF(pArg);
-    }
-    pResult = PyObject_Call(pFunc, pArgs, pKWArgs);
-    if(!pResult) {
-        PyErr_Print();
-        ret = NULL;
-    } else {
-        ret = py_res_to_ret(pResult, ret_type);
-        Py_DECREF(pResult);
-    }
-
-    Py_DECREF(pArgs);
-    Py_DECREF(pKWArgs);
-    Py_DECREF(pFunc);
-
-    return (ret);
-}
-#endif // DSPACES_HAVE_PYTHON
-
-static struct dspaces_module_ret *
-dspaces_module_exec(dspaces_provider_t server, const char *mod_name,
-                    const char *operation, struct dspaces_module_args *args,
-                    int nargs, int ret_type)
-{
-    struct dspaces_module *mod = dspaces_find_mod(server, mod_name);
-
-    DEBUG_OUT("sending '%s' to module '%s'\n", operation, mod->name);
-    if(mod->type == DSPACES_MOD_PY) {
-#ifdef DSPACES_HAVE_PYTHON
-        return (dspaces_module_py_exec(server, mod, operation, args, nargs,
-                                       ret_type));
-#else
-        fprintf(stderr, "WARNNING: tried to execute python module, but not "
-                        "python support.\n");
-        return (NULL);
-#endif // DSPACES_HAVE_PYTHON
-    } else {
-        fprintf(stderr, "ERROR: unknown module request in %s.\n", __func__);
-        return (NULL);
-    }
-}
-
-static int build_module_args_from_odsc(obj_descriptor *odsc,
-                                       struct dspaces_module_args **argsp)
-{
-    struct dspaces_module_args *args;
-    int nargs = 4;
-    int ndims;
-    int i;
-
-    args = malloc(sizeof(*args) * nargs);
-
-    // odsc->name
-    args[0].name = strdup("name");
-    args[0].type = DSPACES_ARG_STR;
-    args[0].len = strlen(odsc->name) + 1;
-    args[0].strval = strdup(odsc->name);
-
-    // odsc->version
-    args[1].name = strdup("version");
-    args[1].type = DSPACES_ARG_INT;
-    args[1].len = -1;
-    args[1].ival = odsc->version;
-
-    ndims = odsc->bb.num_dims;
-    // odsc->bb.lb
-    args[2].name = strdup("lb");
-    if(ndims > 0) {
-        args[2].name = strdup("lb");
-        args[2].type = DSPACES_ARG_INT;
-        args[2].len = ndims;
-        args[2].iarray = malloc(sizeof(*args[2].iarray) * ndims);
-        for(i = 0; i < ndims; i++) {
-            if(odsc->st == row_major) {
-                args[2].iarray[i] = odsc->bb.lb.c[i];
-            } else {
-                args[2].iarray[(ndims - i) - 1] = odsc->bb.lb.c[i];
-            }
-        }
-    } else {
-        args[2].type = DSPACES_ARG_NONE;
-    }
-
-    // odsc->bb.ub
-    args[3].name = strdup("ub");
-    if(ndims > 0) {
-        args[3].type = DSPACES_ARG_INT;
-        args[3].len = ndims;
-        args[3].iarray = malloc(sizeof(*args[3].iarray) * ndims);
-        for(i = 0; i < ndims; i++) {
-            if(odsc->st == row_major) {
-                args[3].iarray[i] = odsc->bb.ub.c[i];
-            } else {
-                args[3].iarray[(ndims - i) - 1] = odsc->bb.ub.c[i];
-            }
-        }
-    } else {
-        args[3].type = DSPACES_ARG_NONE;
-    }
-
-    *argsp = args;
-    return (nargs);
-}
-
-static void free_arg(struct dspaces_module_args *arg)
-{
-    if(arg) {
-        free(arg->name);
-        if(arg->len > 0 && arg->type != DSPACES_ARG_NONE) {
-            free(arg->strval);
-        }
-    } else {
-        fprintf(stderr, "WARNING: trying to free NULL argument in %s\n",
-                __func__);
-    }
-}
-
-static void free_arg_list(struct dspaces_module_args *args, int len)
-{
-    int i;
-
-    if(args) {
-        for(i = 0; i < len; i++) {
-            free_arg(&args[i]);
-        }
-    } else if(len > 0) {
-        fprintf(stderr, "WARNING: trying to free NULL argument list in %s\n",
-                __func__);
-    }
-}
-
 static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
                           struct global_dimension *gdim)
 {
@@ -1870,7 +1538,7 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
         mod_desc += 2) {
         if(strstr(odsc->name, mod_desc[0]) == odsc->name) {
             nargs = build_module_args_from_odsc(odsc, &args);
-            res = dspaces_module_exec(server, mod_desc[1], "query", args, nargs,
+            res = dspaces_module_exec(&server->mods, mod_desc[1], "query", args, nargs,
                                       DSPACES_MOD_RET_ARRAY);
         }
     }
@@ -1893,6 +1561,7 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
                 DEBUG_OUT("returned data is cropped.\n");
                 obj_data_resize(odsc, res->dim);
             }
+            //TODO: refactor to convert ret->odsc in function
             od_odsc = malloc(sizeof(*od_odsc));
             memcpy(od_odsc, odsc, sizeof(*od_odsc));
             odsc_take_ownership(server, od_odsc);
