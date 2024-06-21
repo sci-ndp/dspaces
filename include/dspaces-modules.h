@@ -1,13 +1,11 @@
 #ifndef __DSPACES_MODULES_H__
 #define __DSPACES_MODULES_H__
 
-#include "list.h"
 #include "Python.h"
+#include "list.h"
 #include "ss_data.h"
 
-typedef enum dspaces_mod_type {
-    DSPACES_MOD_PY
-} dspaces_mod_type_t;
+typedef enum dspaces_mod_type { DSPACES_MOD_PY } dspaces_mod_type_t;
 
 struct dspaces_module {
     struct list_head entry;
@@ -60,13 +58,16 @@ struct dspaces_module_ret {
 int dspaces_init_mods(struct list_head *mods);
 
 int build_module_args_from_odsc(obj_descriptor *odsc,
-                                       struct dspaces_module_args **argsp);
+                                struct dspaces_module_args **argsp);
 
 void free_arg_list(struct dspaces_module_args *args, int len);
 
-struct dspaces_module_ret *
-dspaces_module_exec(struct list_head *mods, const char *mod_name,
-                    const char *operation, struct dspaces_module_args *args,
-                    int nargs, int ret_type);
+struct dspaces_module *dspaces_mod_by_od(struct list_head *mods,
+                                         obj_descriptor *odsc);
+
+struct dspaces_module_ret *dspaces_module_exec(struct dspaces_module *mod,
+                                               const char *operation,
+                                               struct dspaces_module_args *args,
+                                               int nargs, int ret_type);
 
 #endif // __DSPACES_MODULES_H__

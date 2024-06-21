@@ -1,8 +1,10 @@
 #include "dspaces-conf.h"
+#include "dspaces-modules.h"
 #include "dspaces-storage.h"
 #include "toml.h"
-#include <stdlib.h>
 #include <errno.h>
+#include <stdlib.h>
+#include <string.h>
 
 static void eat_spaces(char *line)
 {
@@ -22,13 +24,11 @@ static int parse_line(int lineno, char *line, struct ds_conf *conf)
     struct {
         const char *opt;
         int *pval;
-    } options[] = {
-            {"ndim", &conf->ndim},
-            {"dims", (int *)&conf->dims},
-            {"max_versions", &conf->max_versions},
-            {"hash_version", &conf->hash_version},
-            {"num_apps", &conf->num_apps}
-        };
+    } options[] = {{"ndim", &conf->ndim},
+                   {"dims", (int *)&conf->dims},
+                   {"max_versions", &conf->max_versions},
+                   {"hash_version", &conf->hash_version},
+                   {"num_apps", &conf->num_apps}};
 
     char *t;
     int i, n;
@@ -118,10 +118,10 @@ static int get_toml_int(toml_table_t *t, const char *key, int *i)
     if(toml_key_exists(t, key)) {
         dat = toml_int_in(t, key);
         *i = dat.u.i;
-        return(1);
+        return (1);
     }
 
-    return(0);
+    return (0);
 }
 
 static void get_toml_double(toml_table_t *t, const char *key, double *d)
@@ -134,7 +134,7 @@ static void get_toml_double(toml_table_t *t, const char *key, double *d)
     }
 }
 
-static void get_toml_str(toml_table_t *t, const char *key, char **str)
+static int get_toml_str(toml_table_t *t, const char *key, char **str)
 {
     toml_datum_t dat;
 
@@ -152,16 +152,16 @@ static int get_toml_arr_ui64(toml_table_t *t, const char *key, uint64_t *vals)
 
     arr = toml_array_in(t, key);
     if(!arr) {
-        return(0);
+        return (0);
     }
-    for(i = 0; ; i++) {
+    for(i = 0;; i++) {
         dat = toml_int_at(arr, i);
         if(!dat.ok) {
             break;
         }
         vals[i] = dat.u.i;
     }
-    return(i);
+    return (i);
 }
 
 static void parse_remotes_table(toml_table_t *remotes, struct ds_conf *conf)
@@ -214,7 +214,7 @@ static void parse_storage_table(toml_table_t *storage, struct ds_conf *conf)
             dat = toml_string_in(conf_dir, "files");
             if(dat.ok) {
                 if(strcmp(dat.u.s, "all") == 0) {
-                     dir->cont_type = DS_FILE_ALL;
+                    dir->cont_type = DS_FILE_ALL;
                 } else {
                     fprintf(stderr,
                             "ERROR: %s: invalid value for "
@@ -233,7 +233,42 @@ static void parse_storage_table(toml_table_t *storage, struct ds_conf *conf)
 
 static void parse_modules_table(toml_table_t *modules, struct ds_conf *conf)
 {
-    conf->nmod = toml_table_ntab(modules);
+    struct dspaces_module *mod;
+    toml_table_t *module;
+    char *server, *file, *url, *type, *ext;
+    int nmod;
+    int i;
+
+    nmod = toml_table_ntab(modules);
+    for(i = 0; i < nmod; i++) {
+        mod = calloc(1, sizeof(*mod));
+        mod->name = strdup(toml_key_in(modules, i));
+        module = toml_table_in(modules, mod->name);
+        get_toml_str(module, "namespace", &mod->namespace);
+        if(!mod->namespace) {
+            fprintf(stderr,
+                    "WARNING: No namespace for '%s'. Query matching currently "
+                    "requires a namespace.\n",
+                    mod->name);
+        }
+        get_toml_str(module, "file", &file);
+        if(file) {
+            ext = strrchr(file, '.');
+            if(strcmp(ext, ".py") == 0) {
+                mod->type = DSPACES_MOD_PY;
+                ext[0] = '\0';
+                mod->file = file;
+            } else {
+                fprintf(stderr,
+                        "WARNING: could not determine type of module '%s', "
+                        "with extension '%s'. Skipping.\n",
+                        mod->name, ext);
+                free(file);
+                continue;
+            }
+        }
+        list_add(&mod->entry, conf->mods);
+    }
 }
 
 int parse_conf_toml(const char *fname, struct ds_conf *conf)
@@ -290,7 +325,6 @@ int parse_conf_toml(const char *fname, struct ds_conf *conf)
     }
 
     toml_free(toml_conf);
-
 }
 
 void print_conf(struct ds_conf *conf)

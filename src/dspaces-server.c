@@ -5,9 +5,9 @@
  * See COPYRIGHT in top-level directory.
  */
 #include "dspaces-server.h"
-#include "dspaces-ops.h"
 #include "dspaces-conf.h"
 #include "dspaces-modules.h"
+#include "dspaces-ops.h"
 #include "dspaces-remote.h"
 #include "dspaces-storage.h"
 #include "dspaces.h"
@@ -158,8 +158,9 @@ static int init_sspace(dspaces_provider_t server, struct bbox *default_domain,
                        struct ds_gspace *dsg_l)
 {
     int err = -ENOMEM;
-    dsg_l->ssd = ssd_alloc(default_domain, dsg_l->size_sp, server->conf.max_versions,
-                        server->conf.hash_version);
+    dsg_l->ssd =
+        ssd_alloc(default_domain, dsg_l->size_sp, server->conf.max_versions,
+                  server->conf.hash_version);
     if(!dsg_l->ssd)
         goto err_out;
 
@@ -318,6 +319,9 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     server->conf.num_apps = -1;
 
     INIT_LIST_HEAD(&server->dirs);
+    INIT_LIST_HEAD(&server->mods);
+
+    // TODO: distribute configuration from root.
 
     ext = strrchr(conf_name, '.');
     if(!ext || strcmp(ext, ".toml") != 0) {
@@ -325,6 +329,7 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     } else {
         server->conf.dirs = &server->dirs;
         server->conf.remotes = &server->remotes;
+        server->conf.mods = &server->mods;
         err = parse_conf_toml(conf_name, &server->conf);
         server->nremote = server->conf.nremote;
     }
@@ -482,8 +487,9 @@ static struct sspace *lookup_sspace(dspaces_provider_t server,
     memcpy(&ssd_entry->gdim, &gdim, sizeof(struct global_dimension));
 
     DEBUG_OUT("allocate the ssd.\n");
-    ssd_entry->ssd = ssd_alloc(&domain, dsg_l->size_sp, server->conf.max_versions,
-                               server->conf.hash_version);
+    ssd_entry->ssd =
+        ssd_alloc(&domain, dsg_l->size_sp, server->conf.max_versions,
+                  server->conf.hash_version);
     if(!ssd_entry->ssd) {
         fprintf(stderr, "%s(): ssd_alloc failed for '%s'\n", __func__,
                 var_name);
@@ -690,9 +696,6 @@ static void *bootstrap_python(dspaces_provider_t server)
     char *new_pypath;
     int pypath_len;
 
-    Py_Initialize();
-    import_array();
-
     pypath_len = strlen(xstr(DSPACES_MOD_DIR)) + 1;
     if(pypath) {
         pypath_len += strlen(pypath) + 1;
@@ -706,6 +709,9 @@ static void *bootstrap_python(dspaces_provider_t server)
     }
     setenv("PYTHONPATH", new_pypath, 1);
     DEBUG_OUT("New PYTHONPATH is %s\n", new_pypath);
+
+    Py_Initialize();
+    import_array();
 }
 #endif // DSPACES_HAVE_PYTHON
 
@@ -758,11 +764,6 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
 #ifdef DSPACES_HAVE_PYTHON
     bootstrap_python(server);
 #endif // DSPACES_HAVE_PYTHON
-
-    
-    DEBUG_OUT("module directory is %s\n", mod_dir_str); 
-    INIT_LIST_HEAD(&server->mods);
-    dspaces_init_mods(&server->mods);
 
     margo_set_environment(NULL);
     sprintf(margo_conf,
@@ -1045,6 +1046,9 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     } else {
         DEBUG_OUT("Server will run indefinitely.\n");
     }
+
+    DEBUG_OUT("module directory is %s\n", mod_dir_str);
+    dspaces_init_mods(&server->mods);
 
     if(server->f_drain) {
         // thread to drain the data
@@ -1516,31 +1520,21 @@ static int query_remotes(dspaces_provider_t server, obj_descriptor *q_odsc,
 static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
                           struct global_dimension *gdim)
 {
-    static const char *module_nspaces[][2] = {
-        {"goes17\\", "goes17"},
-        {"cmip6-planetary\\", "planetary"},
-        {"cmip6-s3\\", "cmips3"},
-        {NULL, NULL}};
-    const char *s3nc_nspace = "goes17\\";
-    const char *azure_nspace = "cmip6-planetary\\";
-    const char *s3cmip_nspace = "cmip6-s3\\";
+    struct dspaces_module *mod;
     struct dspaces_module_args *args;
     struct dspaces_module_ret *res = NULL;
     struct obj_data *od;
     obj_descriptor *od_odsc;
-    char **mod_desc;
     int nargs;
     int i;
 
     DEBUG_OUT("Routing '%s'\n", odsc->name);
 
-    for(mod_desc = (char **)module_nspaces[0]; mod_desc[0] != NULL;
-        mod_desc += 2) {
-        if(strstr(odsc->name, mod_desc[0]) == odsc->name) {
-            nargs = build_module_args_from_odsc(odsc, &args);
-            res = dspaces_module_exec(&server->mods, mod_desc[1], "query", args, nargs,
-                                      DSPACES_MOD_RET_ARRAY);
-        }
+    mod = dspaces_mod_by_od(&server->mods, odsc);
+    if(mod) {
+        nargs = build_module_args_from_odsc(odsc, &args);
+        res = dspaces_module_exec(mod, "query", args, nargs,
+                                  DSPACES_MOD_RET_ARRAY);
     }
 
     if(res) {
@@ -1561,7 +1555,7 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
                 DEBUG_OUT("returned data is cropped.\n");
                 obj_data_resize(odsc, res->dim);
             }
-            //TODO: refactor to convert ret->odsc in function
+            // TODO: refactor to convert ret->odsc in function
             od_odsc = malloc(sizeof(*od_odsc));
             memcpy(od_odsc, odsc, sizeof(*od_odsc));
             odsc_take_ownership(server, od_odsc);
@@ -2551,13 +2545,15 @@ static void do_ops_rpc(hg_handle_t handle)
     buffer = malloc(res_buf_size);
     cbuffer = malloc(res_buf_size);
     if(expr->type == DS_VAL_INT) {
-        DEBUG_OUT("Executing integer operation on %li elements\n", res_buf_size / sizeof(int));
+        DEBUG_OUT("Executing integer operation on %li elements\n",
+                  res_buf_size / sizeof(int));
 #pragma omp for
         for(i = 0; i < res_buf_size / sizeof(int); i++) {
             ((int *)buffer)[i] = ds_op_calc_ival(expr, i, &err);
         }
     } else if(expr->type == DS_VAL_REAL) {
-        DEBUG_OUT("Executing real operation on %li elements\n", res_buf_size / sizeof(double));
+        DEBUG_OUT("Executing real operation on %li elements\n",
+                  res_buf_size / sizeof(double));
 #pragma omp for
         for(i = 0; i < res_buf_size / sizeof(double); i++) {
             ((double *)buffer)[i] = ds_op_calc_rval(expr, i, &err);
@@ -3191,7 +3187,8 @@ static void get_var_objs_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(get_var_objs_rpc)
 
-static void route_registration(dspaces_provider_t server, const char *type, const char *name, const char *reg_data)
+static void route_registration(dspaces_provider_t server, const char *type,
+                               const char *name, const char *reg_data)
 {
     // TODO
 }
@@ -3240,7 +3237,6 @@ static void reg_rpc(hg_handle_t handle)
     margo_free_input(handle, &in);
     margo_respond(handle, &out);
     margo_destroy(handle);
-
 }
 DEFINE_MARGO_RPC_HANDLER(reg_rpc);
 

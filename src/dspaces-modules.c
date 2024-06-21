@@ -18,40 +18,47 @@ static int dspaces_init_py_mod(struct dspaces_module *mod)
     pName = PyUnicode_DecodeFSDefault(mod->file);
     mod->pModule = PyImport_Import(pName);
     if(!mod->pModule) {
-        fprintf(stderr,
-                    "WARNING: could not load module '%s' from %s. File missing? Any "
-                    "%s accesses will fail.\n",
-                    mod->file, xstr(DSPACES_MOD_DIR), mod->name);
-        return(-1);
+        fprintf(
+            stderr,
+            "WARNING: could not load module '%s' from %s. File missing? Any "
+            "%s accesses will fail.\n",
+            mod->file, xstr(DSPACES_MOD_DIR), mod->name);
+        return (-1);
     }
     Py_DECREF(pName);
 
-    return(0);
+    return (0);
 }
-#endif //DSPACES_HAVE_PYTHON
+#endif // DSPACES_HAVE_PYTHON
 
 int dspaces_init_mods(struct list_head *mods)
 {
     struct dspaces_module *mod;
-    
-    list_for_each_entry(mod, mods, struct dspaces_module, entry) {
+
+    list_for_each_entry(mod, mods, struct dspaces_module, entry)
+    {
         switch(mod->type) {
-            case DSPACES_MOD_PY:
+        case DSPACES_MOD_PY:
 #ifdef DSPACES_HAVE_PYTHON
-                dspaces_init_py_mod(mod);
+            dspaces_init_py_mod(mod);
 #else
-                fprintf(stderr, "WARNING: Unable to load module '%s', which is a python module. DataSpaces was compiled without Python support.\n", mod->name);
-#endif //DSPACES_HAVE_PYTHON
-                break;
-            default:
-                fprintf(stderr, "WARNING: unknown type %i for module '%s'. Corruption?\n", mod->type, mod->name);
+            fprintf(stderr,
+                    "WARNING: Unable to load module '%s', which is a python "
+                    "module. DataSpaces was compiled without Python support.\n",
+                    mod->name);
+#endif // DSPACES_HAVE_PYTHON
+            break;
+        default:
+            fprintf(stderr,
+                    "WARNING: unknown type %i for module '%s'. Corruption?\n",
+                    mod->type, mod->name);
         }
         // TODO: unlink module on init failure?
     }
 }
 
 int build_module_args_from_odsc(obj_descriptor *odsc,
-                                       struct dspaces_module_args **argsp)
+                                struct dspaces_module_args **argsp)
 {
     struct dspaces_module_args *args;
     int nargs = 4;
@@ -140,12 +147,13 @@ void free_arg_list(struct dspaces_module_args *args, int len)
 }
 
 static struct dspaces_module *find_mod(struct list_head *mods,
-                                        const char *mod_name)
+                                       const char *mod_name)
 {
     struct dspaces_module *mod;
     int i;
 
-    list_for_each_entry(mod, mods, struct dspaces_module, entry) {
+    list_for_each_entry(mod, mods, struct dspaces_module, entry)
+    {
         if(strcmp(mod_name, mod->name) == 0) {
             return (mod);
         }
@@ -242,10 +250,27 @@ static struct dspaces_module_ret *py_res_to_ret(PyObject *pResult, int ret_type)
     }
 }
 
+struct dspaces_module *dspaces_mod_by_od(struct list_head *mods,
+                                         obj_descriptor *odsc)
+{
+    struct dspaces_module *mod;
+    int i;
+
+    list_for_each_entry(mod, mods, struct dspaces_module, entry)
+    {
+        // TODO: query mods for match
+        if(strstr(odsc->name, mod->namespace) == odsc->name) {
+            return (mod);
+        }
+    }
+
+    return (NULL);
+}
+
 static struct dspaces_module_ret *
-dspaces_module_py_exec(struct dspaces_module *mod,
-                       const char *operation, struct dspaces_module_args *args,
-                       int nargs, int ret_type)
+dspaces_module_py_exec(struct dspaces_module *mod, const char *operation,
+                       struct dspaces_module_args *args, int nargs,
+                       int ret_type)
 {
     PyObject *pFunc = PyObject_GetAttrString(mod->pModule, operation);
     PyObject *pKey, *pArg, *pArgs, *pKWArgs;
@@ -286,17 +311,14 @@ dspaces_module_py_exec(struct dspaces_module *mod,
 }
 #endif // DSPACES_HAVE_PYTHON
 
-struct dspaces_module_ret *
-dspaces_module_exec(struct list_head *mods, const char *mod_name,
-                    const char *operation, struct dspaces_module_args *args,
-                    int nargs, int ret_type)
+struct dspaces_module_ret *dspaces_module_exec(struct dspaces_module *mod,
+                                               const char *operation,
+                                               struct dspaces_module_args *args,
+                                               int nargs, int ret_type)
 {
-    struct dspaces_module *mod = find_mod(mods, mod_name);
-
     if(mod->type == DSPACES_MOD_PY) {
 #ifdef DSPACES_HAVE_PYTHON
-        return (dspaces_module_py_exec(mod, operation, args, nargs,
-                                       ret_type));
+        return (dspaces_module_py_exec(mod, operation, args, nargs, ret_type));
 #else
         fprintf(stderr, "WARNNING: tried to execute python module, but no "
                         "python support.\n");

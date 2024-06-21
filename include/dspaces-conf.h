@@ -17,7 +17,7 @@ struct ds_conf {
     struct list_head *dirs;
     struct remote **remotes;
     int nremote;
-    int nmod;
+    struct list_head *mods;
 };
 
 int parse_conf(const char *fname, struct ds_conf *conf);
