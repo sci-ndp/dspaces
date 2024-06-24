@@ -26,8 +26,9 @@ PyObject *wrapper_dspaces_init(int rank)
     Py_BEGIN_ALLOW_THREADS
     ret = dspaces_init(rank, clientp);
     Py_END_ALLOW_THREADS
-    // clang-format on
-    if(ret != 0) {
+        // clang-format on
+        if(ret != 0)
+    {
         sprintf(err_str, "dspaces_init() failed with %i", ret);
         PyErr_SetString(PyExc_RuntimeError, err_str);
         return NULL;
@@ -58,8 +59,9 @@ PyObject *wrapper_dspaces_init_mpi(PyObject *commpy)
     Py_BEGIN_ALLOW_THREADS
     ret = dspaces_init_mpi(*comm_p, clientp);
     Py_END_ALLOW_THREADS
-    // clang-format on
-    if(ret != 0) {
+        // clang-format on
+        if(ret != 0)
+    {
         sprintf(err_str, "dspaces_init_mpi() failed with %i", ret);
         PyErr_SetString(PyExc_RuntimeError, err_str);
         return NULL;
@@ -86,8 +88,9 @@ PyObject *wrapper_dspaces_init_wan(const char *listen_str, const char *conn,
     Py_BEGIN_ALLOW_THREADS
     ret = dspaces_init_wan(listen_str, conn, rank, clientp);
     Py_END_ALLOW_THREADS
-    // clang-format on
-    if(ret != 0) {
+        // clang-format on
+        if(ret != 0)
+    {
         sprintf(err_str, "dspaces_init_wan() failed with %i", ret);
         PyErr_SetString(PyExc_RuntimeError, err_str);
         return NULL;
@@ -119,8 +122,9 @@ PyObject *wrapper_dspaces_init_wan_mpi(const char *listen_str, const char *conn,
     Py_BEGIN_ALLOW_THREADS
     ret = dspaces_init_wan_mpi(listen_str, conn, *comm_p, clientp);
     Py_END_ALLOW_THREADS
-    // clang-format on
-    if(ret != 0) {
+        // clang-format on
+        if(ret != 0)
+    {
         sprintf(err_str, "dspaces_init_wan_mpi() failed with %i", ret);
         PyErr_SetString(PyExc_RuntimeError, err_str);
         return NULL;
@@ -152,8 +156,9 @@ PyObject *wrapper_dspaces_server_init(const char *listen_str, PyObject *commpy,
     Py_BEGIN_ALLOW_THREADS
     ret = dspaces_server_init(listen_str, *comm_p, conf, serverp);
     Py_END_ALLOW_THREADS
-    // clang-format on
-    if(ret != 0) {
+        // clang-format on
+        if(ret != 0)
+    {
         sprintf(err_str, "dspaces_init_mpi() failed with %i", ret);
         PyErr_SetString(PyExc_RuntimeError, err_str);
         return NULL;
@@ -204,20 +209,20 @@ void wrapper_dspaces_put(PyObject *clientppy, PyObject *obj, const char *name,
     PyObject *item;
     int i;
 
-    //Reverse order of indices
+    // Reverse order of indices
     for(i = 0; i < ndim; i++) {
         item = PyTuple_GetItem(offset, i);
-        lb[(ndim-1) - i] = PyLong_AsLong(item);
-        ub[(ndim-1) - i] = lb[(ndim-1) - i] + ((long)shape[i] - 1);
+        lb[(ndim - 1) - i] = PyLong_AsLong(item);
+        ub[(ndim - 1) - i] = lb[(ndim - 1) - i] + ((long)shape[i] - 1);
     }
 
     // clang-format off
     Py_BEGIN_ALLOW_THREADS
     dspaces_put_tag(*clientp, name, version, size, tag, ndim, lb, ub, data);
     Py_END_ALLOW_THREADS
-    // clang-format on
+        // clang-format on
 
-    return;
+        return;
 }
 
 PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
@@ -237,31 +242,30 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
     npy_intp dims[ndim];
     int i;
 
-     //Reverse order of indices
+    // Reverse order of indices
     for(i = 0; i < ndim; i++) {
         item = PyTuple_GetItem(lbt, i);
-        lb[(ndim-1) - i] = PyLong_AsLong(item);
+        lb[(ndim - 1) - i] = PyLong_AsLong(item);
         item = PyTuple_GetItem(ubt, i);
-        ub[(ndim-1) - i] = PyLong_AsLong(item);
+        ub[(ndim - 1) - i] = PyLong_AsLong(item);
     }
 
     in_req.var_name = strdup(name);
     in_req.ver = version;
     in_req.ndim = ndim;
     in_req.lb = lb;
-    in_req.ub = ub; 
+    in_req.ub = ub;
 
     // clang-format off
     Py_BEGIN_ALLOW_THREADS 
     dspaces_get_req(*clientp, &in_req, &out_req, timeout);
     Py_END_ALLOW_THREADS
-    // clang-format on
-    data = out_req.buf;
+        // clang-format on
+        data = out_req.buf;
 
     free(in_req.var_name);
 
-    if(data == NULL)
-    {
+    if(data == NULL) {
         Py_INCREF(Py_None);
         return (Py_None);
     }
@@ -274,7 +278,7 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
 
     ndim = out_req.ndim;
     for(i = 0; i < ndim; i++) {
-        dims[(ndim-1) - i] = ((out_req.ub[i] - out_req.lb[i]) + 1);
+        dims[(ndim - 1) - i] = ((out_req.ub[i] - out_req.lb[i]) + 1);
     }
 
     arr = PyArray_NewFromDescr(&PyArray_Type, descr, ndim, dims, NULL, data, 0,
@@ -303,19 +307,21 @@ PyObject *wrapper_dspaces_pexec(PyObject *clientppy, PyObject *req_list,
 
     for(i = 0; i < num_reqs; i++) {
         req_dict = PyList_GetItem(req_list, i);
-        reqs[i].var_name = strdup(PyBytes_AsString(PyDict_GetItemString(req_dict, "var_name")));
+        reqs[i].var_name = strdup(
+            PyBytes_AsString(PyDict_GetItemString(req_dict, "var_name")));
         reqs[i].ver = PyLong_AsLong(PyDict_GetItemString(req_dict, "ver"));
         lbt = PyDict_GetItemString(req_dict, "lb");
         ubt = PyDict_GetItemString(req_dict, "ub");
-        
+
         if(lbt == Py_None || ubt == Py_None) {
             if(lbt != ubt) {
                 PyErr_SetString(PyExc_TypeError,
-                            "both lb and ub must be set or neither");
+                                "both lb and ub must be set or neither");
                 return (NULL);
             }
         } else if(PyTuple_GET_SIZE(lbt) != PyTuple_GET_SIZE(ubt)) {
-            PyErr_SetString(PyExc_TypeError, "lb and ub must have the same length");
+            PyErr_SetString(PyExc_TypeError,
+                            "lb and ub must have the same length");
             return (NULL);
         } else if(lbt == Py_None) {
             reqs[i].ndim = 0;
@@ -326,19 +332,19 @@ PyObject *wrapper_dspaces_pexec(PyObject *clientppy, PyObject *req_list,
 
         lb = malloc(sizeof(*lb) * ndim);
         ub = malloc(sizeof(*ub) * ndim);
-        //Reverse order of indices
+        // Reverse order of indices
         for(j = 0; j < ndim; j++) {
             item = PyTuple_GetItem(lbt, j);
-            lb[(ndim-1) - j] = PyLong_AsLong(item);
+            lb[(ndim - 1) - j] = PyLong_AsLong(item);
             item = PyTuple_GetItem(ubt, j);
-            ub[(ndim-1) - j] = PyLong_AsLong(item);
+            ub[(ndim - 1) - j] = PyLong_AsLong(item);
         }
         reqs[i].lb = lb;
         reqs[i].ub = ub;
 
         if(!PyBytes_Check(fn)) {
             PyErr_SetString(PyExc_TypeError,
-                        "fn must be serialized as a a byte string");
+                            "fn must be serialized as a a byte string");
             return (NULL);
         }
     }
@@ -347,11 +353,14 @@ PyObject *wrapper_dspaces_pexec(PyObject *clientppy, PyObject *req_list,
     dspaces_mpexec(*clientp, num_reqs, reqs, PyBytes_AsString(fn),
                   PyBytes_Size(fn) + 1, fn_name, &data, &data_size);
     Py_END_ALLOW_THREADS
-    // clang-format on
+        // clang-format on
 
-    if(data_size > 0) {
+        if(data_size > 0)
+    {
         result = PyBytes_FromStringAndSize(data, data_size);
-    } else {
+    }
+    else
+    {
         Py_INCREF(Py_None);
         result = Py_None;
     }
@@ -377,7 +386,7 @@ void wrapper_dspaces_define_gdim(PyObject *clientppy, const char *name,
 
     for(i = 0; i < ndim; i++) {
         item = PyTuple_GetItem(gdimt, i);
-        gdim[(ndim-1) - i] = PyLong_AsLong(item);
+        gdim[(ndim - 1) - i] = PyLong_AsLong(item);
     }
 
     dspaces_define_gdim(*clientp, name, ndim, gdim);
