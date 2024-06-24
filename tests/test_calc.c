@@ -1,17 +1,18 @@
 /*
- * Copyright (c) 2022, Scientific Computing & Imagine Institute, University of Utah
+ * Copyright (c) 2022, Scientific Computing & Imagine Institute, University of
+ * Utah
  *
  * See COPYRIGHT in top-level directory.
  */
 
 #include <mpi.h>
 
-#include <dspaces.h>
 #include <dspaces-ops.h>
+#include <dspaces.h>
 
-#include<stdint.h>
-#include<stdio.h>
-#include<stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 int main(int argc, char **argv)
 {
@@ -53,13 +54,16 @@ int main(int argc, char **argv)
     one_minus_a_plus_b = dspaces_op_new_sub(const_1, a_plus_b);
     dspaces_op_calc(client, one_minus_a_plus_b, (void **)&result);
     for(i = 0; i < gdim[0]; i++) {
-         for(j = 0; j < gdim[1]; j++) {
-            if(result[(i * gdim[1]) + j] != 1 - (a[(i * gdim[1]) + j] + b[(i * gdim[1]) + j])) {
+        for(j = 0; j < gdim[1]; j++) {
+            if(result[(i * gdim[1]) + j] !=
+               1 - (a[(i * gdim[1]) + j] + b[(i * gdim[1]) + j])) {
                 fprintf(stderr, "Bad value at (%i, %i)\n", i, j);
-                fprintf(stderr, " Expected %lf, but got %lf\n", 1 - (a[(i * gdim[1]) + j] + b[(i * gdim[1]) + j]), result[(i * gdim[1]) + j]);
-                return(-1);
+                fprintf(stderr, " Expected %lf, but got %lf\n",
+                        1 - (a[(i * gdim[1]) + j] + b[(i * gdim[1]) + j]),
+                        result[(i * gdim[1]) + j]);
+                return (-1);
             }
-         }
+        }
     }
 
     fprintf(stderr, "result[100] = %lf\n", result[100]);
