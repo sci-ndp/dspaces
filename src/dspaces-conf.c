@@ -5,6 +5,12 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef DSPACES_HAVE_CURL
+#include <curl/curl.h>
+#endif
+
+#define xstr(s) str(s)
+#define str(s) #s
 
 static void eat_spaces(char *line)
 {
@@ -236,7 +242,13 @@ static void parse_modules_table(toml_table_t *modules, struct ds_conf *conf)
     struct dspaces_module *mod;
     toml_table_t *module;
     char *server, *file, *url, *type, *ext;
+    char *fname;
+    char *arg_part;
+    FILE *mod_file;
     int nmod;
+#ifdef DSPACES_HAVE_CURL
+    CURL *curl = curl_easy_init();
+#endif
     int i;
 
     nmod = toml_table_ntab(modules);
@@ -251,7 +263,34 @@ static void parse_modules_table(toml_table_t *modules, struct ds_conf *conf)
                     "requires a namespace.\n",
                     mod->name);
         }
+        url = NULL;
+        file = NULL;
+        get_toml_str(module, "url", &url);
         get_toml_str(module, "file", &file);
+        if(url) {
+#ifdef DSPACES_HAVE_CURL
+            if(!file) {
+                file = strdup(strrchr(url, '/')) + 1;
+                arg_part = strchr(file, '?');
+                if(arg_part) {
+                    arg_part[0] = '\0';
+                }
+            }
+            fname = malloc(strlen(xstr(DSPACES_MOD_DIR)) + strlen(file) + 2);
+            sprintf(fname, "%s/%s", xstr(DSPACES_MOD_DIR), file);
+            mod_file = fopen(fname, "wb");
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, mod_file);
+            curl_easy_setopt(curl, CURLOPT_URL, url);
+            curl_easy_perform(curl);
+            fclose(mod_file);
+            free(fname);
+#else
+            fprintf(stderr,
+                    "WARNING: could not download module '%s': compiled without "
+                    "curl support.\n",
+                    mod->name);
+#endif // DSPACES_HAVE_CURL
+        }
         if(file) {
             ext = strrchr(file, '.');
             if(strcmp(ext, ".py") == 0) {
@@ -269,6 +308,9 @@ static void parse_modules_table(toml_table_t *modules, struct ds_conf *conf)
         }
         list_add(&mod->entry, conf->mods);
     }
+#ifdef DSPACES_HAVE_CURL
+    curl_easy_cleanup(curl);
+#endif
 }
 
 int parse_conf_toml(const char *fname, struct ds_conf *conf)

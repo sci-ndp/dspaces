@@ -47,10 +47,14 @@ else()
 endif()
 
 if(Python_FOUND)
-    message(" ${PYTHON_INCLUDE_PATH} ${_Python_NumPy_INCLUDE_DIR}")
     target_link_libraries(dspaces-server Python::Python)
     target_include_directories (dspaces-server BEFORE PUBLIC ${PYTHON_INCLUDE_PATH} ${_Python_NumPy_INCLUDE_DIR})
     target_compile_definitions(dspaces-server PRIVATE DSPACES_HAVE_PYTHON)
+endif()
+
+if(CURL_FOUND)
+    target_link_libraries(dspaces-server curl)
+    target_include_directories (dspaces-server BEFORE PUBLIC ${CURL_INCLUDE_DIR})
 endif()
 
 target_compile_definitions(dspaces-server PRIVATE DSPACES_MOD_DIR=${CMAKE_INSTALL_PREFIX}/share/modules)
