@@ -3,6 +3,7 @@ from dspaces.dspaces_wrapper import *
 import numpy as np
 import dill as pickle
 from inspect import signature
+import json
 
 @dataclass
 class DSObject:
@@ -75,6 +76,12 @@ class DSClient:
         arg = DSObject(name=name, version=version, lb=lb, ub=ub)
         return(self.VecExec([arg], fn))
 
+    def Register(self, type, name, data):
+        return wrapper_dspaces_register(self.client,
+                                        type.encode('ascii'),
+                                        name.encode('ascii'),
+                                        json.dumps(data).encode('ascii'))
+    
     def VecExec(self, objs:list[DSObject] = [], fn=None):
         if objs and not hasattr(objs, '__iter__'):
             raise TypeError('reqs should be a list of arguments, if present')

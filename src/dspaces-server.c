@@ -3187,10 +3187,19 @@ static void get_var_objs_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(get_var_objs_rpc)
 
-static void route_registration(dspaces_provider_t server, const char *type,
-                               const char *name, const char *reg_data)
+static void route_registration(dspaces_provider_t server, reg_in_t *reg)
 {
-    // TODO
+    struct dspaces_module *mod;
+    int nargs;
+    struct dspaces_module_ret *res = NULL;
+    struct dspaces_module_args *args;
+
+    mod = dspaces_mod_by_name(&server->mods, "ds_reg");
+    if(mod) {
+        nargs = build_module_args_from_reg(reg, &args);
+        res = dspaces_module_exec(mod, "register", args, nargs,
+                                  DSPACES_MOD_RET_NONE);
+    }
 }
 
 static void reg_rpc(hg_handle_t handle)
@@ -3232,7 +3241,7 @@ static void reg_rpc(hg_handle_t handle)
     }
     out = in.id;
 
-    route_registration(server, in.type, in.name, in.reg_data);
+    route_registration(server, &in);
 
     margo_free_input(handle, &in);
     margo_respond(handle, &out);
@@ -3252,7 +3261,7 @@ void dspaces_server_fini(dspaces_provider_t server)
     if(err < 0) {
         fprintf(stderr, "ERROR: Python finalize failed with %d\n", err);
     }
-    DEBUG_OUT("fnalize complete\n");
+    DEBUG_OUT("finalize complete\n");
     free(server);
 }
 

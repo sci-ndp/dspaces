@@ -669,3 +669,14 @@ PyObject *wrapper_dspaces_ops_calc(PyObject *clientppy, PyObject *exprppy)
     arr = PyArray_SimpleNewFromData(ndim, array_dims, typenum, result_buf);
     return (arr);
 }
+
+PyObject *wrapper_dspaces_register(PyObject *clientppy, const char *type,
+                                   const char *name, const char *data)
+{
+    dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
+    long id;
+
+    id = dspaces_register(*clientp, type, name, data);
+
+    return (PyLong_FromLong(id));
+}

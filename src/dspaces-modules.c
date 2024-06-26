@@ -1,4 +1,5 @@
 #include "dspaces-modules.h"
+#include "ss_data.h"
 
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
@@ -31,9 +32,34 @@ static int dspaces_init_py_mod(struct dspaces_module *mod)
 }
 #endif // DSPACES_HAVE_PYTHON
 
+static void add_builtin_mods(struct list_head *mods)
+{
+    struct dspaces_module *builtins;
+    int nbuiltin = 0;
+    int i;
+
+#ifdef DSPACES_HAVE_PYTHON
+    nbuiltin++;
+#endif // DSPACES_HAVE_PYTHON
+    builtins = calloc(nbuiltin, sizeof(*builtins));
+
+#ifdef DSPACES_HAVE_PYTHON
+    builtins[nbuiltin - 1].file = strdup("ds_reg");
+    builtins[nbuiltin - 1].name = strdup("ds_reg");
+    builtins[nbuiltin - 1].namespace = strdup("ds_reg");
+    builtins[nbuiltin - 1].type = DSPACES_MOD_PY;
+#endif // DSPACES_HAVE_PYTHON
+
+    for(i = 0; i < nbuiltin; i++) {
+        list_add(&builtins[i].entry, mods);
+    }
+}
+
 int dspaces_init_mods(struct list_head *mods)
 {
     struct dspaces_module *mod;
+
+    add_builtin_mods(mods);
 
     list_for_each_entry(mod, mods, struct dspaces_module, entry)
     {
@@ -55,6 +81,43 @@ int dspaces_init_mods(struct list_head *mods)
         }
         // TODO: unlink module on init failure?
     }
+}
+
+int build_module_args_from_reg(reg_in_t *reg,
+                               struct dspaces_module_args **argsp)
+{
+    struct dspaces_module_args *args;
+    int nargs = 4;
+    int i;
+
+    args = malloc(sizeof(*args) * nargs);
+
+    // reg->type
+    args[0].name = strdup("type");
+    args[0].type = DSPACES_ARG_STR;
+    args[0].len = strlen(reg->type) + 1;
+    args[0].strval = strdup(reg->type);
+
+    // reg->name
+    args[1].name = strdup("name");
+    args[1].type = DSPACES_ARG_STR;
+    args[1].len = strlen(reg->name) + 1;
+    args[1].strval = strdup(reg->name);
+
+    // reg->reg_data
+    args[2].name = strdup("data");
+    args[2].type = DSPACES_ARG_STR;
+    args[2].len = strlen(reg->reg_data) + 1;
+    args[2].strval = strdup(reg->reg_data);
+
+    // reg->id
+    args[3].name = strdup("id");
+    args[3].type = DSPACES_ARG_INT;
+    args[3].len = -1;
+    args[3].ival = reg->id;
+
+    *argsp = args;
+    return (nargs);
 }
 
 int build_module_args_from_odsc(obj_descriptor *odsc,
@@ -243,6 +306,8 @@ static struct dspaces_module_ret *py_res_to_ret(PyObject *pResult, int ret_type)
     switch(ret_type) {
     case DSPACES_MOD_RET_ARRAY:
         return (py_res_buf(pResult));
+    case DSPACES_MOD_RET_NONE:
+        return (NULL);
     default:
         fprintf(stderr, "ERROR: unknown module return type in %s (%d)\n",
                 __func__, ret_type);
@@ -254,7 +319,6 @@ struct dspaces_module *dspaces_mod_by_od(struct list_head *mods,
                                          obj_descriptor *odsc)
 {
     struct dspaces_module *mod;
-    int i;
 
     list_for_each_entry(mod, mods, struct dspaces_module, entry)
     {
@@ -264,6 +328,20 @@ struct dspaces_module *dspaces_mod_by_od(struct list_head *mods,
         }
     }
 
+    return (NULL);
+}
+
+struct dspaces_module *dspaces_mod_by_name(struct list_head *mods,
+                                           const char *name)
+{
+    struct dspaces_module *mod;
+
+    list_for_each_entry(mod, mods, struct dspaces_module, entry)
+    {
+        if(strcmp(mod->name, name) == 0) {
+            return (mod);
+        }
+    }
     return (NULL);
 }
 

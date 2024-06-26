@@ -57,3 +57,6 @@ PyObject *wrapper_dspaces_op_new_pow(PyObject *exprppy1, PyObject *exprppy2);
 PyObject *wrapper_dspaces_op_new_arctan(PyObject *exprppy1);
 
 PyObject *wrapper_dspaces_ops_calc(PyObject *clientppy, PyObject *exprppy);
+
+PyObject *wrapper_dspaces_register(PyObject *clientppy, const char *type,
+                                   const char *name, const char *data);
