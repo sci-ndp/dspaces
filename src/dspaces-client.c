@@ -1723,7 +1723,7 @@ int dspaces_get_req(dspaces_client_t client, struct dspaces_req *in_req,
         elem_size = odsc_tab[0].size;
     } else {
         DEBUG_OUT("not setting element size because there are no result "
-                  "descriptors.");
+                  "descriptors.\n");
         data = NULL;
         return (ret);
     }

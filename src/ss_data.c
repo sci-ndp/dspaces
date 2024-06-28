@@ -1799,7 +1799,7 @@ int dht_find_entry_all(struct dht_entry *de, obj_descriptor *q_odsc,
     long num_elem;
     struct obj_desc_list *odscl;
     struct bbox isect;
-    int sub = timeout != 0 && de == de->ss->ent_self;
+    int sub = (timeout == -1 && de == de->ss->ent_self);
 
     n = q_odsc->version % de->odsc_size;
     num_elem = ssh_hash_elem_count(de->ss, &q_odsc->bb);
