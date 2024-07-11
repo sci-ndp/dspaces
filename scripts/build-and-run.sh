@@ -18,8 +18,12 @@ make install
 fi_info
 
 cd /
-${install_dir}/bin/dspaces_server ${ofi_str} &
-while [ -f conf.ds ] ; do
+if [ -f dspaces.toml ] ; then
+    ${install_dir}/bin/dspaces_server ${ofi_str} dspaces.toml &
+else
+    ${install_dir}/bin/dspaces_server ${ofi_str} &
+fi
+while [ ! -f conf.ds ] ; do
     sleep 1
 done
 sleep 2
