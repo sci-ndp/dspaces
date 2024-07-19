@@ -24,7 +24,7 @@ static int dspaces_init_py_mod(struct dspaces_module *mod)
             "WARNING: could not load module '%s' from %s. File missing? Any "
             "%s accesses will fail.\n",
             mod->file, xstr(DSPACES_MOD_DIR), mod->name);
-	PyError_Print();
+	PyErr_Print();
         return (-1);
     }
     Py_DECREF(pName);
