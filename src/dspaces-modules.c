@@ -23,7 +23,7 @@ static int dspaces_init_py_mod(struct dspaces_module *mod)
             stderr,
             "WARNING: could not load module '%s' from %s. File missing? Any "
             "%s accesses will fail.\n",
-            mod->file, xstr(DSPACES_MOD_DIR), mod->name);
+            mod->file, xstr(DSPACES_MOD_DIR), mod->name) PyError_Print();
         return (-1);
     }
     Py_DECREF(pName);
@@ -350,12 +350,19 @@ dspaces_module_py_exec(struct dspaces_module *mod, const char *operation,
                        struct dspaces_module_args *args, int nargs,
                        int ret_type)
 {
-    PyObject *pFunc = PyObject_GetAttrString(mod->pModule, operation);
+    PyObject *pFunc;
     PyObject *pKey, *pArg, *pArgs, *pKWArgs;
     PyObject *pResult;
     struct dspaces_module_ret *ret;
     int i;
 
+    if(!mod->pModule) {
+        fprintf(stderr, "ERROR: trying to run against failed Python module. "
+                        "Check for warnings from module load time.\n");
+        return (NULL);
+    }
+
+    pFunc = PyObject_GetAttrString(mod->pModule, operation);
     if(!pFunc || !PyCallable_Check(pFunc)) {
         fprintf(
             stderr,
