@@ -70,6 +70,8 @@ struct ds_data_expr *dspaces_op_new_iconst(long val)
     expr->type = DS_VAL_INT;
     expr->size = sizeof(int);
     expr->sub_expr = NULL;
+
+    return(expr);
 }
 
 struct ds_data_expr *dspaces_op_new_rconst(double val)
@@ -81,6 +83,8 @@ struct ds_data_expr *dspaces_op_new_rconst(double val)
     expr->type = DS_VAL_REAL;
     expr->size = sizeof(double);
     expr->sub_expr = NULL;
+
+    return(NULL);
 }
 
 struct ds_data_expr *dspaces_op_new_add(struct ds_data_expr *expr1,
