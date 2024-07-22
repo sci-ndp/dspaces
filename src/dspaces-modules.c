@@ -3,11 +3,10 @@
 
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
+#ifdef DSPACES_HAVE_PYTHON
 #include <Python.h>
 #include <numpy/ndarrayobject.h>
 #include <numpy/ndarraytypes.h>
-
-#ifdef DSPACES_HAVE_PYTHON
 
 #define xstr(s) str(s)
 #define str(s) #s
@@ -226,6 +225,36 @@ static struct dspaces_module *find_mod(struct list_head *mods,
     return (NULL);
 }
 
+struct dspaces_module *dspaces_mod_by_od(struct list_head *mods,
+                                         obj_descriptor *odsc)
+{
+    struct dspaces_module *mod;
+
+    list_for_each_entry(mod, mods, struct dspaces_module, entry)
+    {
+        // TODO: query mods for match
+        if(strstr(odsc->name, mod->namespace) == odsc->name) {
+            return (mod);
+        }
+    }
+
+    return (NULL);
+}
+
+struct dspaces_module *dspaces_mod_by_name(struct list_head *mods,
+                                           const char *name)
+{
+    struct dspaces_module *mod;
+
+    list_for_each_entry(mod, mods, struct dspaces_module, entry)
+    {
+        if(strcmp(mod->name, name) == 0) {
+            return (mod);
+        }
+    }
+    return (NULL);
+}
+
 #ifdef DSPACES_HAVE_PYTHON
 PyObject *py_obj_from_arg(struct dspaces_module_args *arg)
 {
@@ -314,36 +343,6 @@ static struct dspaces_module_ret *py_res_to_ret(PyObject *pResult, int ret_type)
                 __func__, ret_type);
         return (NULL);
     }
-}
-
-struct dspaces_module *dspaces_mod_by_od(struct list_head *mods,
-                                         obj_descriptor *odsc)
-{
-    struct dspaces_module *mod;
-
-    list_for_each_entry(mod, mods, struct dspaces_module, entry)
-    {
-        // TODO: query mods for match
-        if(strstr(odsc->name, mod->namespace) == odsc->name) {
-            return (mod);
-        }
-    }
-
-    return (NULL);
-}
-
-struct dspaces_module *dspaces_mod_by_name(struct list_head *mods,
-                                           const char *name)
-{
-    struct dspaces_module *mod;
-
-    list_for_each_entry(mod, mods, struct dspaces_module, entry)
-    {
-        if(strcmp(mod->name, name) == 0) {
-            return (mod);
-        }
-    }
-    return (NULL);
 }
 
 static struct dspaces_module_ret *

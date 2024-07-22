@@ -37,14 +37,15 @@ set(dspaces-server-src util.c bbox.c ss_data.c dspaces-server.c dspaces-conf.c d
 
 add_library(dspaces-server ${dspaces-server-src} ${dspaces-src})
 if(HAVE_DRC)
-    target_link_libraries (dspaces-server margo m pthread ${DRC_LIBRARIES} liblz4 ${CURL_LIBRARIES})
+    target_link_libraries (dspaces-server margo m pthread ${DRC_LIBRARIES} liblz4)
     target_include_directories (dspaces-server BEFORE PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include> ${DRC_INCLUDE_DIRS} ${CURL_INCLUDE_DIR})
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include> ${DRC_INCLUDE_DIRS})
 else()
-    target_link_libraries (dspaces-server margo m pthread liblz4 ${CURL_LIBRARIES})
+    target_link_libraries (dspaces-server margo m pthread liblz4)
     target_include_directories (dspaces-server BEFORE PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include> ${CURL_INCLUDE_DIR})
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>)
 endif()
+
 
 if(Python_FOUND)
     target_link_libraries(dspaces-server Python::Python)

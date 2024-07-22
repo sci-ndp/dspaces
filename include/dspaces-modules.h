@@ -1,7 +1,9 @@
 #ifndef __DSPACES_MODULES_H__
 #define __DSPACES_MODULES_H__
 
+#ifdef DSPACES_HAVE_PYTHON
 #include "Python.h"
+#endif // DSPACES_HAVE_PYTHON
 #include "list.h"
 #include "ss_data.h"
 
