@@ -923,7 +923,7 @@ static void copy_var_name_to_odsc(dspaces_client_t client, const char *var_name,
                                   obj_descriptor *odsc)
 {
     if(client->nspace) {
-        strncpy(odsc->name, client->nspace, strlen(client->nspace));
+        strncpy(odsc->name, client->nspace, sizeof(odsc->name) - 1);
         odsc->name[strlen(client->nspace)] = '\\';
         strncpy(&odsc->name[strlen(client->nspace) + 1], var_name,
                 (sizeof(odsc->name) - strlen(client->nspace)) - 1);
@@ -2690,7 +2690,7 @@ struct dspaces_sub_handle *dspaces_sub(dspaces_client_t client,
     memset(subh->q_odsc.bb.ub.c, 0, sizeof(uint64_t) * BBOX_MAX_NDIM);
     memcpy(subh->q_odsc.bb.lb.c, lb, sizeof(uint64_t) * ndim);
     memcpy(subh->q_odsc.bb.ub.c, ub, sizeof(uint64_t) * ndim);
-    strncpy(subh->q_odsc.name, var_name, strlen(var_name) + 1);
+    strncpy(subh->q_odsc.name, var_name, sizeof(subh->q_odsc.name) - 1);
     copy_var_name_to_odsc(client, var_name, &subh->q_odsc);
 
     // A hack to send our address to the server without using more space. This

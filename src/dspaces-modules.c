@@ -15,6 +15,10 @@ static int dspaces_init_py_mod(struct dspaces_module *mod)
 {
     PyObject *pName;
 
+    if(!mod->file) {
+        return(-1);
+    }
+
     pName = PyUnicode_DecodeFSDefault(mod->file);
     mod->pModule = PyImport_Import(pName);
     if(!mod->pModule) {
