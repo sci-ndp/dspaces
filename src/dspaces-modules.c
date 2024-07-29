@@ -19,6 +19,7 @@ static int dspaces_init_py_mod(struct dspaces_module *mod)
         return(-1);
     }
 
+    fprintf(stderr, "%s\n", mod->file);
     pName = PyUnicode_DecodeFSDefault(mod->file);
     mod->pModule = PyImport_Import(pName);
     if(!mod->pModule) {
@@ -41,8 +42,8 @@ static void add_builtin_mods(struct list_head *mods)
     struct dspaces_module *builtins;
     int nbuiltin = 0;
     int i;
-
 #ifdef DSPACES_HAVE_PYTHON
+    
     nbuiltin++;
 #endif // DSPACES_HAVE_PYTHON
     builtins = calloc(nbuiltin, sizeof(*builtins));
@@ -337,6 +338,10 @@ static struct dspaces_module_ret *py_res_to_ret(PyObject *pResult, int ret_type)
 {
     struct dspaces_module_ret *ret;
 
+    if(pResult == Py_None) {
+        return(NULL);
+    }
+
     switch(ret_type) {
     case DSPACES_MOD_RET_ARRAY:
         return (py_res_buf(pResult));
@@ -354,12 +359,14 @@ dspaces_module_py_exec(struct dspaces_module *mod, const char *operation,
                        struct dspaces_module_args *args, int nargs,
                        int ret_type)
 {
+    PyGILState_STATE gstate;
     PyObject *pFunc;
     PyObject *pKey, *pArg, *pArgs, *pKWArgs;
     PyObject *pResult;
     struct dspaces_module_ret *ret;
     int i;
 
+    gstate = PyGILState_Ensure();
     if(!mod->pModule) {
         fprintf(stderr, "ERROR: trying to run against failed Python module. "
                         "Check for warnings from module load time.\n");
@@ -395,6 +402,8 @@ dspaces_module_py_exec(struct dspaces_module *mod, const char *operation,
     Py_DECREF(pArgs);
     Py_DECREF(pKWArgs);
     Py_DECREF(pFunc);
+
+    PyGILState_Release(gstate);
 
     return (ret);
 }

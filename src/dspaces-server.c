@@ -46,10 +46,12 @@
     do {                                                                       \
         if(server->f_debug) {                                                  \
             ABT_unit_id tid;                                                   \
+            int es_rank;                                                       \
             ABT_thread_self_id(&tid);                                          \
+            ABT_self_get_xstream_rank(&es_rank);                               \
             fprintf(stderr,                                                    \
-                    "Rank %i: TID: %" PRIu64 " %s, line %i (%s): " dstr,       \
-                    server->rank, tid, __FILE__, __LINE__, __func__,           \
+                    "Rank %i: TID: %" PRIu64 " ES: %i %s, line %i (%s): " dstr,\
+                    server->rank, tid, es_rank, __FILE__, __LINE__, __func__,  \
                     ##__VA_ARGS__);                                            \
         }                                                                      \
     } while(0);
@@ -130,6 +132,14 @@ struct dspaces_provider {
 
     struct remote *remotes;
     int nremote;
+
+    int num_handlers;
+    int *handler_rmap;
+
+#ifdef DSPACES_HAVE_PYTHON
+    PyThreadState *main_state;
+    PyThreadState **handler_state;
+#endif // DSPACES_HAVE_PYTHON
 };
 
 DECLARE_MARGO_RPC_HANDLER(put_rpc)
@@ -695,6 +705,7 @@ static void *bootstrap_python(dspaces_provider_t server)
     char *pypath = getenv("PYTHONPATH");
     char *new_pypath;
     int pypath_len;
+    int i;
 
     pypath_len = strlen(xstr(DSPACES_MOD_DIR)) + 1;
     if(pypath) {
@@ -710,10 +721,45 @@ static void *bootstrap_python(dspaces_provider_t server)
     setenv("PYTHONPATH", new_pypath, 1);
     DEBUG_OUT("New PYTHONPATH is %s\n", new_pypath);
 
-    Py_Initialize();
+    Py_InitializeEx(0);
     import_array();
+    
+    server->handler_state = malloc(sizeof(*server->handler_state) * server->num_handlers);
 }
+
 #endif // DSPACES_HAVE_PYTHON
+
+static void init_rmap(struct dspaces_provider *server)
+{
+    int i;
+
+    server->handler_rmap = malloc(sizeof(*server->handler_rmap) * server->num_handlers);
+    for(i = 0; i < server->num_handlers; i++) {
+        server->handler_rmap[i] = -1;
+    }
+}
+
+static int get_handler_id(struct dspaces_provider *server)
+{
+    int es_rank;
+    int i;
+
+    ABT_self_get_xstream_rank(&es_rank);
+
+    for(i = 0; i < server->num_handlers; i++) {
+        if(server->handler_rmap[i] = -1) {
+            server->handler_rmap[i] = es_rank;
+        }
+
+        if(server->handler_rmap[i] == es_rank) {
+            return(i);
+        }
+    }
+
+    fprintf(stderr, "ERROR: more unique execution streams have called %s than have been allocated for RPC handlers.\n", __func__);
+
+    return(-1);
+}
 
 int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                         const char *conf_file, dspaces_provider_t *sv)
@@ -727,7 +773,6 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     static int is_initialized = 0;
     hg_bool_t flag;
     hg_id_t id;
-    int num_handlers = DSPACES_DEFAULT_NUM_HANDLERS;
     struct hg_init_info hii = {0};
     char margo_conf[1024];
     struct margo_init_info mii = {0};
@@ -749,9 +794,11 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
         server->f_debug = 1;
     }
 
+    server->num_handlers = DSPACES_DEFAULT_NUM_HANDLERS;
     if(envnthreads) {
-        num_handlers = atoi(envnthreads);
+        server->num_handlers = atoi(envnthreads);
     }
+    init_rmap(server);
 
     if(envdrain) {
         DEBUG_OUT("enabling data draining.\n");
@@ -761,14 +808,10 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     MPI_Comm_dup(comm, &server->comm);
     MPI_Comm_rank(comm, &server->rank);
 
-#ifdef DSPACES_HAVE_PYTHON
-    bootstrap_python(server);
-#endif // DSPACES_HAVE_PYTHON
-
     margo_set_environment(NULL);
     sprintf(margo_conf,
             "{ \"use_progress_thread\" : true, \"rpc_thread_count\" : %d }",
-            num_handlers);
+            server->num_handlers);
     hii.request_post_init = 1024;
     hii.auto_sm = 0;
     mii.hg_init_info = &hii;
@@ -1047,8 +1090,15 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
         DEBUG_OUT("Server will run indefinitely.\n");
     }
 
+#ifdef DSPACES_HAVE_PYTHON
+    bootstrap_python(server);
+#endif // DSPACES_HAVE_PYTHON
+
     DEBUG_OUT("module directory is %s\n", mod_dir_str);
     dspaces_init_mods(&server->mods);
+#ifdef DSPACES_HAVE_PYTHON
+    server->main_state = PyEval_SaveThread();
+#endif //DSPACES_HAVE_PYTHON
 
     if(server->f_drain) {
         // thread to drain the data
@@ -2562,7 +2612,6 @@ static void do_ops_rpc(hg_handle_t handle)
         fprintf(stderr, "ERROR: %s: invalid expression data type.\n", __func__);
         goto cleanup;
     }
-
     size = res_buf_size;
     hret = margo_bulk_create(mid, 1, (void **)&cbuffer, &size,
                              HG_BULK_READ_ONLY, &bulk_handle);
@@ -2628,6 +2677,7 @@ static PyObject *build_ndarray_from_od(struct obj_data *od)
 
 static void pexec_rpc(hg_handle_t handle)
 {
+    PyGILState_STATE gstate;
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
     const struct hg_info *info = margo_get_info(handle);
     dspaces_provider_t server =
@@ -2722,9 +2772,9 @@ static void pexec_rpc(hg_handle_t handle)
     } else if(from_objs) {
         free(from_objs);
     }
+    gstate = PyGILState_Ensure();
     array = build_ndarray_from_od(arg_obj);
 
-    // Race condition? Protect with mutex?
     if((pklmod == NULL) &&
        (pklmod = PyImport_ImportModuleNoBlock("dill")) == NULL) {
         margo_respond(handle, &out);
@@ -2804,12 +2854,14 @@ static void pexec_rpc(hg_handle_t handle)
     DEBUG_OUT("done with pexec handling\n");
 
     Py_XDECREF(array);
+    PyGILState_Release(gstate);
     obj_data_free(arg_obj);
 }
 DEFINE_MARGO_RPC_HANDLER(pexec_rpc)
 
 static void mpexec_rpc(hg_handle_t handle)
 {
+    PyGILState_STATE gstate;
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
     const struct hg_info *info = margo_get_info(handle);
     dspaces_provider_t server =
@@ -2876,6 +2928,7 @@ static void mpexec_rpc(hg_handle_t handle)
 
     arg_objs = calloc(num_args, sizeof(*arg_objs));
     arg_arrays = calloc(num_args, sizeof(*arg_arrays));
+    gstate = PyGILState_Ensure();
     for(i = 0; i < num_args; i++) {
         route_request(server, &in_odscs[i], &(server->dsg->default_gdim));
 
@@ -3029,6 +3082,7 @@ static void mpexec_rpc(hg_handle_t handle)
     DEBUG_OUT("done with pexec handling\n");
 
     Py_XDECREF(args);
+    PyGILState_Release(gstate);
     free(arg_arrays);
     if(num_args) {
         for(i = 0; i < num_args; i++) {
@@ -3251,11 +3305,12 @@ DEFINE_MARGO_RPC_HANDLER(reg_rpc);
 
 void dspaces_server_fini(dspaces_provider_t server)
 {
-    int err;
+    int err = 0;
 
     DEBUG_OUT("waiting for finalize to occur\n");
     margo_wait_for_finalize(server->mid);
 #ifdef DSPACES_HAVE_PYTHON
+    PyEval_RestoreThread(server->main_state);
     err = Py_FinalizeEx();
 #endif // DSPACES_HAVE_PYTHON
     if(err < 0) {
