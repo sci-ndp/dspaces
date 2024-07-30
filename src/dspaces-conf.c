@@ -140,7 +140,7 @@ static void get_toml_double(toml_table_t *t, const char *key, double *d)
     }
 }
 
-static int get_toml_str(toml_table_t *t, const char *key, char **str)
+static void get_toml_str(toml_table_t *t, const char *key, char **str)
 {
     toml_datum_t dat;
 
@@ -367,6 +367,8 @@ int parse_conf_toml(const char *fname, struct ds_conf *conf)
     }
 
     toml_free(toml_conf);
+
+    return (0);
 }
 
 void print_conf(struct ds_conf *conf)

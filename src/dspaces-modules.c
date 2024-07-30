@@ -16,7 +16,7 @@ static int dspaces_init_py_mod(struct dspaces_module *mod)
     PyObject *pName;
 
     if(!mod->file) {
-        return(-1);
+        return (-1);
     }
 
     fprintf(stderr, "%s\n", mod->file);
@@ -28,7 +28,7 @@ static int dspaces_init_py_mod(struct dspaces_module *mod)
             "WARNING: could not load module '%s' from %s. File missing? Any "
             "%s accesses will fail.\n",
             mod->file, xstr(DSPACES_MOD_DIR), mod->name);
-	PyErr_Print();
+        PyErr_Print();
         return (-1);
     }
     Py_DECREF(pName);
@@ -43,7 +43,7 @@ static void add_builtin_mods(struct list_head *mods)
     int nbuiltin = 0;
     int i;
 #ifdef DSPACES_HAVE_PYTHON
-    
+
     nbuiltin++;
 #endif // DSPACES_HAVE_PYTHON
     builtins = calloc(nbuiltin, sizeof(*builtins));
@@ -86,6 +86,8 @@ int dspaces_init_mods(struct list_head *mods)
         }
         // TODO: unlink module on init failure?
     }
+
+    return (0);
 }
 
 int build_module_args_from_reg(reg_in_t *reg,
@@ -339,7 +341,7 @@ static struct dspaces_module_ret *py_res_to_ret(PyObject *pResult, int ret_type)
     struct dspaces_module_ret *ret;
 
     if(pResult == Py_None) {
-        return(NULL);
+        return (NULL);
     }
 
     switch(ret_type) {

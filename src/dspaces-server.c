@@ -50,7 +50,8 @@
             ABT_thread_self_id(&tid);                                          \
             ABT_self_get_xstream_rank(&es_rank);                               \
             fprintf(stderr,                                                    \
-                    "Rank %i: TID: %" PRIu64 " ES: %i %s, line %i (%s): " dstr,\
+                    "Rank %i: TID: %" PRIu64                                   \
+                    " ES: %i %s, line %i (%s): " dstr,                         \
                     server->rank, tid, es_rank, __FILE__, __LINE__, __func__,  \
                     ##__VA_ARGS__);                                            \
         }                                                                      \
@@ -617,7 +618,7 @@ static int get_client_data(obj_descriptor odsc, dspaces_provider_t server)
     in.odsc.raw_odsc = (char *)(&odsc);
 
     hg_addr_t owner_addr;
-    size_t owner_addr_size = 128;
+    hg_size_t owner_addr_size = 128;
 
     margo_addr_self(server->mid, &owner_addr);
     margo_addr_to_string(server->mid, od->obj_desc.owner, &owner_addr_size,
@@ -723,8 +724,11 @@ static void *bootstrap_python(dspaces_provider_t server)
 
     Py_InitializeEx(0);
     import_array();
-    
-    server->handler_state = malloc(sizeof(*server->handler_state) * server->num_handlers);
+
+    server->handler_state =
+        malloc(sizeof(*server->handler_state) * server->num_handlers);
+
+    return (NULL);
 }
 
 #endif // DSPACES_HAVE_PYTHON
@@ -733,7 +737,8 @@ static void init_rmap(struct dspaces_provider *server)
 {
     int i;
 
-    server->handler_rmap = malloc(sizeof(*server->handler_rmap) * server->num_handlers);
+    server->handler_rmap =
+        malloc(sizeof(*server->handler_rmap) * server->num_handlers);
     for(i = 0; i < server->num_handlers; i++) {
         server->handler_rmap[i] = -1;
     }
@@ -747,18 +752,21 @@ static int get_handler_id(struct dspaces_provider *server)
     ABT_self_get_xstream_rank(&es_rank);
 
     for(i = 0; i < server->num_handlers; i++) {
-        if(server->handler_rmap[i] = -1) {
+        if(server->handler_rmap[i] == -1) {
             server->handler_rmap[i] = es_rank;
         }
 
         if(server->handler_rmap[i] == es_rank) {
-            return(i);
+            return (i);
         }
     }
 
-    fprintf(stderr, "ERROR: more unique execution streams have called %s than have been allocated for RPC handlers.\n", __func__);
+    fprintf(stderr,
+            "ERROR: more unique execution streams have called %s than have "
+            "been allocated for RPC handlers.\n",
+            __func__);
 
-    return(-1);
+    return (-1);
 }
 
 int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
@@ -1098,7 +1106,7 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     dspaces_init_mods(&server->mods);
 #ifdef DSPACES_HAVE_PYTHON
     server->main_state = PyEval_SaveThread();
-#endif //DSPACES_HAVE_PYTHON
+#endif // DSPACES_HAVE_PYTHON
 
     if(server->f_drain) {
         // thread to drain the data
@@ -1250,7 +1258,7 @@ static void address_translate(dspaces_provider_t server, char *addr_str)
 static void odsc_take_ownership(dspaces_provider_t server, obj_descriptor *odsc)
 {
     hg_addr_t owner_addr;
-    size_t owner_addr_size = 128;
+    hg_size_t owner_addr_size = 128;
 
     margo_addr_self(server->mid, &owner_addr);
     margo_addr_to_string(server->mid, odsc->owner, &owner_addr_size,
@@ -1305,7 +1313,7 @@ static void put_rpc(hg_handle_t handle)
 
     hg_size_t size = (in_odsc.size) * bbox_volume(&(in_odsc.bb));
 
-    DEBUG_OUT("Creating a bulk transfer buffer of size %li\n", size);
+    DEBUG_OUT("Creating a bulk transfer buffer of size %" PRIu64 "\n", size);
 
     hret = margo_bulk_create(mid, 1, (void **)&(od->data), &size,
                              HG_BULK_WRITE_ONLY, &bulk_handle);
@@ -1519,7 +1527,7 @@ static int query_remotes(dspaces_provider_t server, obj_descriptor *q_odsc,
     obj_descriptor *odsc;
     struct obj_data *od;
     hg_addr_t owner_addr;
-    size_t owner_addr_size = 128;
+    hg_size_t owner_addr_size = 128;
     int i;
 
     buf_size = obj_data_size(q_odsc);
@@ -1637,7 +1645,7 @@ static void send_tgt_rpc(dspaces_provider_t server, hg_id_t rpc_id, int target,
                          void *in, hg_addr_t *addr, hg_handle_t *h,
                          margo_request *req)
 {
-    DEBUG_OUT("sending rpc_id %lu to rank %i\n", rpc_id, target);
+    DEBUG_OUT("sending rpc_id %" PRIu64 " to rank %i\n", rpc_id, target);
     margo_addr_lookup(server->mid, server->server_address[target], addr);
     margo_create(server->mid, *addr, rpc_id, h);
     margo_iforward(*h, in, req);
@@ -2182,7 +2190,7 @@ static void get_rpc(hg_handle_t handle)
     cbuffer = malloc(size);
     hret = margo_bulk_create(mid, 1, (void **)&cbuffer, &size,
                              HG_BULK_READ_ONLY, &bulk_handle);
-    DEBUG_OUT("created bulk handle of size %li\n", size);
+    DEBUG_OUT("created bulk handle of size %" PRIu64 "\n", size);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s): margo_bulk_create() failure\n", __func__);
         out.ret = dspaces_ERR_MERCURY;
@@ -2197,7 +2205,8 @@ static void get_rpc(hg_handle_t handle)
         /* things like CPU->GPU transfer don't support compression, but we need
          * the client to tell us. */
         csize = LZ4_compress_default(od->data, cbuffer, size, size);
-        DEBUG_OUT("compressed result from %li to %i bytes.\n", size, csize);
+        DEBUG_OUT("compressed result from %" PRIu64 " to %i bytes.\n", size,
+                  csize);
         if(!csize) {
             DEBUG_OUT(
                 "compressed result could not fit in dst buffer - longer than "
@@ -2595,14 +2604,14 @@ static void do_ops_rpc(hg_handle_t handle)
     buffer = malloc(res_buf_size);
     cbuffer = malloc(res_buf_size);
     if(expr->type == DS_VAL_INT) {
-        DEBUG_OUT("Executing integer operation on %li elements\n",
+        DEBUG_OUT("Executing integer operation on %" PRIu64 " elements\n",
                   res_buf_size / sizeof(int));
 #pragma omp for
         for(i = 0; i < res_buf_size / sizeof(int); i++) {
             ((int *)buffer)[i] = ds_op_calc_ival(expr, i, &err);
         }
     } else if(expr->type == DS_VAL_REAL) {
-        DEBUG_OUT("Executing real operation on %li elements\n",
+        DEBUG_OUT("Executing real operation on %" PRIu64 " elements\n",
                   res_buf_size / sizeof(double));
 #pragma omp for
         for(i = 0; i < res_buf_size / sizeof(double); i++) {
@@ -2624,7 +2633,7 @@ static void do_ops_rpc(hg_handle_t handle)
 
     csize = LZ4_compress_default(buffer, cbuffer, size, size);
 
-    DEBUG_OUT("compressed result from %li to %i bytes.\n", size, csize);
+    DEBUG_OUT("compressed result from %" PRIu64 " to %i bytes.\n", size, csize);
     if(!csize) {
         DEBUG_OUT("compressed result could not fit in dst buffer - longer than "
                   "original! Sending uncompressed.\n");
@@ -3163,7 +3172,7 @@ static void get_vars_rpc(hg_handle_t handle)
     }
 
     rout.count = ds_str_hash_get_all(results, &rout.names);
-    DEBUG_OUT("returning %zi variable names\n", rout.count);
+    DEBUG_OUT("returning %" PRIu64 " variable names\n", rout.count);
     margo_respond(handle, &rout);
     for(i = 0; i < rout.count; i++) {
         free(rout.names[i]);

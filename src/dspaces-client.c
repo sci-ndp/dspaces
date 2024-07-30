@@ -1317,11 +1317,11 @@ static int get_data(dspaces_client_t client, int num_odscs,
 
         rdma_size[i] = (req_obj.size) * bbox_volume(&odsc_tab[i].bb);
 
-        DEBUG_OUT("For odsc %i, element size is %zi, and there are %li "
-                  "elements to fetch.\n",
+        DEBUG_OUT("For odsc %i, element size is %zi, and there are %" PRIu64
+                  " elements to fetch.\n",
                   i, req_obj.size, bbox_volume(&odsc_tab[i].bb));
 
-        DEBUG_OUT("creating bulk handle for buffer %p of size %li.\n",
+        DEBUG_OUT("creating bulk handle for buffer %p of size %" PRIu64 ".\n",
                   od[i]->data, rdma_size[i]);
         hret =
             margo_bulk_create(client->mid, 1, (void **)(&(od[i]->data)),
@@ -1367,7 +1367,8 @@ static int get_data(dspaces_client_t client, int num_odscs,
             // decompress into buffer and copy back
             ret = LZ4_decompress_safe(od[i]->data, ucbuffer, resp.len,
                                       rdma_size[i]);
-            DEBUG_OUT("decompressed from %li to %i bytes\n", resp.len, ret);
+            DEBUG_OUT("decompressed from %" PRIu64 " to %i bytes\n", resp.len,
+                      ret);
             if(ret != rdma_size[i]) {
                 fprintf(stderr, "LZ4 decompression failed with %i.\n", ret);
             }
@@ -1518,7 +1519,7 @@ int dspaces_put_local(dspaces_client_t client, const char *var_name,
                            }};
 
     hg_addr_t owner_addr;
-    size_t owner_addr_size = 128;
+    hg_size_t owner_addr_size = 128;
 
     margo_addr_self(client->mid, &owner_addr);
     margo_addr_to_string(client->mid, odsc.owner, &owner_addr_size, owner_addr);
@@ -1894,7 +1895,7 @@ int dspaces_get_meta(dspaces_client_t client, const char *name, int mode,
     DEBUG_OUT("Replied with version %d.\n", out.version);
 
     if(out.mdata.len) {
-        DEBUG_OUT("fetching %zi bytes.\n", out.mdata.len);
+        DEBUG_OUT("fetching %" PRIu64 " bytes.\n", out.mdata.len);
         *data = malloc(out.mdata.len);
         /*
         hret = margo_bulk_create(client->mid, 1, data, &out.size,
@@ -2294,7 +2295,7 @@ static void get_local_rpc(hg_handle_t handle)
     hg_size_t size = (in_odsc.size) * bbox_volume(&(in_odsc.bb));
     void *buffer = (void *)od->data;
 
-    DEBUG_OUT("creating buffer of size %zi\n", size);
+    DEBUG_OUT("creating buffer of size %" PRIu64 "\n", size);
     APEX_NAME_TIMER_START(4, "get_local_bulk_create");
     hret = margo_bulk_create(mid, 1, (void **)&buffer, &size, HG_BULK_READ_ONLY,
                              &bulk_handle);
@@ -2323,7 +2324,7 @@ static void get_local_rpc(hg_handle_t handle)
         int req_id = 0;
         size_t offset = 0;
         while(remaining) {
-            DEBUG_OUT("%li bytes left to transfer\n", remaining);
+            DEBUG_OUT("%" PRIu64 " bytes left to transfer\n", remaining);
             offset = size - remaining;
             xfer_size =
                 (remaining > BULK_TRANSFER_MAX) ? BULK_TRANSFER_MAX : remaining;
@@ -2649,7 +2650,7 @@ struct dspaces_sub_handle *dspaces_sub(dspaces_client_t client,
     struct dspaces_sub_handle *subh;
     odsc_gdim_t in;
     struct global_dimension od_gdim;
-    size_t owner_addr_size = 128;
+    hg_size_t owner_addr_size = 128;
     int ret;
 
     if(client->listener_init == 0) {
@@ -2871,8 +2872,9 @@ int dspaces_op_calc(dspaces_client_t client, struct ds_data_expr *expr,
     if(out.len) {
         *buf = malloc(rdma_size);
         ret = LZ4_decompress_safe(cbuf, *buf, out.len, rdma_size);
-        DEBUG_OUT("decompressed results from %zi to %zi bytes.\n", out.len,
-                  rdma_size);
+        DEBUG_OUT("decompressed results from %" PRIu64 " to %" PRIu64
+                  " bytes.\n",
+                  out.len, rdma_size);
         free(cbuf);
     } else {
         *buf = cbuf;
@@ -2880,6 +2882,8 @@ int dspaces_op_calc(dspaces_client_t client, struct ds_data_expr *expr,
 
     margo_free_output(handle, &out);
     margo_destroy(handle);
+
+    return (dspaces_SUCCESS);
 }
 
 void dspaces_set_namespace(dspaces_client_t client, const char *nspace)
@@ -2924,7 +2928,7 @@ int dspaces_get_var_names(dspaces_client_t client, char ***var_names)
         return (-1);
     }
 
-    DEBUG_OUT("Received %zi variables in reply\n", out.count);
+    DEBUG_OUT("Received %" PRIu64 " variables in reply\n", out.count);
 
     *var_names = malloc(sizeof(*var_names) * out.count);
     for(i = 0; i < out.count; i++) {
