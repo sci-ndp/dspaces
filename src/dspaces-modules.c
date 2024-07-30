@@ -19,7 +19,6 @@ static int dspaces_init_py_mod(struct dspaces_module *mod)
         return (-1);
     }
 
-    fprintf(stderr, "%s\n", mod->file);
     pName = PyUnicode_DecodeFSDefault(mod->file);
     mod->pModule = PyImport_Import(pName);
     if(!mod->pModule) {

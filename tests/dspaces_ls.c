@@ -29,6 +29,8 @@ int ls_all(dspaces_client_t dsp)
     if(count) {
         free(names);
     }
+
+    return(0);
 }
 
 int ls_one(dspaces_client_t dsp, const char *name)
@@ -59,6 +61,8 @@ int ls_one(dspaces_client_t dsp, const char *name)
     if(count) {
         free(found_objs);
     }
+
+    return(0);
 }
 
 int main(int argc, char **argv)
