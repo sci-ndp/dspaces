@@ -1006,13 +1006,20 @@ int dspaces_put_tag(dspaces_client_t client, const char *var_name,
     hg_return_t hret;
     bulk_gdim_t in;
     bulk_out_t out;
+    int type;
     int ret = dspaces_SUCCESS;
+
+    if(elem_size < 0) {
+        type = elem_size;
+        elem_size = type_to_size(type);
+    }
 
     obj_descriptor odsc = {.version = ver,
                            .owner = {0},
                            .st = st,
                            .flags = 0,
                            .tag = tag,
+                           .type = type,
                            .size = elem_size,
                            .bb = {
                                .num_dims = ndim,

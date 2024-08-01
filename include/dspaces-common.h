@@ -8,6 +8,9 @@
 #ifndef __DSPACES_COMMON_H
 #define __DSPACES_COMMON_H
 
+#include <stdio.h>
+#include <stdlib.h>
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -33,6 +36,52 @@ extern "C" {
  * function's return value on purpose.
  */
 static inline void ignore_result(int unused_result) { (void)unused_result; }
+
+#define DSP_FLOAT -1
+#define DSP_INT -2
+#define DSP_LONG -3
+#define DSP_DOUBLE -4
+#define DSP_BOOL -5
+#define DSP_CHAR -6
+#define DSP_UINT -7
+#define DSP_ULONG -8
+#define DSP_BYTE -9
+#define DSP_UINT8 -10
+#define DSP_UINT16 -11
+#define DSP_UINT32 -12
+#define DSP_UINT64 -13
+#define DSP_INT8 -14
+#define DSP_INT16 -15
+#define DSP_INT32 -16
+#define DSP_INT64 -17
+
+static size_t type_to_size_map[] = {0,
+                                    sizeof(float),
+                                    sizeof(int),
+                                    sizeof(long),
+                                    sizeof(double),
+                                    1,
+                                    sizeof(char),
+                                    sizeof(unsigned),
+                                    sizeof(unsigned long),
+                                    1,
+                                    1,
+                                    2,
+                                    4,
+                                    8,
+                                    1,
+                                    2,
+                                    4,
+                                    8};
+
+static int type_to_size(int type_id)
+{
+    if(type_id >= 0) {
+        fprintf(stderr, "WARNING: type ids should be negative.\n");
+        return (-1);
+    }
+    return (type_to_size_map[-type_id]);
+}
 
 #if defined(__cplusplus)
 }
