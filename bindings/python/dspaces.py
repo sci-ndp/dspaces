@@ -24,6 +24,14 @@ class DSModuleError(Exception):
     def __init__(self, errno):
         self.errno = errno
 
+class DSRemoteFaultError(Exception):
+    def __init__(self, errno):
+        self.errno = errno
+
+class DSConnectionError(Exception):
+    def __init__(self, errno):
+        self.errno = errno
+
 class DSServer:
     def __init__(self, conn = "sockets", comm = None, conf = "dataspaces.conf"):
         from mpi4py import MPI
@@ -86,7 +94,14 @@ class DSClient:
                                         name.encode('ascii'),
                                         json.dumps(data).encode('ascii'))
         if reg_id < 0:
-            raise DSModuleError(reg_id)
+            if reg_id == -1:
+                raise DSModuleError(reg_id)
+            elif reg_id == -2 or reg_id == -3 or reg_id == -4 or reg_id == -5:
+                raise DSRemoteFaultError(reg_id)
+            elif reg_id == -6:
+                raise DSConnectionError(reg_id)
+            else:
+                raise Exception("unknown failure")
         return(nspace, reg_id)
     
     def VecExec(self, objs:list[DSObject] = [], fn=None):
