@@ -1801,6 +1801,7 @@ int dht_find_entry_all(struct dht_entry *de, obj_descriptor *q_odsc,
     struct bbox isect;
     int sub = (timeout == -1 && de == de->ss->ent_self);
 
+    fprintf(stderr, "sub = %i\n", sub);
     n = q_odsc->version % de->odsc_size;
     num_elem = ssh_hash_elem_count(de->ss, &q_odsc->bb);
     if(sub) {
@@ -1816,6 +1817,7 @@ int dht_find_entry_all(struct dht_entry *de, obj_descriptor *q_odsc,
             num_elem -= ssh_hash_elem_count(de->ss, &isect);
         }
     }
+    fprintf(stderr, "num_elem = %lu\n", num_elem);
     if(sub) {
         if(num_elem > 0) {
             dht_local_subscribe(de, q_odsc, odsc_tab, &num_odsc, num_elem,

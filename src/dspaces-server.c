@@ -50,7 +50,8 @@
             ABT_thread_self_id(&tid);                                          \
             ABT_self_get_xstream_rank(&es_rank);                               \
             fprintf(stderr,                                                    \
-                    "Rank %i: TID: %" PRIu64 " ES: %i %s, line %i (%s): " dstr,\
+                    "Rank %i: TID: %" PRIu64                                   \
+                    " ES: %i %s, line %i (%s): " dstr,                         \
                     server->rank, tid, es_rank, __FILE__, __LINE__, __func__,  \
                     ##__VA_ARGS__);                                            \
         }                                                                      \
@@ -723,8 +724,9 @@ static void *bootstrap_python(dspaces_provider_t server)
 
     Py_InitializeEx(0);
     import_array();
-    
-    server->handler_state = malloc(sizeof(*server->handler_state) * server->num_handlers);
+
+    server->handler_state =
+        malloc(sizeof(*server->handler_state) * server->num_handlers);
 }
 
 #endif // DSPACES_HAVE_PYTHON
@@ -733,7 +735,8 @@ static void init_rmap(struct dspaces_provider *server)
 {
     int i;
 
-    server->handler_rmap = malloc(sizeof(*server->handler_rmap) * server->num_handlers);
+    server->handler_rmap =
+        malloc(sizeof(*server->handler_rmap) * server->num_handlers);
     for(i = 0; i < server->num_handlers; i++) {
         server->handler_rmap[i] = -1;
     }
@@ -752,13 +755,16 @@ static int get_handler_id(struct dspaces_provider *server)
         }
 
         if(server->handler_rmap[i] == es_rank) {
-            return(i);
+            return (i);
         }
     }
 
-    fprintf(stderr, "ERROR: more unique execution streams have called %s than have been allocated for RPC handlers.\n", __func__);
+    fprintf(stderr,
+            "ERROR: more unique execution streams have called %s than have "
+            "been allocated for RPC handlers.\n",
+            __func__);
 
-    return(-1);
+    return (-1);
 }
 
 int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
@@ -1098,7 +1104,7 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     dspaces_init_mods(&server->mods);
 #ifdef DSPACES_HAVE_PYTHON
     server->main_state = PyEval_SaveThread();
-#endif //DSPACES_HAVE_PYTHON
+#endif // DSPACES_HAVE_PYTHON
 
     if(server->f_drain) {
         // thread to drain the data
@@ -1567,8 +1573,8 @@ static int query_remotes(dspaces_provider_t server, obj_descriptor *q_odsc,
     }
 }
 
-static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
-                          struct global_dimension *gdim)
+static int route_request(dspaces_provider_t server, obj_descriptor *odsc,
+                         struct global_dimension *gdim)
 {
     struct dspaces_module *mod;
     struct dspaces_module_args *args;
@@ -1576,7 +1582,7 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
     struct obj_data *od;
     obj_descriptor *od_odsc;
     int nargs;
-    int i;
+    int i, err;
 
     DEBUG_OUT("Routing '%s'\n", odsc->name);
 
@@ -1585,6 +1591,12 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
         nargs = build_module_args_from_odsc(odsc, &args);
         res = dspaces_module_exec(mod, "query", args, nargs,
                                   DSPACES_MOD_RET_ARRAY);
+    }
+
+    if(res && res->type == DSPACES_MOD_RET_ERR) {
+        err = res->err;
+        free(res);
+        return (err);
     }
 
     if(res) {
@@ -1625,6 +1637,8 @@ static void route_request(dspaces_provider_t server, obj_descriptor *odsc,
         }
         free(res);
     }
+
+    return (0);
 }
 
 // should we handle this locally
@@ -3241,19 +3255,27 @@ static void get_var_objs_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(get_var_objs_rpc)
 
-static void route_registration(dspaces_provider_t server, reg_in_t *reg)
+static int route_registration(dspaces_provider_t server, reg_in_t *reg)
 {
     struct dspaces_module *mod;
     int nargs;
     struct dspaces_module_ret *res = NULL;
     struct dspaces_module_args *args;
+    int err;
 
     mod = dspaces_mod_by_name(&server->mods, "ds_reg");
     if(mod) {
         nargs = build_module_args_from_reg(reg, &args);
         res = dspaces_module_exec(mod, "register", args, nargs,
                                   DSPACES_MOD_RET_NONE);
+        if(res && res->type == DSPACES_MOD_RET_ERR) {
+            err = res->err;
+            free(res);
+            return (err);
+        }
     }
+
+    return (0);
 }
 
 static void reg_rpc(hg_handle_t handle)
@@ -3267,7 +3289,7 @@ static void reg_rpc(hg_handle_t handle)
     reg_in_t in;
     uint64_t out;
     struct ibcast_state *bcast;
-    int i;
+    int i, err;
 
     mid = margo_hg_handle_get_instance(handle);
     info = margo_get_info(handle);
@@ -3295,7 +3317,10 @@ static void reg_rpc(hg_handle_t handle)
     }
     out = in.id;
 
-    route_registration(server, &in);
+    err = route_registration(server, &in);
+    if(err != 0) {
+        out = err;
+    }
 
     margo_free_input(handle, &in);
     margo_respond(handle, &out);

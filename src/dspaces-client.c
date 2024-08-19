@@ -2186,8 +2186,9 @@ int dspaces_pexec(dspaces_client_t client, const char *var_name,
     return (dspaces_SUCCESS);
 }
 
-long dspaces_register(dspaces_client_t client, const char *type,
-                      const char *name, const char *reg_data)
+long dspaces_register_simple(dspaces_client_t client, const char *type,
+                             const char *name, const char *reg_data,
+                             char **nspace)
 {
     hg_addr_t server_addr;
     hg_return_t hret;
@@ -2206,24 +2207,31 @@ long dspaces_register(dspaces_client_t client, const char *type,
     hret = margo_create(client->mid, server_addr, client->reg_id, &handle);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s): margo_create() failed\n", __func__);
-        return dspaces_ERR_MERCURY;
+        return (DS_MOD_ECLIENT);
     }
 
     hret = margo_forward(handle, &in);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s): margo_forward() failed\n", __func__);
         margo_destroy(handle);
-        return dspaces_ERR_MERCURY;
+        return (DS_MOD_ECLIENT);
     }
 
     hret = margo_get_output(handle, &out);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "ERROR: (%s): margo_get_output() failed\n", __func__);
         margo_destroy(handle);
-        return dspaces_ERR_MERCURY;
+        return (DS_MOD_ECLIENT);
     }
 
     reg_handle = out;
+    if(nspace) {
+        if(reg_handle < 0) {
+            *nspace = NULL;
+        } else {
+            *nspace = strdup("ds_reg");
+        }
+    }
 
     margo_free_output(handle, &out);
     margo_destroy(handle);

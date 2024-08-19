@@ -25,6 +25,13 @@ extern "C" {
 #define dspaces_ERR_UNKNOWN_OBJ -8 /* Could not find the object*/
 #define dspaces_ERR_END -9         /* End of range for valid error codes */
 
+#define DS_MOD_ENOMOD -1
+#define DS_MOD_ENODEF -2
+#define DS_MOD_EFAULT -3
+#define DS_MOD_ENOSYS -4
+#define DS_MOD_ENOSUPPORT -5
+#define DS_MOD_ECLIENT -6
+
 #define DS_OBJ_RESIZE 0x02
 
 /**

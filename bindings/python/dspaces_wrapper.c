@@ -674,9 +674,20 @@ PyObject *wrapper_dspaces_register(PyObject *clientppy, const char *type,
                                    const char *name, const char *data)
 {
     dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
+    PyObject *ret;
+    char *nspace = NULL;
     long id;
 
-    id = dspaces_register(*clientp, type, name, data);
+    id = dspaces_register_simple(*clientp, type, name, data, &nspace);
+    ret = PyTuple_New(2);
+    if(nspace) {
+        PyTuple_SET_ITEM(ret, 0,
+                         PyUnicode_DecodeASCII(nspace, strlen(nspace), NULL));
+    } else {
+        PyTuple_SET_ITEM(ret, 0, Py_None);
+    }
 
-    return (PyLong_FromLong(id));
+    PyTuple_SET_ITEM(ret, 1, PyLong_FromLong(id));
+
+    return (ret);
 }

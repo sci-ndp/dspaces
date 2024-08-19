@@ -20,6 +20,10 @@ class DSObject:
             'ub': self.ub
         })
 
+class DSModuleError(Exception):
+    def __init__(self, errno):
+        self.errno = errno
+
 class DSServer:
     def __init__(self, conn = "sockets", comm = None, conf = "dataspaces.conf"):
         from mpi4py import MPI
@@ -77,10 +81,13 @@ class DSClient:
         return(self.VecExec([arg], fn))
 
     def Register(self, type, name, data):
-        return wrapper_dspaces_register(self.client,
+        nspace, reg_id =  wrapper_dspaces_register(self.client,
                                         type.encode('ascii'),
                                         name.encode('ascii'),
                                         json.dumps(data).encode('ascii'))
+        if reg_id < 0:
+            raise DSModuleError(reg_id)
+        return(nspace, reg_id)
     
     def VecExec(self, objs:list[DSObject] = [], fn=None):
         if objs and not hasattr(objs, '__iter__'):

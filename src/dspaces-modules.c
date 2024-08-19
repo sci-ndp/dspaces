@@ -1,4 +1,5 @@
 #include "dspaces-modules.h"
+#include "dspaces-common.h"
 #include "ss_data.h"
 
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
@@ -16,7 +17,7 @@ static int dspaces_init_py_mod(struct dspaces_module *mod)
     PyObject *pName;
 
     if(!mod->file) {
-        return(-1);
+        return (-1);
     }
 
     fprintf(stderr, "%s\n", mod->file);
@@ -28,7 +29,7 @@ static int dspaces_init_py_mod(struct dspaces_module *mod)
             "WARNING: could not load module '%s' from %s. File missing? Any "
             "%s accesses will fail.\n",
             mod->file, xstr(DSPACES_MOD_DIR), mod->name);
-	PyErr_Print();
+        PyErr_Print();
         return (-1);
     }
     Py_DECREF(pName);
@@ -43,7 +44,7 @@ static void add_builtin_mods(struct list_head *mods)
     int nbuiltin = 0;
     int i;
 #ifdef DSPACES_HAVE_PYTHON
-    
+
     nbuiltin++;
 #endif // DSPACES_HAVE_PYTHON
     builtins = calloc(nbuiltin, sizeof(*builtins));
@@ -260,6 +261,16 @@ struct dspaces_module *dspaces_mod_by_name(struct list_head *mods,
     return (NULL);
 }
 
+static struct dspaces_module_ret *ds_module_ret_err(int err)
+{
+    struct dspaces_module_ret *ret = malloc(sizeof(*ret));
+
+    ret->type = DSPACES_MOD_RET_ERR;
+    ret->err = err;
+
+    return (ret);
+}
+
 #ifdef DSPACES_HAVE_PYTHON
 PyObject *py_obj_from_arg(struct dspaces_module_args *arg)
 {
@@ -339,7 +350,7 @@ static struct dspaces_module_ret *py_res_to_ret(PyObject *pResult, int ret_type)
     struct dspaces_module_ret *ret;
 
     if(pResult == Py_None) {
-        return(NULL);
+        return (NULL);
     }
 
     switch(ret_type) {
@@ -370,7 +381,7 @@ dspaces_module_py_exec(struct dspaces_module *mod, const char *operation,
     if(!mod->pModule) {
         fprintf(stderr, "ERROR: trying to run against failed Python module. "
                         "Check for warnings from module load time.\n");
-        return (NULL);
+        return (ds_module_ret_err(DS_MOD_ENOMOD));
     }
 
     pFunc = PyObject_GetAttrString(mod->pModule, operation);
@@ -379,7 +390,7 @@ dspaces_module_py_exec(struct dspaces_module *mod, const char *operation,
             stderr,
             "ERROR! Could not find executable function '%s' in module '%s'\n",
             operation, mod->name);
-        return (NULL);
+        return (ds_module_ret_err(DS_MOD_ENODEF));
     }
     pArgs = PyTuple_New(0);
     pKWArgs = PyDict_New();
@@ -393,7 +404,7 @@ dspaces_module_py_exec(struct dspaces_module *mod, const char *operation,
     pResult = PyObject_Call(pFunc, pArgs, pKWArgs);
     if(!pResult) {
         PyErr_Print();
-        ret = NULL;
+        ret = ds_module_ret_err(DS_MOD_EFAULT);
     } else {
         ret = py_res_to_ret(pResult, ret_type);
         Py_DECREF(pResult);
@@ -420,10 +431,10 @@ struct dspaces_module_ret *dspaces_module_exec(struct dspaces_module *mod,
 #else
         fprintf(stderr, "WARNNING: tried to execute python module, but no "
                         "python support.\n");
-        return (NULL);
+        return (ds_module_ret_err(DS_MOD_ENOSUPPORT));
 #endif // DSPACES_HAVE_PYTHON
     } else {
         fprintf(stderr, "ERROR: unknown module request in %s.\n", __func__);
-        return (NULL);
+        return (ds_module_ret_err(DS_MOD_ENOSYS));
     }
 }

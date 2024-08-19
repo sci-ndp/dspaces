@@ -44,14 +44,18 @@ struct dspaces_module_args {
 
 typedef enum dspaces_module_return_type {
     DSPACES_MOD_RET_ARRAY,
-    DSPACES_MOD_RET_NONE
+    DSPACES_MOD_RET_NONE,
+    DSPACES_MOD_RET_ERR
 } dspaces_mod_ret_type_t;
 
 struct dspaces_module_ret {
     dspaces_mod_ret_type_t type;
     int len;
     uint64_t *dim;
-    int ndim;
+    union {
+        int ndim;
+        int err;
+    };
     int tag;
     int elem_size;
     enum storage_type st;

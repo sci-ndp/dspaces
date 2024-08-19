@@ -462,8 +462,8 @@ int dspaces_get_var_names(dspaces_client_t client, char ***var_names);
 int dspaces_get_var_objs(dspaces_client_t client, const char *name,
                          struct dspaces_obj **objs);
 
-long dspaces_register(dspaces_client_t client, const char *type,
-                      const char *name, const char *data);
+long dspaces_register_simple(dspaces_client_t client, const char *type,
+                             const char *name, const char *data, char **nspace);
 
 #if defined(__cplusplus)
 }
