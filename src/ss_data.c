@@ -807,9 +807,10 @@ char *obj_desc_sprint(obj_descriptor *odsc)
                         "\t.version = %d,\n"
                         "\t.size = %i,\n"
                         "\t.tag = %i,\n"
+                        "\t.type = %i,\n"
                         "\t.bb = ",
                         odsc->name, odsc->owner, odsc->version, odsc->size,
-                        odsc->tag);
+                        odsc->tag, odsc->type);
     str = str_append_const(str_append(str, bbox_sprint(&odsc->bb)), "}\n");
 
     return str;
@@ -822,6 +823,7 @@ int ssd_copy(struct obj_data *to_obj, struct obj_data *from_obj)
     int copied_elems = 0;
 
     to_obj->obj_desc.tag = from_obj->obj_desc.tag;
+    to_obj->obj_desc.type = from_obj->obj_desc.type;
     bbox_intersect(&to_obj->obj_desc.bb, &from_obj->obj_desc.bb, &bbcom);
 
     matrix_init(&from_mat, from_obj->obj_desc.st, &from_obj->obj_desc.bb,

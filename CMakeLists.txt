@@ -65,8 +65,11 @@ xpkg_import_module (liblz4 REQUIRED liblz4)
 include(python_bindings)
 
 find_package(MPI COMPONENTS REQUIRED)
+
+set(DSPACES_USE_OPENMP ON CACHE STRING "Use OpenMP for operations")
+mark_as_advanced(DSPACES_USE_OPENMP)
 find_package(OpenMP)
-if(OPENMP_FOUND)
+if(OPENMP_FOUND AND DSPACES_USE_OPENMP)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
     add_definitions(-DOPS_USE_OPENMP)

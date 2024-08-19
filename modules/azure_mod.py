@@ -46,6 +46,7 @@ def _get_gddp_params(name):
     scenario = 'ssp585'
     variable = None
     var_name = name.split('\\')[-1]
+    quality = 0
     name_parts = var_name.split(',')
     for part in name_parts:
         if part[0] == 'm':
@@ -60,9 +61,11 @@ def _get_gddp_params(name):
             variable = part[2:]
             if have_pc and variable not in variable_list:
                 raise ValueError(f"variable {variable} not available.")
+        if part[0] == 'q':
+            quality = int(part[2:])
     if variable == None:
         raise ValueError('No variable name specified')
-    return model, scenario, variable
+    return model, scenario, variable, quality
 
 def _get_dataset(url):
     path = urlparse(url).path
@@ -118,7 +121,7 @@ def _get_cmip6_data(model, scenario, variable, start_date, end_date, lb, ub):
 
 def query(name, version, lb, ub):
     start_date, end_date = _get_gddp_time_ranges(version)
-    model, scenario, variable = _get_gddp_params(name)
+    model, scenario, variable, quality = _get_gddp_params(name)
     result = _get_cmip6_data(model, scenario, variable, start_date, end_date, lb, ub)
     return(result)
 

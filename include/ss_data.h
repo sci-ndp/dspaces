@@ -41,6 +41,7 @@ typedef struct {
     enum storage_type st;
     uint32_t flags;
     int tag;
+    int type;
 
     char owner[128];
     unsigned int version;
