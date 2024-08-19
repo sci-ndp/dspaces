@@ -94,9 +94,9 @@ class DSClient:
                                         name.encode('ascii'),
                                         json.dumps(data).encode('ascii'))
         if reg_id < 0:
-            if reg_id == -1:
+            if reg_id == -3:
                 raise DSModuleError(reg_id)
-            elif reg_id == -2 or reg_id == -3 or reg_id == -4 or reg_id == -5:
+            elif reg_id == -2 or reg_id == -1 or reg_id == -4 or reg_id == -5:
                 raise DSRemoteFaultError(reg_id)
             elif reg_id == -6:
                 raise DSConnectionError(reg_id)
