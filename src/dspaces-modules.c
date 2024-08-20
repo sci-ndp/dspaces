@@ -1,5 +1,6 @@
 #include "dspaces-modules.h"
 #include "dspaces-common.h"
+#include "dspaces-logging.h"
 #include "ss_data.h"
 
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
@@ -32,6 +33,8 @@ static int dspaces_init_py_mod(struct dspaces_module *mod)
         return (-1);
     }
     Py_DECREF(pName);
+
+    DEBUG_OUT("initialized module '%s'.\n", mod->name);
 
     return (0);
 }
@@ -380,8 +383,10 @@ dspaces_module_py_exec(struct dspaces_module *mod, const char *operation,
 
     gstate = PyGILState_Ensure();
     if(!mod->pModule) {
-        fprintf(stderr, "ERROR: trying to run against failed Python module. "
-                        "Check for warnings from module load time.\n");
+        fprintf(stderr,
+                "ERROR: trying to run against failed Python module '%s'."
+                " Check for warnings from module load time.\n",
+                mod->name);
         return (ds_module_ret_err(DS_MOD_ENOMOD));
     }
 

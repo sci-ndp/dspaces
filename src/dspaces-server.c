@@ -6,6 +6,7 @@
  */
 #include "dspaces-server.h"
 #include "dspaces-conf.h"
+#include "dspaces-logging.h"
 #include "dspaces-modules.h"
 #include "dspaces-ops.h"
 #include "dspaces-remote.h"
@@ -41,21 +42,6 @@
 #ifdef HAVE_DRC
 #include <rdmacred.h>
 #endif /* HAVE_DRC */
-
-#define DEBUG_OUT(dstr, ...)                                                   \
-    do {                                                                       \
-        if(server->f_debug) {                                                  \
-            ABT_unit_id tid;                                                   \
-            int es_rank;                                                       \
-            ABT_thread_self_id(&tid);                                          \
-            ABT_self_get_xstream_rank(&es_rank);                               \
-            fprintf(stderr,                                                    \
-                    "Rank %i: TID: %" PRIu64                                   \
-                    " ES: %i %s, line %i (%s): " dstr,                         \
-                    server->rank, tid, es_rank, __FILE__, __LINE__, __func__,  \
-                    ##__VA_ARGS__);                                            \
-        }                                                                      \
-    } while(0);
 
 #define DSPACES_DEFAULT_NUM_HANDLERS 4
 
@@ -816,6 +802,8 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     MPI_Comm_dup(comm, &server->comm);
     MPI_Comm_rank(comm, &server->rank);
 
+    dspaces_init_logging(server->rank);
+
     margo_set_environment(NULL);
     sprintf(margo_conf,
             "{ \"use_progress_thread\" : true, \"rpc_thread_count\" : %d }",
@@ -1131,6 +1119,8 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     *sv = server;
 
     is_initialized = 1;
+
+    DEBUG_OUT("server is ready for requests.\n");
 
     return dspaces_SUCCESS;
 }
