@@ -240,10 +240,12 @@ struct dspaces_module *dspaces_mod_by_od(struct list_head *mods,
 {
     struct dspaces_module *mod;
 
+    DEBUG_OUT("finding module for odsc with name %s.\n", odsc->name);
     list_for_each_entry(mod, mods, struct dspaces_module, entry)
     {
         // TODO: query mods for match
         if(mod->namespace && strstr(odsc->name, mod->namespace) == odsc->name) {
+            DEBUG_OUT("found %s\n", mod->name);
             return (mod);
         }
     }
@@ -380,6 +382,8 @@ dspaces_module_py_exec(struct dspaces_module *mod, const char *operation,
     PyObject *pResult;
     struct dspaces_module_ret *ret;
     int i;
+
+    DEBUG_OUT("calling out to '%s' in module '%s'.\n", operation, mod->name);
 
     gstate = PyGILState_Ensure();
     if(!mod->pModule) {

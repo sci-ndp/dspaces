@@ -3270,6 +3270,8 @@ static int route_registration(dspaces_provider_t server, reg_in_t *reg)
     struct dspaces_module_args *args;
     int err;
 
+    DEBUG_OUT("routing registration request.\n");
+
     mod = dspaces_mod_by_name(&server->mods, "ds_reg");
     if(mod) {
         nargs = build_module_args_from_reg(reg, &args);
@@ -3310,6 +3312,8 @@ static void reg_rpc(hg_handle_t handle)
         margo_destroy(handle);
         return;
     }
+
+    DEBUG_OUT("received registration '%s' of type '%s' with %zi bytes of registration data.\n", in.name, in.type, strlen(in.reg_data));
 
     if(in.src == -1) {
         in.id = __sync_fetch_and_add(&local_id, 1);
