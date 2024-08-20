@@ -1698,14 +1698,20 @@ static struct ibcast_state *ibcast_rpc_start(dspaces_provider_t server,
 }
 
 static void ibcast_get_output(struct ibcast_state *bcast, unsigned int idx,
-                              void *out)
+                              void *out, int *present)
 {
     if(idx > 2 || !bcast->sent_rpc[idx]) {
+        if(present) {
+            *present = 0;
+        }
         return;
     }
 
     margo_wait(bcast->req[idx]);
     margo_get_output(bcast->hndl[idx], out);
+    if(present) {
+        *present = 1;
+    }
 }
 
 static void ibcast_finish(dspaces_provider_t server, struct ibcast_state *bcast)
@@ -3134,9 +3140,10 @@ static void get_vars_rpc(hg_handle_t handle)
         (dspaces_provider_t)margo_registered_data(mid, info->id);
     struct ibcast_state *bcast;
     int32_t src, rank;
-    name_list_t out[3];
+    name_list_t out[3] = {0};
     name_list_t rout = {0};
     ds_str_hash *results = ds_str_hash_init();
+    int present;
     int num_vars;
     char **names = NULL;
     int i, j;
@@ -3163,9 +3170,11 @@ static void get_vars_rpc(hg_handle_t handle)
 
     if(bcast) {
         for(i = 0; i < 3; i++) {
-            ibcast_get_output(bcast, i, &out[i]);
-            for(j = 0; j < out[i].count; j++) {
-                ds_str_hash_add(results, out[i].names[j]);
+            ibcast_get_output(bcast, i, &out[i], &present);
+            if(present) {
+                for(j = 0; j < out[i].count; j++) {
+                    ds_str_hash_add(results, out[i].names[j]);
+                }
             }
         }
         ibcast_finish(server, bcast);
@@ -3197,6 +3206,7 @@ static void get_var_objs_rpc(hg_handle_t handle)
     obj_descriptor **odsc_tab;
     int i;
     int num_odscs;
+    int present;
     odsc_hdr rout;
     hg_return_t hret;
 
@@ -3231,10 +3241,12 @@ static void get_var_objs_rpc(hg_handle_t handle)
 
     if(bcast) {
         for(i = 0; i < 3; i++) {
-            ibcast_get_output(bcast, i, &out[i]);
-            rout.raw_odsc = realloc(rout.raw_odsc, rout.size + out[i].size);
-            memcpy(rout.raw_odsc + rout.size, out[i].raw_odsc, out[i].size);
-            rout.size += out[i].size;
+            ibcast_get_output(bcast, i, &out[i], &present);
+            if(present) {
+                rout.raw_odsc = realloc(rout.raw_odsc, rout.size + out[i].size);
+                memcpy(rout.raw_odsc + rout.size, out[i].raw_odsc, out[i].size);
+                rout.size += out[i].size;
+            }
         }
         ibcast_finish(server, bcast);
     }
@@ -3306,7 +3318,7 @@ static void reg_rpc(hg_handle_t handle)
     bcast = ibcast_rpc_start(server, server->reg_id, in.src, &in);
     if(bcast) {
         for(i = 0; i < 3; i++) {
-            ibcast_get_output(bcast, i, &out);
+            ibcast_get_output(bcast, i, &out, NULL);
         }
         ibcast_finish(server, bcast);
     }
