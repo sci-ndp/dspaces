@@ -13,7 +13,7 @@ jobs:
     # cross-platform coverage.
     # See: https://docs.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow#configuring-a-build-matrix
     runs-on: ubuntu-latest
-    container: philipdavis/dspaces-ci:v24062024
+    container: philipdavis/dspaces-ci:v20082024
 
     defaults:
       run:
@@ -27,19 +27,20 @@ jobs:
       # We'll use this as our working directory for all subsequent commands
       run: mkdir -p ${{runner.workspace}}/build
 
+    - name: Extend python path
+      run: echo "PYTHONPATH=${PYTHONPATH}:${{runner.workspace}}/modules" >> /entrypoint.sh
+
     - name: Configure CMake
       # Note the current convention is to use the -S and -B options here to specify source 
       # and build directories, but this is only available with CMake 3.13 and higher.  
       # The CMake binaries on the Github Actions machines are (as of this writing) 3.12
-      run: . /opt/spack-environment/activate.sh && cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DENABLE_TESTS=true -DCMAKE_C_COMPILER=mpicc -DCMAKE_Fortran_COMPILER=mpifort
+      run: /entrypoint.sh cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DENABLE_TESTS=true -DCMAKE_C_COMPILER=mpicc -DCMAKE_Fortran_COMPILER=mpifort
 
     - name: Build
       # Execute the build.  You can specify a specific target with "--target <NAME>"
-      run: . /opt/spack-environment/activate.sh && cmake --build . --config $BUILD_TYPE
+      run: /entrypoint.sh cmake --build . --config $BUILD_TYPE
 
     - name: Test
       # Execute tests defined by the CMake configuration.  
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: . /opt/spack-environment/activate.sh && ctest -V -C $BUILD_TYPE
-      #env:
-      #  DSPACES_DEBUG: 1
+      run: /entrypoint.sh ctest -V -C $BUILD_TYPE
