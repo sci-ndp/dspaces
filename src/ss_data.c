@@ -1372,7 +1372,7 @@ int ssd_choose_hash(const struct bbox *bb_domain)
     uint64_t x;
     int i;
 
-    if(bb_domain->num_dims == 1 && bb_domain->ub.c[i] == 0) {
+    if(bb_domain->num_dims == 1 && bb_domain->ub.c[0] == 0) {
         // flag for no hashing
         return (ssd_hash_version_v0);
     }
