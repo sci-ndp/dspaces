@@ -243,7 +243,7 @@ struct dspaces_module *dspaces_mod_by_od(struct list_head *mods,
     list_for_each_entry(mod, mods, struct dspaces_module, entry)
     {
         // TODO: query mods for match
-        if(strstr(odsc->name, mod->namespace) == odsc->name) {
+        if(mod->namespace && strstr(odsc->name, mod->namespace) == odsc->name) {
             return (mod);
         }
     }
