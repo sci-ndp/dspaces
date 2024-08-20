@@ -3135,10 +3135,10 @@ static void get_vars_rpc(hg_handle_t handle)
     struct ibcast_state *bcast;
     int32_t src, rank;
     name_list_t out[3];
-    name_list_t rout;
+    name_list_t rout = {0};
     ds_str_hash *results = ds_str_hash_init();
     int num_vars;
-    char **names;
+    char **names = NULL;
     int i, j;
 
     margo_get_input(handle, &src);
@@ -3157,7 +3157,9 @@ static void get_vars_rpc(hg_handle_t handle)
         ds_str_hash_add(results, names[i]);
         free(names[i]);
     }
-    free(names);
+    if(names) {
+        free(names);
+    }
 
     if(bcast) {
         for(i = 0; i < 3; i++) {
