@@ -96,31 +96,24 @@ def reg_query(name, version, lb, ub, params, bucket, path):
     if lb:
         index = [ slice(lb[x], ub[x]+1) for x in range(len(lb)) ]
     else:
-        index = [ slice(0, x) for x in array.shape ]
+        index = [ slice(0, x) for x in array.shape]
     return(array[index])
 
 def query(name, version, lb, ub):
-    sys.stdout.flush()
     dir_base, file_base = build_dir_file(name, version)
     times = unpack_version(version)
     fcount = max(times[-2], times[-1])
     centry = build_cache_entry(dir_base, file_base, fcount)
     if not os.path.exists(centry):
         s3_file = query_s3(dir_base, file_base, times)
-        print(s3_file)
         s3.get(s3_file, centry)
     var = name.split('/')[-1]
     data = Dataset(centry)
     array = data[var]
-    print(lb, ub)
     if lb != None:
         index = [ slice(lb[x], ub[x]+1) for x in range(len(lb)) ]
     else:
         index = [ slice(0, x) for x in array.shape ]
-    print(f'index = {index}')
-    print(f'result shape = {array[index].shape}')
-    sys.stdout.flush()
-    sys.stderr.flush()
     return(array[index])
 
 if __name__ == '__main__':

@@ -77,6 +77,10 @@ def _get_dataset(url):
         urlretrieve(url, filename=cache_entry)
     return(Dataset(cache_entry))
 
+def _get_azure_url(url, var_name):
+    ds = _get_dataset(url)
+    return(ds[var_name])
+
 def _get_cmip6_data(model, scenario, variable, start_date, end_date, lb, ub):
     result = None
     result_days = (end_date - start_date).days + 1
@@ -102,6 +106,7 @@ def _get_cmip6_data(model, scenario, variable, start_date, end_date, lb, ub):
             url = item.assets[variable].href
             ds = _get_dataset(url)
         else:
+            # TODO - in case indexing is offline, we still want to hit the cache
             pass
         data = ds[variable]
         if result is None:
@@ -118,6 +123,15 @@ def _get_cmip6_data(model, scenario, variable, start_date, end_date, lb, ub):
         end_iidx = (item_end - date(year, 1, 1)).days + 1
         result[start_gidx:end_gidx,:,:] = data[start_iidx:end_iidx,lb[0]:ub[0],lb[1]:ub[1]]
     return(result)
+
+def reg_query(name, version, lb, ub, params, url, var_name):
+    array = _get_azure_url(url, var_name)
+    if lb:
+        index = [ slice(lb[x], ub[x]+1) for x in range(len(lb)) ]
+    else:
+        index = [ slice(0, x) for x in array.shape]
+    return(array[index])
+
 
 def query(name, version, lb, ub):
     start_date, end_date = _get_gddp_time_ranges(version)
