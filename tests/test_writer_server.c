@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 extern int test_put_run(int dims, int *npdim, uint64_t *spdim, int timestep,
                         size_t elem_size, int num_vars, int local_mode,
@@ -173,6 +174,8 @@ int main(int argc, char **argv)
     ret = dspaces_server_init(listen_addr_str, gcomm, "dataspaces.conf", &s);
     if(ret != 0)
         return ret;
+
+    sleep(2);
 
     test_put_run(dims, np, sp, timestep, elem_size, num_vars, local_mode,
                  terminate, nonblock, gcomm);
