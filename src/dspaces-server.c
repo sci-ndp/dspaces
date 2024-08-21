@@ -2798,6 +2798,7 @@ static void pexec_rpc(hg_handle_t handle)
         margo_respond(handle, &out);
         margo_free_input(handle, &in);
         margo_destroy(handle);
+        PyGILState_Release(gstate);
         return;
     }
     arg = PyBytes_FromStringAndSize(fn, rdma_size);
@@ -2817,6 +2818,7 @@ static void pexec_rpc(hg_handle_t handle)
         margo_respond(handle, &out);
         margo_free_input(handle, &in);
         margo_destroy(handle);
+        PyGILState_Release(gstate);
         return;
     }
 
@@ -2836,6 +2838,7 @@ static void pexec_rpc(hg_handle_t handle)
             margo_respond(handle, &out);
             margo_free_input(handle, &in);
             margo_destroy(handle);
+            PyGILState_Release(gstate);
             return;
         }
         out.length = rdma_size;
@@ -2845,6 +2848,7 @@ static void pexec_rpc(hg_handle_t handle)
         }
         out.length = 0;
     }
+    PyGILState_Release(gstate);
 
     if(out.length > 0) {
         ABT_cond_create(&cond);
@@ -2871,6 +2875,7 @@ static void pexec_rpc(hg_handle_t handle)
 
     DEBUG_OUT("done with pexec handling\n");
 
+    gstate = PyGILState_Ensure();
     Py_XDECREF(array);
     PyGILState_Release(gstate);
     obj_data_free(arg_obj);
@@ -2946,7 +2951,6 @@ static void mpexec_rpc(hg_handle_t handle)
 
     arg_objs = calloc(num_args, sizeof(*arg_objs));
     arg_arrays = calloc(num_args, sizeof(*arg_arrays));
-    gstate = PyGILState_Ensure();
     for(i = 0; i < num_args; i++) {
         route_request(server, &in_odscs[i], &(server->dsg->default_gdim));
 
@@ -3001,7 +3005,7 @@ static void mpexec_rpc(hg_handle_t handle)
                   obj_desc_sprint(&arg_objs[i]->obj_desc));
     }
 
-    // Race condition? Protect with mutex?
+    gstate = PyGILState_Ensure();
     if((pklmod == NULL) &&
        (pklmod = PyImport_ImportModuleNoBlock("dill")) == NULL) {
         out.length = 0;
@@ -3014,6 +3018,7 @@ static void mpexec_rpc(hg_handle_t handle)
         margo_respond(handle, &out);
         margo_free_input(handle, &in);
         margo_destroy(handle);
+        PyGILState_Release(gstate);
         return;
     }
     arg = PyBytes_FromStringAndSize(fn, rdma_size);
@@ -3045,6 +3050,7 @@ static void mpexec_rpc(hg_handle_t handle)
         margo_respond(handle, &out);
         margo_free_input(handle, &in);
         margo_destroy(handle);
+        PyGILState_Release(gstate);
         return;
     }
 
@@ -3064,6 +3070,7 @@ static void mpexec_rpc(hg_handle_t handle)
             margo_respond(handle, &out);
             margo_free_input(handle, &in);
             margo_destroy(handle);
+            PyGILState_Release(gstate);
             return;
         }
         out.length = rdma_size;
@@ -3073,6 +3080,7 @@ static void mpexec_rpc(hg_handle_t handle)
         }
         out.length = 0;
     }
+    PyGILState_Release(gstate);
 
     if(out.length > 0) {
         ABT_cond_create(&cond);
@@ -3099,6 +3107,7 @@ static void mpexec_rpc(hg_handle_t handle)
 
     DEBUG_OUT("done with pexec handling\n");
 
+    gstate = PyGILState_Ensure();
     Py_XDECREF(args);
     PyGILState_Release(gstate);
     free(arg_arrays);
