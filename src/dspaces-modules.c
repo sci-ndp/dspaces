@@ -93,6 +93,16 @@ int dspaces_init_mods(struct list_head *mods)
     return (0);
 }
 
+int build_module_arg_from_rank(long rank, struct dspaces_module_args *arg)
+{
+    arg->name = strdup("rank");
+    arg->type = DSPACES_ARG_INT;
+    arg->len = -1;
+    arg->ival = rank;
+
+    return (1);
+}
+
 int build_module_args_from_reg(reg_in_t *reg,
                                struct dspaces_module_args **argsp)
 {
@@ -348,6 +358,18 @@ static struct dspaces_module_ret *py_res_buf(PyObject *pResult)
 
     memcpy(ret->data, PyArray_DATA(pArray), data_len);
 
+    ret->type = DSPACES_MOD_RET_ARRAY;
+
+    return (ret);
+}
+
+static struct dspaces_module_ret *py_res_int(PyObject *pResult)
+{
+    struct dspaces_module_ret *ret = malloc(sizeof(*ret));
+
+    ret->type = DSPACES_MOD_RET_INT;
+    ret->ival = PyLong_AsLong(pResult);
+
     return (ret);
 }
 
@@ -362,6 +384,8 @@ static struct dspaces_module_ret *py_res_to_ret(PyObject *pResult, int ret_type)
     switch(ret_type) {
     case DSPACES_MOD_RET_ARRAY:
         return (py_res_buf(pResult));
+    case DSPACES_MOD_RET_INT:
+        return (py_res_int(pResult));
     case DSPACES_MOD_RET_NONE:
         return (NULL);
     default:

@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <lz4.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -123,11 +124,14 @@ struct dspaces_provider {
     int num_handlers;
     int *handler_rmap;
 
+    atomic_int local_reg_id;
 #ifdef DSPACES_HAVE_PYTHON
     PyThreadState *main_state;
     PyThreadState **handler_state;
 #endif // DSPACES_HAVE_PYTHON
 };
+
+static int dspaces_init_registry(dspaces_provider_t server);
 
 DECLARE_MARGO_RPC_HANDLER(put_rpc)
 DECLARE_MARGO_RPC_HANDLER(put_local_rpc)
@@ -1092,6 +1096,7 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
 
     DEBUG_OUT("module directory is %s\n", mod_dir_str);
     dspaces_init_mods(&server->mods);
+    dspaces_init_registry(server);
 #ifdef DSPACES_HAVE_PYTHON
     server->main_state = PyEval_SaveThread();
 #endif // DSPACES_HAVE_PYTHON
@@ -3262,6 +3267,39 @@ static void get_var_objs_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(get_var_objs_rpc)
 
+static int dspaces_init_registry(dspaces_provider_t server)
+{
+    struct dspaces_module *mod;
+    struct dspaces_module_args arg;
+    struct dspaces_module_ret *res = NULL;
+    int err;
+
+    server->local_reg_id = 0;
+
+    mod = dspaces_mod_by_name(&server->mods, "ds_reg");
+
+    if(!mod) {
+        fprintf(stderr, "missing built-in ds_reg module.\n");
+        return (-1);
+    }
+
+    build_module_arg_from_rank(server->rank, &arg);
+    res =
+        dspaces_module_exec(mod, "bootstrap_id", &arg, 1, DSPACES_MOD_RET_INT);
+    if(res && res->type == DSPACES_MOD_RET_ERR) {
+        err = res->err;
+        free(res);
+        return (err);
+    }
+    if(res) {
+        server->local_reg_id = res->ival;
+    }
+
+    DEBUG_OUT("local registry id starting at %i\n", server->local_reg_id);
+
+    return (0);
+}
+
 static int route_registration(dspaces_provider_t server, reg_in_t *reg)
 {
     struct dspaces_module *mod;
@@ -3276,11 +3314,17 @@ static int route_registration(dspaces_provider_t server, reg_in_t *reg)
     if(mod) {
         nargs = build_module_args_from_reg(reg, &args);
         res = dspaces_module_exec(mod, "register", args, nargs,
-                                  DSPACES_MOD_RET_NONE);
+                                  DSPACES_MOD_RET_INT);
         if(res && res->type == DSPACES_MOD_RET_ERR) {
             err = res->err;
             free(res);
             return (err);
+        }
+        if(res) {
+            if(res->ival != reg->id) {
+                DEBUG_OUT("updating registration id to %li.\n", res->ival);
+                reg->id = res->ival;
+            }
         }
     }
 
@@ -3289,7 +3333,6 @@ static int route_registration(dspaces_provider_t server, reg_in_t *reg)
 
 static void reg_rpc(hg_handle_t handle)
 {
-    static uint64_t local_id = 0;
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
     const struct hg_info *info = margo_get_info(handle);
     dspaces_provider_t server =
@@ -3313,10 +3356,12 @@ static void reg_rpc(hg_handle_t handle)
         return;
     }
 
-    DEBUG_OUT("received registration '%s' of type '%s' with %zi bytes of registration data.\n", in.name, in.type, strlen(in.reg_data));
+    DEBUG_OUT("received registration '%s' of type '%s' with %zi bytes of "
+              "registration data.\n",
+              in.name, in.type, strlen(in.reg_data));
 
     if(in.src == -1) {
-        in.id = __sync_fetch_and_add(&local_id, 1);
+        in.id = __sync_fetch_and_add(&server->local_reg_id, 1);
         in.id += (uint64_t)server->dsg->rank << 40;
     }
     bcast = ibcast_rpc_start(server, server->reg_id, in.src, &in);
@@ -3326,12 +3371,13 @@ static void reg_rpc(hg_handle_t handle)
         }
         ibcast_finish(server, bcast);
     }
-    out = in.id;
 
     err = route_registration(server, &in);
     if(err != 0) {
         out = err;
     }
+
+    out = in.id;
 
     margo_free_input(handle, &in);
     margo_respond(handle, &out);

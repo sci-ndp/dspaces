@@ -44,6 +44,7 @@ struct dspaces_module_args {
 
 typedef enum dspaces_module_return_type {
     DSPACES_MOD_RET_ARRAY,
+    DSPACES_MOD_RET_INT,
     DSPACES_MOD_RET_NONE,
     DSPACES_MOD_RET_ERR
 } dspaces_mod_ret_type_t;
@@ -59,13 +60,18 @@ struct dspaces_module_ret {
     int tag;
     int elem_size;
     enum storage_type st;
-    void *data;
+    union {
+        void *data;
+        long ival;
+    };
 };
 
 int dspaces_init_mods(struct list_head *mods);
 
 int build_module_args_from_odsc(obj_descriptor *odsc,
                                 struct dspaces_module_args **argsp);
+
+int build_module_arg_from_rank(long rank, struct dspaces_module_args *arg);
 
 int build_module_args_from_reg(reg_in_t *reg,
                                struct dspaces_module_args **argsp);
