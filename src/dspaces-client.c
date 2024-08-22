@@ -259,7 +259,9 @@ static int init_ss_info(dspaces_client_t client)
     int ret;
 
     ret = get_ss_info(client, &ss_data);
-    install_ss_info(client, &ss_data);
+    if(ret == dspaces_SUCCESS) {
+        install_ss_info(client, &ss_data);
+    }
 
     return (ret);
 }
@@ -695,7 +697,10 @@ int dspaces_init(int rank, dspaces_client_t *c)
     }
 
     choose_server(client);
-    init_ss_info(client);
+    ret = init_ss_info(client);
+    if(ret != dspaces_SUCCESS) {
+        return (ret);
+    }
     dspaces_post_init(client);
 
     *c = client;
@@ -729,6 +734,9 @@ int dspaces_init_mpi(MPI_Comm comm, dspaces_client_t *c)
 
     choose_server(client);
     init_ss_info_mpi(client, comm);
+    if(ret != dspaces_SUCCESS) {
+        return (ret);
+    }
     dspaces_post_init(client);
 
     *c = client;
