@@ -69,7 +69,8 @@ class DSClient:
                 self.client = wrapper_dspaces_init_wan(listen_str.encode('ascii'), conn.encode('ascii'), rank)
 
     def __del__(self):
-        wrapper_dspaces_fini(self.client) 
+        if hasattr(self, 'client'):
+            wrapper_dspaces_fini(self.client) 
  
     def KillServer(self, token_count = 1):
         for token in range(token_count):
@@ -211,6 +212,7 @@ class DSExpr:
         return(obj)
     def exec(self):
         return(wrapper_dspaces_ops_calc(self.client.client, self.expr))
+
 class DSConst(DSExpr):
     def __init__(self, client, val):
         DSExpr.__init__(self, client)

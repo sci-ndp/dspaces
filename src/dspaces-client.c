@@ -280,6 +280,7 @@ static int init_ss_info_mpi(dspaces_client_t client, MPI_Comm comm)
         MPI_Bcast(&ss_data, sizeof(ss_data), MPI_BYTE, 0, comm);
         install_ss_info(client, &ss_data);
     }
+
     return (ret);
 }
 
@@ -733,7 +734,7 @@ int dspaces_init_mpi(MPI_Comm comm, dspaces_client_t *c)
     }
 
     choose_server(client);
-    init_ss_info_mpi(client, comm);
+    ret = init_ss_info_mpi(client, comm);
     if(ret != dspaces_SUCCESS) {
         return (ret);
     }
@@ -776,7 +777,10 @@ int dspaces_init_wan(const char *listen_addr_str, const char *conn_str,
     }
 
     choose_server(client);
-    init_ss_info(client);
+    ret =init_ss_info(client);
+    if(ret != dspaces_SUCCESS) {
+        return (ret);
+    }
     dspaces_post_init(client);
 
     *c = client;
@@ -808,7 +812,10 @@ int dspaces_init_wan_mpi(const char *listen_addr_str, const char *conn_str,
     }
 
     choose_server(client);
-    init_ss_info_mpi(client, comm);
+    ret = init_ss_info_mpi(client, comm);
+    if(ret != dspaces_SUCCESS) {
+        return (ret);
+    }
     dspaces_post_init(client);
 
     *c = client;
