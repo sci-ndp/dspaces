@@ -3311,7 +3311,7 @@ static int dspaces_init_registry(dspaces_provider_t server)
 
 static int route_registration(dspaces_provider_t server, reg_in_t *reg)
 {
-    struct dspaces_module *mod;
+    struct dspaces_module *mod, *reg_mod;
     int nargs;
     struct dspaces_module_ret *res = NULL;
     struct dspaces_module_args *args;
@@ -3319,22 +3319,34 @@ static int route_registration(dspaces_provider_t server, reg_in_t *reg)
 
     DEBUG_OUT("routing registration request.\n");
 
-    mod = dspaces_mod_by_name(&server->mods, "ds_reg");
-    if(mod) {
-        nargs = build_module_args_from_reg(reg, &args);
-        res = dspaces_module_exec(mod, "register", args, nargs,
-                                  DSPACES_MOD_RET_INT);
-        if(res && res->type == DSPACES_MOD_RET_ERR) {
-            err = res->err;
-            free(res);
-            return (err);
-        }
-        if(res) {
-            if(res->ival != reg->id) {
-                DEBUG_OUT("updating registration id to %li.\n", res->ival);
-                reg->id = res->ival;
-            }
-        }
+    mod = dspaces_mod_by_name(&server->mods, reg->type);
+    if(!mod) {
+        return (DS_MOD_ENOMOD);
+    }
+
+    // ds_reg module doesn't have access to the map between dspaces module name
+    // and Python module name, so translate for it.
+    free(reg->type);
+    reg->type = strdup(mod->file);
+
+    reg_mod = dspaces_mod_by_name(&server->mods, "ds_reg");
+    if(!reg_mod) {
+        return (DS_MOD_EFAULT);
+    }
+    nargs = build_module_args_from_reg(reg, &args);
+    res = dspaces_module_exec(reg_mod, "register", args, nargs,
+                              DSPACES_MOD_RET_INT);
+    if(!res) {
+        return (DS_MOD_EFAULT);
+    }
+    if(res->type == DSPACES_MOD_RET_ERR) {
+        err = res->err;
+        free(res);
+        return (err);
+    }
+    if(res->ival != reg->id) {
+        DEBUG_OUT("updating registration id to %li.\n", res->ival);
+        reg->id = res->ival;
     }
 
     return (0);
