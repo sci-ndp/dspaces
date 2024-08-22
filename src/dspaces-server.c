@@ -3321,6 +3321,7 @@ static int route_registration(dspaces_provider_t server, reg_in_t *reg)
 
     mod = dspaces_mod_by_name(&server->mods, reg->type);
     if(!mod) {
+        DEBUG_OUT("could not find module for type '%s'.\n", reg->type);
         return (DS_MOD_ENOMOD);
     }
 
