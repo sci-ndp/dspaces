@@ -145,7 +145,7 @@ class DSClient:
     def GetVars(self):
         return wrapper_dspaces_get_vars(self.client)
 
-    def GetObjVars(self, var_name):
+    def GetVarObjs(self, var_name):
         ret_objs = []
         wrapper_results =  wrapper_dspaces_get_var_objs(self.client, var_name.encode('ascii'))
         for obj in wrapper_results:
