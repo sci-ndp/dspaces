@@ -20,6 +20,11 @@ class DSObject:
             'ub': self.ub
         })
 
+@dataclass
+class DSRegHandle:
+    namespace: str
+    parameters: dict
+
 class DSModuleError(Exception):
     def __init__(self, errno):
         self.errno = errno
@@ -89,7 +94,7 @@ class DSClient:
         return(self.VecExec([arg], fn))
 
     def Register(self, type, name, data):
-        nspace, reg_id =  wrapper_dspaces_register(self.client,
+        nspace, reg_id = wrapper_dspaces_register(self.client,
                                         type.encode('ascii'),
                                         name.encode('ascii'),
                                         json.dumps(data).encode('ascii'))
@@ -102,7 +107,7 @@ class DSClient:
                 raise DSConnectionError(reg_id)
             else:
                 raise Exception("unknown failure")
-        return(nspace, reg_id)
+        return(DSRegHandle(nspace, {'id':str(reg_id)}))
     
     def VecExec(self, objs:list[DSObject] = [], fn=None):
         if objs and not hasattr(objs, '__iter__'):
