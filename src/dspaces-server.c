@@ -3397,9 +3397,9 @@ static void reg_rpc(hg_handle_t handle)
     err = route_registration(server, &in);
     if(err != 0) {
         out = err;
+    } else {
+        out = in.id;
     }
-
-    out = in.id;
 
     margo_free_input(handle, &in);
     margo_respond(handle, &out);
