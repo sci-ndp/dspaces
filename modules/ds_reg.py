@@ -26,6 +26,7 @@ class Registry:
         else:
             res = cursor.execute("SELECT id FROM type WHERE name == ?", (reg_type,))
             type_id, = res.fetchone()
+        self.modules[reg_type].validate(**json.loads(data))
         res = cursor.execute("SELECT id FROM registry WHERE reg_type == ? AND name == ?", (type_id, name)).fetchone()
         if res is None:
             cursor.execute("INSERT INTO registry(id, reg_type, name, data) VALUES(?, ?, ?, ?) ON CONFLICT DO NOTHING", (reg_id, type_id, name, data))

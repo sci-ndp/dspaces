@@ -124,6 +124,9 @@ def _get_cmip6_data(model, scenario, variable, start_date, end_date, lb, ub):
         result[start_gidx:end_gidx,:,:] = data[start_iidx:end_iidx,lb[0]:ub[0],lb[1]:ub[1]]
     return(result)
 
+def validate(url, **kwargs):
+    pass
+
 def reg_query(name, version, lb, ub, params, url, var_name):
     array = _get_azure_url(url, var_name)
     if lb:

@@ -84,6 +84,10 @@ def build_cache_entry(dir_base, file_base, fcount):
     cache_file = f'{file_base}_G17_{fcount}.nc'
     return(f'{cache_dir}/{cache_file}')
 
+def validate(bucket, path):
+    if not path.endswith('.nc'):
+        raise ValueError("S3 module can only access netCDF files.")
+
 def reg_query(name, version, lb, ub, params, bucket, path):
     if 'var_name' not in params:
         raise ValueError
