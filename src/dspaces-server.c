@@ -124,7 +124,7 @@ struct dspaces_provider {
     int num_handlers;
     int *handler_rmap;
 
-    atomic_int local_reg_id;
+    int local_reg_id;
 #ifdef DSPACES_HAVE_PYTHON
     PyThreadState *main_state;
     PyThreadState **handler_state;
@@ -232,6 +232,7 @@ static int write_conf(dspaces_provider_t server, MPI_Comm comm)
     MPI_Comm_size(comm, &server->comm_size);
     str_sizes = malloc(server->comm_size * sizeof(*str_sizes));
     sizes_psum = malloc(server->comm_size * sizeof(*sizes_psum));
+    // TODO: MPI_Reduce instead
     MPI_Allgather(&my_addr_size, 1, MPI_INT, str_sizes, 1, MPI_INT, comm);
     sizes_psum[0] = 0;
     for(i = 0; i < server->comm_size; i++) {
@@ -240,10 +241,11 @@ static int write_conf(dspaces_provider_t server, MPI_Comm comm)
             sizes_psum[i] = sizes_psum[i - 1] + str_sizes[i - 1];
         }
     }
-    str_buf = malloc(buf_size);
-    MPI_Allgatherv(my_addr_str, my_addr_size, MPI_CHAR, str_buf, str_sizes,
-                   sizes_psum, MPI_CHAR, comm);
-
+    if(buf_size > 0) {
+        str_buf = malloc(buf_size);
+        MPI_Allgatherv(my_addr_str, my_addr_size, MPI_CHAR, str_buf, str_sizes,
+                       sizes_psum, MPI_CHAR, comm);
+    }
     server->server_address =
         malloc(server->comm_size * sizeof(*server->server_address));
     for(i = 0; i < server->comm_size; i++) {
@@ -384,8 +386,6 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
         print_conf(&server->conf);
     }
 
-    write_conf(server, comm);
-
     err = init_sspace(server, &domain, dsg_l);
     if(err < 0) {
         goto err_free;
@@ -408,6 +408,9 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
     INIT_LIST_HEAD(&dsg_l->obj_desc_drain_list);
 
     server->dsg = dsg_l;
+
+    write_conf(server, comm);
+
     return 0;
 err_free:
     free(dsg_l);
@@ -600,7 +603,6 @@ static int get_client_data(obj_descriptor odsc, dspaces_provider_t server)
     bulk_in_t in;
     bulk_out_t out;
     struct obj_data *od;
-    od = malloc(sizeof(struct obj_data));
     int ret;
 
     od = obj_data_alloc(&odsc);
