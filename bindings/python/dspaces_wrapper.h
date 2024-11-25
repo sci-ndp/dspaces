@@ -36,6 +36,8 @@ PyObject *wrapper_dspaces_get_vars(PyObject *clientppy);
 
 PyObject *wrapper_dspaces_get_var_objs(PyObject *clientppy, const char *name);
 
+PyObject *wrapper_dspaces_get_modules(PyObject *clientppy);
+
 PyObject *wrapper_dspaces_ops_new_iconst(long val);
 
 PyObject *wrapper_dspaces_ops_new_rconst(double val);

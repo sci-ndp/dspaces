@@ -108,6 +108,7 @@ struct dspaces_client {
     hg_id_t get_vars_id;
     hg_id_t get_var_objs_id;
     hg_id_t reg_id;
+    hg_id_t get_mods_id;
     struct dc_gspace *dcg;
     char **server_address;
     char **node_names;
@@ -592,6 +593,8 @@ static int dspaces_init_margo(dspaces_client_t client,
         margo_registered_name(client->mid, "get_var_objs_rpc",
                               &client->get_var_objs_id, &flag);
         margo_registered_name(client->mid, "reg_rpc", &client->reg_id, &flag);
+        margo_registered_name(client->mid, "get_mods_rpc", &client->get_mods_id,
+                              &flag);
     } else {
         client->put_id = MARGO_REGISTER(client->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, NULL);
@@ -655,6 +658,8 @@ static int dspaces_init_margo(dspaces_client_t client,
             client->mid, "get_var_objs_rpc", get_var_objs_in_t, odsc_hdr, NULL);
         client->reg_id =
             MARGO_REGISTER(client->mid, "reg_rpc", reg_in_t, uint64_t, NULL);
+        client->get_mods_id = MARGO_REGISTER(client->mid, "get_mods_rpc", void,
+                                             name_list_t, NULL);
     }
 
     return (dspaces_SUCCESS);
@@ -777,7 +782,7 @@ int dspaces_init_wan(const char *listen_addr_str, const char *conn_str,
     }
 
     choose_server(client);
-    ret =init_ss_info(client);
+    ret = init_ss_info(client);
     if(ret != dspaces_SUCCESS) {
         return (ret);
     }
@@ -3040,6 +3045,52 @@ int dspaces_get_var_objs(dspaces_client_t client, const char *name,
     margo_addr_free(client->mid, server_addr);
     margo_destroy(h);
     free(in.var_name);
+
+    return (ret);
+}
+
+int dspaces_get_modules(dspaces_client_t client, char ***mod_names)
+{
+    hg_addr_t server_addr;
+    hg_handle_t h;
+    name_list_t out;
+    int i, ret;
+    hg_return_t hret;
+
+    DEBUG_OUT("Requesting modules from server.\n");
+
+    get_server_address(client, &server_addr);
+    hret = margo_create(client->mid, server_addr, client->get_mods_id, &h);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_create() failed\n", __func__);
+        margo_addr_free(client->mid, server_addr);
+        return (-1);
+    }
+
+    hret = margo_forward(h, NULL);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_forward() failed\n", __func__);
+        margo_destroy(h);
+        return (-1);
+    }
+
+    hret = margo_get_output(h, &out);
+    if(hret != HG_SUCCESS) {
+        fprintf(stderr, "ERROR: (%s): margo_get_output() failed\n", __func__);
+        margo_destroy(h);
+        return (-1);
+    }
+
+    DEBUG_OUT("Received %" PRIu64 " modules in reply\n", out.count);
+    *mod_names = malloc(sizeof(*mod_names) * out.count);
+    for(i = 0; i < out.count; i++) {
+        (*mod_names)[i] = strdup(out.names[i]);
+    }
+    ret = out.count;
+
+    margo_free_output(h, &out);
+    margo_addr_free(client->mid, server_addr);
+    margo_destroy(h);
 
     return (ret);
 }

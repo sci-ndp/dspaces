@@ -89,4 +89,6 @@ struct dspaces_module_ret *dspaces_module_exec(struct dspaces_module *mod,
                                                struct dspaces_module_args *args,
                                                int nargs, int ret_type);
 
+int dspaces_module_names(struct list_head *mods, char ***names);
+
 #endif // __DSPACES_MODULES_H__

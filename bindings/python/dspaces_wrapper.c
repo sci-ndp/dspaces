@@ -461,6 +461,36 @@ PyObject *wrapper_dspaces_get_var_objs(PyObject *clientppy, const char *name)
     return (obj_list);
 }
 
+PyObject *wrapper_dspaces_get_modules(PyObject *clientppy)
+{
+    dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
+    int num_mods;
+    char **mod_names = NULL;
+    PyObject *mod_list;
+    PyObject *name;
+    int i;
+
+    num_mods = dspaces_get_modules(*clientp, &mod_names);
+    if(num_mods < 0) {
+        return (NULL);
+    }
+
+    mod_list = PyList_New(0);
+    for(i = 0; i < num_mods; i++) {
+        name = PyUnicode_DecodeASCII(mod_names[i], strlen(mod_names[i]), NULL);
+        if(name) {
+            PyList_Append(mod_list, name);
+        }
+        free(mod_names[i]);
+    }
+
+    if(num_mods) {
+        free(mod_names);
+    }
+
+    return (mod_list);
+}
+
 PyObject *wrapper_dspaces_ops_new_iconst(long val)
 {
     ds_expr_t *exprp;

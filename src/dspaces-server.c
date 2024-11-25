@@ -88,6 +88,7 @@ struct dspaces_provider {
     hg_id_t get_vars_id;
     hg_id_t get_var_objs_id;
     hg_id_t reg_id;
+    hg_id_t get_mods_id;
     struct list_head mods;
     struct ds_gspace *dsg;
     char **server_address;
@@ -154,6 +155,7 @@ DECLARE_MARGO_RPC_HANDLER(cond_rpc)
 DECLARE_MARGO_RPC_HANDLER(get_vars_rpc);
 DECLARE_MARGO_RPC_HANDLER(get_var_objs_rpc);
 DECLARE_MARGO_RPC_HANDLER(reg_rpc);
+DECLARE_MARGO_RPC_HANDLER(get_mods_rpc);
 
 static int init_sspace(dspaces_provider_t server, struct bbox *default_domain,
                        struct ds_gspace *dsg_l)
@@ -971,6 +973,10 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                        get_var_objs_rpc);
         margo_registered_name(server->mid, "reg_rpc", &server->reg_id, &flag);
         DS_HG_REGISTER(hg, server->reg_id, reg_in_t, uint64_t, reg_rpc);
+        margo_registered_name(server->mid, "get_mods_rpc", &server->get_mods_id,
+                              &flag);
+        DS_HG_REGISTER(hg, server->get_mods_id, void, name_list_t,
+                       get_mods_rpc);
     } else {
         server->put_id = MARGO_REGISTER(server->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, put_rpc);
@@ -1068,6 +1074,11 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
         server->reg_id =
             MARGO_REGISTER(server->mid, "reg_rpc", reg_in_t, uint64_t, reg_rpc);
         margo_register_data(server->mid, server->reg_id, (void *)server, NULL);
+
+        server->get_mods_id = MARGO_REGISTER(server->mid, "get_mods_rpc", void,
+                                             name_list_t, get_mods_rpc);
+        margo_register_data(server->mid, server->get_mods_id, (void *)server,
+                            NULL);
     }
     int err = dsg_alloc(server, conf_file, comm);
     if(err) {
@@ -3408,6 +3419,31 @@ static void reg_rpc(hg_handle_t handle)
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(reg_rpc);
+
+static void get_mods_rpc(hg_handle_t handle)
+{
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    const struct hg_info *info = margo_get_info(handle);
+    dspaces_provider_t server =
+        (dspaces_provider_t)margo_registered_data(mid, info->id);
+    name_list_t out = {0};
+    int i;
+
+    DEBUG_OUT("Received request for all module names.\n");
+
+    out.count = dspaces_module_names(&server->mods, &out.names);
+    DEBUG_OUT("returning %" PRIu64 " module names\n", out.count);
+    margo_respond(handle, &out);
+
+    for(i = 0; i < out.count; i++) {
+        free(out.names[i]);
+    }
+    if(out.count > 0) {
+        free(out.names);
+    }
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(get_mods_rpc);
 
 void dspaces_server_fini(dspaces_provider_t server)
 {

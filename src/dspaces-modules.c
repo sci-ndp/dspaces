@@ -472,3 +472,18 @@ struct dspaces_module_ret *dspaces_module_exec(struct dspaces_module *mod,
         return (ds_module_ret_err(DS_MOD_ENOSYS));
     }
 }
+
+int dspaces_module_names(struct list_head *mods, char ***names)
+{
+    int num_mods = list_len(mods);
+    struct dspaces_module *mod;
+    int i = 0;
+
+    *names = malloc(sizeof(**names) * num_mods);
+    list_for_each_entry(mod, mods, struct dspaces_module, entry)
+    {
+        (*names)[i++] = strdup(mod->name);
+    }
+
+    return (num_mods);
+}

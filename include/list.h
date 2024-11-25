@@ -73,6 +73,18 @@ static inline int list_empty(struct list_head *head)
     return head->next == head;
 }
 
+static inline int list_len(struct list_head *head)
+{
+    int len = 0;
+    struct list_head *pos;
+
+    for(pos = head->next; pos != head; pos = pos->next) {
+        len++;
+    }
+
+    return (len);
+}
+
 #define list_entry(ptr, type, member)                                          \
     (type *)((char *)ptr - offsetof(type, member))
 

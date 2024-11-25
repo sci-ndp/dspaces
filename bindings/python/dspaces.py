@@ -159,6 +159,9 @@ class DSClient:
             )
         return(ret_objs)
 
+    def GetModules(self):
+        return wrapper_dspaces_get_modules(self.client)
+    
 def _get_expr(obj, client):
     if isinstance(obj, DSExpr):
         return(obj)
