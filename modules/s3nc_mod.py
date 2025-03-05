@@ -88,10 +88,12 @@ def validate(bucket, path):
     if not path.endswith('.nc'):
         raise ValueError("S3 module can only access netCDF files.")
 
-def reg_query(name, version, lb, ub, params, bucket, path):
+def reg_query(name, params, bucket, path):
     if 'var_name' not in params:
         raise ValueError
     var_name = params['var_name']
+    lb = params.get('lb')
+    ub = params.get('ub')
     cache_entry = f'{cache_base}/{bucket}/{path}'
     if not os.path.exists(cache_entry):
         s3.get(f'{bucket}/{path}', cache_entry)
@@ -121,6 +123,9 @@ def query(name, version, lb, ub):
     return(array[index])
 
 if __name__ == '__main__':
-    var_name = 'goes17\\RadM/M1/C2/Rad'
+    var_name = 'Rad'
     version = 505081608
-    print(query(var_name, version, (1,1), (4,2)))
+    bucket = 'noaa-goes17'
+    path = 'ABI-L1b-RadM/2020/215/15/OR_ABI-L1b-RadM1-M6C04_G17_s20202151508255_e20202151508312_c20202151508354.nc'
+    params = {'version':version, 'var_name': var_name, 'lb':(1,1), 'ub':(4,2)}
+    print(reg_query('foo', params, bucket, path))

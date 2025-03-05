@@ -25,7 +25,9 @@ struct dspaces_module {
 typedef enum dspaces_module_arg_type {
     DSPACES_ARG_REAL,
     DSPACES_ARG_INT,
+    DSPACES_ARG_BOOL,
     DSPACES_ARG_STR,
+    DSPACES_ARG_JSON,
     DSPACES_ARG_NONE
 } dspaces_mod_arg_type_t;
 
@@ -68,6 +70,10 @@ struct dspaces_module_ret {
 
 int dspaces_init_mods(struct list_head *mods);
 
+int build_module_args_from_dict(size_t dict_len, int8_t *types, char **keys,
+                                void **vals,
+                                struct dspaces_module_args **argsp);
+
 int build_module_args_from_odsc(obj_descriptor *odsc,
                                 struct dspaces_module_args **argsp);
 
@@ -90,5 +96,8 @@ struct dspaces_module_ret *dspaces_module_exec(struct dspaces_module *mod,
                                                int nargs, int ret_type);
 
 int dspaces_module_names(struct list_head *mods, char ***names);
+
+int odsc_from_ret(struct dspaces_module_ret *ret, obj_descriptor **odsc_out,
+                  char name[OD_MAX_NAME_LEN], int version);
 
 #endif // __DSPACES_MODULES_H__

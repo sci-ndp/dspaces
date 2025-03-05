@@ -29,8 +29,12 @@ def _get_url_array(url, name, var_name):
     data = Dataset(cache_entry)
     return(data[var_name])
 
-def reg_query(name, version, lb, ub, params, url):
+def reg_query(name, params, url):
+    if 'var_name' not in params:
+        raise ValueError
     var_name = params['var_name']
+    lb = params.get('lb')
+    ub = params.get('ub')
     array = _get_url_array(url, name, var_name)
     if lb:
         index = [ slice(lb[x], ub[x]+1) for x in range(len(lb)) ]
@@ -50,5 +54,6 @@ def query(name, version, lb, ub):
 
 if __name__ == '__main__':
     url = 'https://www.unidata.ucar.edu/software/netcdf/examples/sresa1b_ncar_ccsm3-example.nc'
-    a = reg_query('foo', 0, (10, 10), (20,30), {'var_name':'area'}, url)
+    params = {'lb':(10,10), 'ub':(20,20), 'var_name':'area'}
+    a = reg_query('foo', params, url)
     print(a)

@@ -314,6 +314,29 @@ struct dspaces_req {
 int dspaces_get_req(dspaces_client_t client, struct dspaces_req *in_req,
                     struct dspaces_req *out_req, int timeout);
 
+struct dspaces_mod_param {
+    int type;
+    char *key;
+    union {
+        float f;
+        double d;
+        int8_t b : 1;
+        int8_t i8;
+        int16_t i16;
+        int32_t i32;
+        int64_t i64;
+        uint8_t u8;
+        uint16_t u16;
+        uint32_t u32;
+        uint64_t u64;
+        char *s;
+    } val;
+};
+
+int dspaces_get_module(dspaces_client_t client, const char *module,
+                       struct dspaces_mod_param *params, int num_param,
+                       struct dspaces_req *out);
+
 int dspaces_pexec(dspaces_client_t client, const char *var_name,
                   unsigned int ver, int ndim, uint64_t *lb, uint64_t *ub,
                   const char *fn, unsigned int fnsz, const char *fn_name,

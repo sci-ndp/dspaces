@@ -140,6 +140,62 @@ int build_module_args_from_reg(reg_in_t *reg,
     return (nargs);
 }
 
+int build_module_args_from_dict(size_t dict_len, int8_t *types, char **keys,
+                                void **vals, struct dspaces_module_args **argsp)
+{
+    struct dspaces_module_args *args;
+    int i;
+
+    args = malloc(sizeof(*args) * dict_len);
+
+    for(i = 0; i < dict_len; i++) {
+        args[i].name = strdup(keys[i]);
+        switch(types[i]) {
+        case DSP_FLOAT:
+            args[i].type = DSPACES_ARG_REAL;
+            args[i].len = -1;
+            args[i].rval = *(float *)(vals[i]);
+            break;
+        case DSP_INT:
+            args[i].type = DSPACES_ARG_INT;
+            args[i].len = -1;
+            args[i].ival = *(int *)(vals[i]);
+            break;
+        case DSP_LONG:
+            args[i].type = DSPACES_ARG_INT;
+            args[i].len = -1;
+            args[i].ival = *(long *)(vals[i]);
+            break;
+        case DSP_DOUBLE:
+            args[i].type = DSPACES_ARG_REAL;
+            args[i].len = -1;
+            args[i].ival = *(double *)(vals[i]);
+            break;
+        case DSP_BOOL:
+            args[i].type = DSPACES_ARG_BOOL;
+            args[i].len = -1;
+            args[i].ival = *(uint8_t *)(vals[i]);
+            break;
+        case DSP_STR:
+            args[i].type = DSPACES_ARG_STR;
+            args[i].len = 1 + strlen(vals[i]);
+            args[i].strval = vals[i];
+            break;
+        case DSP_JSON:
+            args[i].type = DSPACES_ARG_JSON;
+            args[i].len = 1 + strlen(vals[i]);
+            args[i].strval = vals[i];
+            break;
+        default:
+            args[i].type = DSPACES_ARG_NONE;
+            args[i].len = -1;
+            break;
+        }
+    }
+    *argsp = args;
+    return (dict_len);
+}
+
 int build_module_args_from_odsc(obj_descriptor *odsc,
                                 struct dspaces_module_args **argsp)
 {
@@ -290,7 +346,8 @@ static struct dspaces_module_ret *ds_module_ret_err(int err)
 #ifdef DSPACES_HAVE_PYTHON
 PyObject *py_obj_from_arg(struct dspaces_module_args *arg)
 {
-    PyObject *pArg;
+    PyObject *pArg, *jArg, *jObj;
+    static PyObject *json_mod = NULL;
     int i;
 
     switch(arg->type) {
@@ -312,8 +369,32 @@ PyObject *py_obj_from_arg(struct dspaces_module_args *arg)
             PyTuple_SetItem(pArg, i, PyLong_FromLong(arg->iarray[i]));
         }
         return (pArg);
+    case DSPACES_ARG_BOOL:
+        if(arg->len == -1) {
+            return (PyBool_FromLong(arg->ival));
+        }
+        pArg = PyTuple_New(arg->len);
+        for(i = 0; i < arg->len; i++) {
+            PyTuple_SetItem(pArg, i, PyBool_FromLong(arg->iarray[i]));
+        }
+        return (pArg);
     case DSPACES_ARG_STR:
         return (PyUnicode_DecodeFSDefault(arg->strval));
+    case DSPACES_ARG_JSON:
+        if(json_mod == NULL &&
+           (json_mod = PyImport_ImportModule("json")) == NULL) {
+            fprintf(stderr, "ERROR: could not load json python module.\n");
+            PyErr_Print();
+            return (Py_None);
+        }
+        jArg = PyBytes_FromStringAndSize(arg->strval, arg->len - 1);
+        jObj = PyObject_CallMethodObjArgs(
+            json_mod, PyUnicode_FromString("loads"), jArg, NULL);
+        if(!jObj) {
+            PyErr_Print();
+        }
+        Py_XDECREF(jArg);
+        return (jObj);
     case DSPACES_ARG_NONE:
         return (Py_None);
     default:
@@ -486,4 +567,32 @@ int dspaces_module_names(struct list_head *mods, char ***names)
     }
 
     return (num_mods);
+}
+
+int odsc_from_ret(struct dspaces_module_ret *ret, obj_descriptor **odsc_out,
+                  char name[OD_MAX_NAME_LEN], int version)
+{
+    obj_descriptor *odsc;
+
+    if(odsc_out == NULL) {
+        fprintf(stderr, "ERROR: %s: bad oddsc_out pointer.\n", __func__);
+        return (-1);
+    }
+    if(ret->type != DSPACES_MOD_RET_ARRAY) {
+        fprintf(stderr,
+                "WARNING: %s: failed to make obj_data from non-array.\n",
+                __func__);
+        return (-1);
+    }
+    odsc = calloc(1, sizeof(*odsc));
+    odsc->size = ret->elem_size;
+    odsc->bb.num_dims = ret->ndim;
+    obj_data_resize(odsc, ret->dim);
+    odsc->tag = ret->tag;
+    memcpy(odsc->name, name, OD_MAX_NAME_LEN);
+    odsc->version = version;
+
+    *odsc_out = odsc;
+
+    return (0);
 }

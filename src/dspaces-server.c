@@ -89,6 +89,7 @@ struct dspaces_provider {
     hg_id_t get_var_objs_id;
     hg_id_t reg_id;
     hg_id_t get_mods_id;
+    hg_id_t get_mod_id;
     struct list_head mods;
     struct ds_gspace *dsg;
     char **server_address;
@@ -156,6 +157,7 @@ DECLARE_MARGO_RPC_HANDLER(get_vars_rpc);
 DECLARE_MARGO_RPC_HANDLER(get_var_objs_rpc);
 DECLARE_MARGO_RPC_HANDLER(reg_rpc);
 DECLARE_MARGO_RPC_HANDLER(get_mods_rpc);
+DECLARE_MARGO_RPC_HANDLER(get_mod_rpc);
 
 static int init_sspace(dspaces_provider_t server, struct bbox *default_domain,
                        struct ds_gspace *dsg_l)
@@ -977,6 +979,10 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                               &flag);
         DS_HG_REGISTER(hg, server->get_mods_id, void, name_list_t,
                        get_mods_rpc);
+        margo_registered_name(server->mid, "get_mod_rpc", &server->get_mod_id,
+                              &flag);
+        DS_HG_REGISTER(hg, server->get_mod_id, get_mod_in_t, get_mod_out_t,
+                       get_mod_rpc);
     } else {
         server->put_id = MARGO_REGISTER(server->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, put_rpc);
@@ -1078,6 +1084,11 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
         server->get_mods_id = MARGO_REGISTER(server->mid, "get_mods_rpc", void,
                                              name_list_t, get_mods_rpc);
         margo_register_data(server->mid, server->get_mods_id, (void *)server,
+                            NULL);
+        server->get_mod_id =
+            MARGO_REGISTER(server->mid, "get_mod_rpc", get_mod_in_t,
+                           get_mod_out_t, get_mod_rpc);
+        margo_register_data(server->mid, server->get_mod_id, (void *)server,
                             NULL);
     }
     int err = dsg_alloc(server, conf_file, comm);
@@ -1962,6 +1973,183 @@ static void query_rpc(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(query_rpc)
 
+static int param_hash(int type, void *val, int mod)
+{
+    char *sval;
+    int hval = 1;
+    int i;
+
+    switch(type) {
+    case DSP_BOOL:
+    case DSP_CHAR:
+    case DSP_BYTE:
+    case DSP_UINT8:
+    case DSP_INT8:
+        return (*(uint8_t *)val);
+    case DSP_UINT16:
+    case DSP_INT16:
+        return (*(uint16_t *)val);
+    case DSP_FLOAT:
+    case DSP_INT:
+    case DSP_UINT:
+    case DSP_UINT32:
+    case DSP_INT32:
+        return (*(uint32_t *)val);
+    case DSP_LONG:
+    case DSP_DOUBLE:
+    case DSP_ULONG:
+    case DSP_UINT64:
+    case DSP_INT64:
+        return ((*(uint64_t *)val) % mod);
+    case DSP_STR:
+    case DSP_JSON:
+        sval = val;
+        for(i = 0; sval[i]; i++) {
+            hval = (hval * sval[i]) % mod;
+        }
+        return (hval);
+    }
+}
+
+static unsigned int params_hash(dsp_dict_t *params)
+{
+    long hval = 1;
+    static const int mod = 1000000007;
+    int i;
+
+    for(i = 0; i < params->len; i++) {
+        hval =
+            (hval * param_hash(params->types[i], params->vals[i], mod)) % mod;
+    }
+
+    return (hval);
+}
+
+static void write_param_name(dsp_dict_t *params, char name[OD_MAX_NAME_LEN])
+{
+    char *pstr_start = name;
+    static const int mod = 1000000007;
+    int hval;
+    int i;
+
+    for(i = 0; i < params->len; i++) {
+        hval = param_hash(params->types[i], params->vals[i], mod);
+        sprintf(pstr_start, "%x.4", hval);
+        pstr_start += 8;
+        if(pstr_start - name >= 136) {
+            pstr_start = name;
+        }
+    }
+}
+
+static void get_version_name(dsp_dict_t *params, unsigned int *version,
+                             char name[OD_MAX_NAME_LEN])
+{
+    int ver_set = 0;
+    int name_set = 0;
+    int i;
+
+    for(i = 0; i < params->len; i++) {
+        if(params->types[i] == DSP_STR &&
+           strcmp(params->keys[i], "name") == 0) {
+            memcpy(name, params->vals[i], 149);
+            name_set = 1;
+        }
+        if(params->types[i] == DSP_UINT &&
+           strcmp(params->keys[i], "version") == 0) {
+            *version = *(unsigned int *)(params->vals[i]);
+            ver_set = 1;
+        }
+    }
+    if(!ver_set) {
+        *version = params_hash(params);
+    }
+    if(!name_set) {
+        write_param_name(params, name);
+    }
+}
+
+static void get_mod_rpc(hg_handle_t handle)
+{
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    const struct hg_info *info = margo_get_info(handle);
+    dspaces_provider_t server =
+        (dspaces_provider_t)margo_registered_data(mid, info->id);
+    get_mod_in_t in;
+    get_mod_out_t out = {0};
+    struct dspaces_module *mod;
+    struct dspaces_module_args *args;
+    int nargs;
+    struct dspaces_module_ret *res = NULL;
+    hg_return_t hret;
+    char name[OD_MAX_NAME_LEN] = {0};
+    unsigned int version;
+    obj_descriptor *odsc;
+    struct obj_data *od;
+    int8_t *types;
+    int i, err;
+
+    HG_TRY(margo_get_input(handle, &in), 0, err_destroy,
+           "margo_get_input() failed.\n");
+
+    mod = dspaces_mod_by_name(&server->mods, in.name);
+    if(!mod) {
+        fprintf(stderr, "ERROR: %s: module '%s' requested but not available.\n",
+                __func__, in.name);
+        out.ret = DS_MOD_ENOMOD;
+        goto err_respond;
+    }
+
+    // To keep modules from being depedent on hg types.
+    // vals are void * ; we can probably depend on hg_string_t
+    // being a typedef of char *, and there's no hg_string_t
+    // conversion interface anyway...
+    types = malloc(sizeof(*types) * in.params.len);
+    for(i = 0; i < in.params.len; i++) {
+        types[i] = in.params.types[i];
+    }
+
+    nargs = build_module_args_from_dict(in.params.len, types, in.params.keys,
+                                        in.params.vals, &args);
+    free(types);
+    res =
+        dspaces_module_exec(mod, "pquery", args, nargs, DSPACES_MOD_RET_ARRAY);
+    if(res && res->type == DSPACES_MOD_RET_ERR) {
+        DEBUG_OUT("Module failure. Returning EFAULT to user.\n")
+        out.ret = DS_MOD_EFAULT;
+        free(res);
+        goto err_respond;
+    } else if(res) {
+        get_version_name(&in.params, &version, name);
+    }
+
+    odsc_from_ret(res, &odsc, name, version);
+    odsc_take_ownership(server, odsc);
+    od = obj_data_alloc_no_data(odsc, res->data);
+    ABT_mutex_lock(server->ls_mutex);
+    ls_add_obj(server->dsg->ls, od);
+    ABT_mutex_unlock(server->ls_mutex);
+    obj_update_dht(server, od, DS_OBJ_NEW);
+
+    out.odscs.odsc_list.raw_odsc = (char *)odsc;
+    out.odscs.odsc_list.size = sizeof(*odsc);
+
+    margo_respond(handle, &out);
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+
+    free(odsc);
+
+    return;
+
+err_respond:
+    margo_respond(handle, &out);
+    margo_free_input(handle, &in);
+err_destroy:
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(get_mod_rpc)
+
 static int peek_meta_remotes(dspaces_provider_t server, peek_meta_in_t *in)
 {
     margo_request *reqs;
@@ -2806,8 +2994,7 @@ static void pexec_rpc(hg_handle_t handle)
     gstate = PyGILState_Ensure();
     array = build_ndarray_from_od(arg_obj);
 
-    if((pklmod == NULL) &&
-       (pklmod = PyImport_ImportModuleNoBlock("dill")) == NULL) {
+    if((pklmod == NULL) && (pklmod = PyImport_ImportModule("dill")) == NULL) {
         margo_respond(handle, &out);
         margo_free_input(handle, &in);
         margo_destroy(handle);

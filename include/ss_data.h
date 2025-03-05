@@ -20,6 +20,8 @@
 #include <mercury_macros.h>
 #include <mercury_proc_string.h>
 
+#include "dspaces-common.h"
+
 #include <abt.h>
 
 #define MAX_VERSIONS 10
@@ -35,15 +37,18 @@ typedef struct {
 
 enum storage_type { row_major, column_major };
 
+#define OD_MAX_NAME_LEN 150
+#define OD_MAX_OWNER_LEN 128
+
 typedef struct {
-    char name[150];
+    char name[OD_MAX_NAME_LEN];
 
     enum storage_type st;
     uint32_t flags;
     int tag;
     int type;
 
-    char owner[128];
+    char owner[OD_MAX_OWNER_LEN];
     unsigned int version;
 
     /* Global bounding box descriptor. */
@@ -376,6 +381,128 @@ static inline hg_return_t hg_proc_name_list_t(hg_proc_t proc, void *data)
     return (ret);
 }
 
+typedef struct dsp_dict {
+    hg_size_t len;
+    hg_int8_t *types;
+    hg_string_t *keys;
+    void **vals;
+} dsp_dict_t;
+
+static inline hg_return_t dict_encode_val(hg_proc_t proc, hg_int8_t type,
+                                          void *val)
+{
+    switch(type) {
+    case DSP_BOOL:
+    case DSP_CHAR:
+    case DSP_BYTE:
+    case DSP_UINT8:
+    case DSP_INT8:
+        return (hg_proc_raw(proc, val, 1));
+    case DSP_UINT16:
+    case DSP_INT16:
+        return (hg_proc_raw(proc, val, 2));
+    case DSP_FLOAT:
+    case DSP_INT:
+    case DSP_UINT:
+    case DSP_UINT32:
+    case DSP_INT32:
+        return (hg_proc_raw(proc, val, 4));
+    case DSP_LONG:
+    case DSP_DOUBLE:
+    case DSP_ULONG:
+    case DSP_UINT64:
+    case DSP_INT64:
+        return (hg_proc_raw(proc, val, 8));
+    case DSP_STR:
+    case DSP_JSON:
+        return (hg_proc_hg_string_t(proc, &val));
+    default:
+        return (HG_INVALID_PARAM);
+    }
+}
+
+static inline hg_return_t dict_decode_val(hg_proc_t proc, hg_int8_t type,
+                                          void **val)
+{
+    hg_return_t ret = HG_SUCCESS;
+
+    switch(type) {
+    case DSP_BOOL:
+    case DSP_CHAR:
+    case DSP_BYTE:
+    case DSP_UINT8:
+    case DSP_INT8:
+        *val = malloc(1);
+        return (hg_proc_raw(proc, *val, 1));
+    case DSP_UINT16:
+    case DSP_INT16:
+        *val = malloc(2);
+        return (hg_proc_raw(proc, *val, 2));
+    case DSP_FLOAT:
+    case DSP_INT:
+    case DSP_UINT:
+    case DSP_UINT32:
+    case DSP_INT32:
+        *val = malloc(4);
+        return (hg_proc_raw(proc, *val, 4));
+    case DSP_LONG:
+    case DSP_DOUBLE:
+    case DSP_ULONG:
+    case DSP_UINT64:
+    case DSP_INT64:
+        *val = malloc(8);
+        return (hg_proc_raw(proc, *val, 8));
+    case DSP_STR:
+    case DSP_JSON:
+        ret = hg_proc_hg_string_t(proc, val);
+        return (ret);
+    default:
+        return (HG_INVALID_PARAM);
+    }
+}
+
+static inline hg_return_t hg_proc_dsp_dict_t(hg_proc_t proc, void *arg)
+{
+    hg_return_t ret = HG_SUCCESS;
+    dsp_dict_t *in = (dsp_dict_t *)arg;
+    int i;
+
+    ret = hg_proc_hg_size_t(proc, &in->len);
+    if(ret != HG_SUCCESS)
+        return ret;
+
+    if(hg_proc_get_op(proc) == HG_DECODE) {
+        in->types = malloc(sizeof(*in->types) * in->len);
+        in->keys = malloc(sizeof(*in->keys) * in->len);
+        in->vals = malloc(sizeof(*in->vals) * in->len);
+    }
+    for(i = 0; i < in->len; i++) {
+        ret = hg_proc_hg_int8_t(proc, &in->types[i]);
+        if(ret != HG_SUCCESS) {
+            return (ret);
+        }
+        ret = hg_proc_hg_string_t(proc, &in->keys[i]);
+        if(ret != HG_SUCCESS) {
+            return (ret);
+        }
+        if(hg_proc_get_op(proc) == HG_ENCODE) {
+            ret = dict_encode_val(proc, in->types[i], in->vals[i]);
+        } else if(hg_proc_get_op(proc) == HG_DECODE) {
+            ret = dict_decode_val(proc, in->types[i], &in->vals[i]);
+        } else {
+            free(in->vals[i]);
+        }
+        if(ret != HG_SUCCESS)
+            return (ret);
+    }
+    if(hg_proc_get_op(proc) == HG_FREE) {
+        free(in->keys);
+        free(in->vals);
+    }
+
+    return (ret);
+}
+
 MERCURY_GEN_PROC(bulk_gdim_t, ((odsc_hdr_with_gdim)(odsc))((hg_bulk_t)(handle)))
 MERCURY_GEN_PROC(bulk_in_t,
                  ((odsc_hdr)(odsc))((hg_bulk_t)(handle))((uint8_t)(flags)))
@@ -400,6 +527,8 @@ MERCURY_GEN_PROC(get_var_objs_in_t, ((hg_string_t)(var_name))((int32_t)(src)))
 MERCURY_GEN_PROC(reg_in_t,
                  ((hg_string_t)(type))((hg_string_t)(name))(
                      (hg_string_t)(reg_data))((int32_t)(src))((uint64_t)(id)))
+MERCURY_GEN_PROC(get_mod_in_t, ((hg_string_t)(name))((dsp_dict_t)(params)))
+MERCURY_GEN_PROC(get_mod_out_t, ((odsc_list_t)(odscs))((int32_t)(ret)))
 
 char *obj_desc_sprint(obj_descriptor *);
 //

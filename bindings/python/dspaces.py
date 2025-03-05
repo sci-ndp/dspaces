@@ -90,6 +90,24 @@ class DSClient:
         passed_type = None if dtype == None else np.dtype(dtype)
         return wrapper_dspaces_get(self.client, (self.nspace + name).encode('ascii'), version, lb, ub, passed_type, timeout)    
 
+    def GetModule(self, module, params = {}):
+        if not isinstance(module, str):
+            raise TypeError("module should be a module name")
+        if not isinstance(params, dict):
+            raise TypeError("params should be a dictionary.")
+        serialized_params = {key: json.dumps(val) for key,val in params.items()}
+        result, err = wrapper_dspaces_get_module(self.client, module.encode('ascii'), serialized_params)
+        if err < 0:
+            if err == -3:
+                raise DSModuleError(err)
+            elif err == -2 or err == -1 or err == -4 or err == -5:
+                raise DSRemoteFaultError(err)
+            elif err == -6:
+                raise DSConnectionError(err)
+            else:
+                raise Exception("unknown failure")
+        return(result)
+
     def Exec(self, name, version, lb=None, ub=None, fn=None):
         arg = DSObject(name=name, version=version, lb=lb, ub=ub)
         return(self.VecExec([arg], fn))

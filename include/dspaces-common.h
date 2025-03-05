@@ -11,6 +11,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <margo.h>
+
+#include "dspaces-logging.h"
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -61,6 +65,8 @@ static inline void ignore_result(int unused_result) { (void)unused_result; }
 #define DSP_INT16 -15
 #define DSP_INT32 -16
 #define DSP_INT64 -17
+#define DSP_STR -18
+#define DSP_JSON -19
 
 static size_t type_to_size_map[] = {0,
                                     sizeof(float),
@@ -89,6 +95,16 @@ static int type_to_size(int type_id)
     }
     return (type_to_size_map[-type_id]);
 }
+
+#define HG_TRY(op, ret, jmp, estr, ...)                                        \
+    do {                                                                       \
+        hg_return_t hret = op;                                                 \
+        if(hret != HG_SUCCESS) {                                               \
+            DEBUG_OUT(estr, ##__VA_ARGS__);                                    \
+            err = ret;                                                         \
+            goto jmp;                                                          \
+        }                                                                      \
+    } while(0);
 
 #if defined(__cplusplus)
 }

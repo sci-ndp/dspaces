@@ -4,6 +4,7 @@
  *
  * See COPYRIGHT in top-level directory.
  */
+#include "dspaces-logging.h"
 #include "dspaces-ops.h"
 #include "dspaces.h"
 #include "dspacesp.h"
@@ -39,18 +40,6 @@
 #define APEX_NAME_TIMER_START(num, name) (void)0;
 #define APEX_TIMER_STOP(num) (void)0;
 #endif
-
-#define DEBUG_OUT(dstr, ...)                                                   \
-    do {                                                                       \
-        if(client->f_debug) {                                                  \
-            ABT_unit_id tid;                                                   \
-            ABT_thread_self_id(&tid);                                          \
-            fprintf(stderr,                                                    \
-                    "Rank %i: TID: %" PRIu64 " %s, line %i (%s): " dstr,       \
-                    client->rank, tid, __FILE__, __LINE__, __func__,           \
-                    ##__VA_ARGS__);                                            \
-        }                                                                      \
-    } while(0);
 
 #define SUB_HASH_SIZE 16
 #define MB (1024 * 1024)
@@ -109,6 +98,7 @@ struct dspaces_client {
     hg_id_t get_var_objs_id;
     hg_id_t reg_id;
     hg_id_t get_mods_id;
+    hg_id_t get_mod_id;
     struct dc_gspace *dcg;
     char **server_address;
     char **node_names;
@@ -462,6 +452,7 @@ static int dspaces_init_internal(int rank, dspaces_client_t *c)
     }
 
     client->rank = rank;
+    dspaces_init_logging(client->rank);
 
     // now do dcg_alloc and store gid
     client->dcg = dcg_alloc(client);
@@ -595,6 +586,8 @@ static int dspaces_init_margo(dspaces_client_t client,
         margo_registered_name(client->mid, "reg_rpc", &client->reg_id, &flag);
         margo_registered_name(client->mid, "get_mods_rpc", &client->get_mods_id,
                               &flag);
+        margo_registered_name(client->mid, "get_mod_rpc", &client->get_mod_id,
+                              &flag);
     } else {
         client->put_id = MARGO_REGISTER(client->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, NULL);
@@ -660,6 +653,8 @@ static int dspaces_init_margo(dspaces_client_t client,
             MARGO_REGISTER(client->mid, "reg_rpc", reg_in_t, uint64_t, NULL);
         client->get_mods_id = MARGO_REGISTER(client->mid, "get_mods_rpc", void,
                                              name_list_t, NULL);
+        client->get_mod_id = MARGO_REGISTER(client->mid, "get_mod_rpc",
+                                            get_mod_in_t, get_mod_out_t, NULL);
     }
 
     return (dspaces_SUCCESS);
@@ -1342,6 +1337,8 @@ static int get_data(dspaces_client_t client, int num_odscs,
         in[i].odsc.size = sizeof(obj_descriptor);
         in[i].odsc.raw_odsc = (char *)(&odsc_tab[i]);
 
+        DEBUG_OUT("retrieving %s\n", obj_desc_sprint(&odsc_tab[i]));
+
         rdma_size[i] = (req_obj.size) * bbox_volume(&odsc_tab[i].bb);
 
         DEBUG_OUT("For odsc %i, element size is %zi, and there are %" PRIu64
@@ -1879,6 +1876,120 @@ int dspaces_get(dspaces_client_t client, const char *var_name, unsigned int ver,
     }
 
     return (ret);
+}
+
+int compare_params(const void *v1, const void *v2)
+{
+    struct dspaces_mod_param *p1 = (struct dspaces_mod_param *)v1;
+    struct dspaces_mod_param *p2 = (struct dspaces_mod_param *)v2;
+
+    return (strcmp(p1->key, p2->key));
+}
+
+int dspaces_get_module(dspaces_client_t client, const char *module,
+                       struct dspaces_mod_param *params, int num_param,
+                       struct dspaces_req *req_out)
+{
+    get_mod_in_t in;
+    get_mod_out_t out;
+    hg_addr_t server_addr;
+    hg_handle_t handle;
+    int num_odscs;
+    obj_descriptor *odsc_tab;
+    obj_descriptor odsc = {0};
+    int num_elem, elem_size;
+    void *data;
+    int i, err;
+
+    memset(req_out, 0, sizeof(*req_out));
+
+    qsort(params, num_param, sizeof(*params), compare_params);
+
+    in.name = strdup(module);
+    in.params.len = num_param;
+    in.params.types = malloc(sizeof(*in.params.types) * num_param);
+    in.params.keys = malloc(sizeof(*in.params.keys) * num_param);
+    in.params.vals = malloc(sizeof(*in.params.vals) * num_param);
+    for(i = 0; i < num_param; i++) {
+        in.params.types[i] = params[i].type;
+        in.params.keys[i] = params[i].key;
+        if(in.params.types[i] == DSP_STR || in.params.types[i] == DSP_JSON) {
+            in.params.vals[i] = params[i].val.s;
+        } else {
+            in.params.vals[i] = &params[i].val;
+        }
+    }
+
+    get_server_address(client, &server_addr);
+    HG_TRY(margo_create(client->mid, server_addr, client->get_mod_id, &handle),
+           DS_MOD_ECLIENT, err_out, "margo_create() failed.\n");
+    HG_TRY(margo_forward(handle, &in), DS_MOD_ECLIENT, err_destroy,
+           "margo_forward() failed.\n");
+    HG_TRY(margo_get_output(handle, &out), DS_MOD_ECLIENT, err_destroy,
+           "margo_get_output() failed\n");
+
+    num_odscs = (out.odscs.odsc_list.size) / sizeof(obj_descriptor);
+    if(num_odscs == 0) {
+        err = DS_MOD_EFAULT;
+        goto err_destroy;
+    }
+    odsc_tab = malloc(out.odscs.odsc_list.size);
+    memcpy(odsc_tab, out.odscs.odsc_list.raw_odsc, out.odscs.odsc_list.size);
+    margo_free_output(handle, &out);
+    margo_addr_free(client->mid, server_addr);
+    margo_destroy(handle);
+
+    free(in.name);
+    free(in.params.types);
+    free(in.params.keys);
+    free(in.params.vals);
+
+    DEBUG_OUT("Finished module query - need to fetch %d objects\n", num_odscs);
+    memcpy(&odsc, odsc_tab, sizeof(odsc));
+
+    // send request to get the obj_desc
+    if(num_odscs != 0) {
+        elem_size = odsc_tab[0].size;
+    } else {
+        DEBUG_OUT("not setting element size because there are no result "
+                  "descriptors.\n");
+        data = NULL;
+        return (DS_MOD_EFAULT);
+    }
+
+    num_elem = 1;
+    odsc.size = elem_size;
+    DEBUG_OUT("element size is %zi\n", odsc.size);
+    for(i = 0; i < odsc.bb.num_dims; i++) {
+        num_elem *= (odsc.bb.ub.c[i] - odsc.bb.lb.c[i]) + 1;
+    }
+    DEBUG_OUT("data buffer size is %d\n", num_elem * elem_size);
+
+    odsc.tag = odsc_tab[0].tag;
+    for(i = 1; i < num_odscs; i++) {
+        if(odsc_tab[i].tag != odsc_tab[0].tag) {
+            fprintf(stderr, "WARNING: multiple distinct tag values returned in "
+                            "query result. Returning first one.\n");
+            break;
+        }
+    }
+
+    data = malloc(num_elem * elem_size);
+    get_data(client, num_odscs, odsc, odsc_tab, data);
+    if(req_out) {
+        fill_req(client, &odsc, data, req_out);
+    }
+
+    return (0);
+err_destroy:
+    margo_addr_free(client->mid, server_addr);
+    margo_destroy(handle);
+err_out:
+    free(in.name);
+    free(in.params.types);
+    free(in.params.keys);
+    free(in.params.vals);
+    return (err);
 }
 
 int dspaces_get_meta(dspaces_client_t client, const char *name, int mode,

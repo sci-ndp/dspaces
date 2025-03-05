@@ -36,7 +36,7 @@ class Registry:
         cursor.close()
         return(reg_id)
 
-    def Query(self, reg_id, version, lb, ub, params):
+    def Query(self, reg_id, params):
         db_conn = sqlite3.connect(self.db_name)
         cursor = db_conn.cursor()
         res = cursor.execute("SELECT type.name, registry.name, registry.data FROM registry INNER JOIN type ON registry.reg_type == type.id WHERE registry.id == ?", (reg_id,))
@@ -44,7 +44,7 @@ class Registry:
         db_conn.close()
         data = json.loads(ser_data)
         module = self.modules[reg_type]
-        return(module.reg_query(name, version, lb, ub, params, **data))
+        return(module.reg_query(name, params, **data))
 
     def HighestIDBetween(self, min_id, max_id):
         db_conn = sqlite3.connect(self.db_name)
@@ -81,10 +81,19 @@ def bootstrap_id(rank):
 def query(name, version, lb, ub):
     id_part = name.split('\\')[-1]
     id, params = _get_query_params(name)
-    return(reg.Query(id, version, lb, ub, params))
+    params['version'] = version
+    params['lb'] = lb
+    params['ub'] = ub
+    result = reg.Query(id, params)
+    return(result)
+
+def pquery(id, **kwargs):
+    return(reg.Query(id, kwargs))
 
 if __name__ == '__main__':
-    register('s3nc_mod', 'abc', json.dumps({'bucket':'noaa-goes17','path':'ABI-L1b-RadM/2020/215/15/OR_ABI-L1b-RadM1-M6C02_G17_s20202151508255_e20202151508312_c20202151508338.nc'}), 45)
+    id = register('s3nc_mod', 'abc', json.dumps({'bucket':'noaa-goes17','path':'ABI-L1b-RadM/2020/215/15/OR_ABI-L1b-RadM1-M6C02_G17_s20202151508255_e20202151508312_c20202151508338.nc'}), 45)
     res = query('abcdef\id:45,var_name:Rad', 2, (1,1), (4,2))
+    params = {'id':id, 'var_name': 'Rad', 'version':2, 'lb':(1,1), 'ub':(4,2)}
+    #res = pquery(**params)
     print(res)
     

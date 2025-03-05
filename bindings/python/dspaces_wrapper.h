@@ -26,6 +26,9 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
                               int version, PyObject *lbt, PyObject *ubt,
                               PyObject *dtype, int timeout);
 
+PyObject *wrapper_dspaces_get_module(PyObject *clientppy, const char *module,
+                                     PyObject *params);
+
 PyObject *wrapper_dspaces_pexec(PyObject *clientppy, PyObject *req_list,
                                 PyObject *fn, const char *fn_name);
 

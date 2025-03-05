@@ -261,6 +261,7 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
     dspaces_get_req(*clientp, &in_req, &out_req, timeout);
     Py_END_ALLOW_THREADS
         // clang-format on
+
         data = out_req.buf;
 
     free(in_req.var_name);
@@ -285,6 +286,82 @@ PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
                                NULL);
 
     return (arr);
+}
+
+PyObject *wrapper_dspaces_get_module(PyObject *clientppy, const char *module,
+                                     PyObject *params)
+{
+    dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
+    // char ***param_str;
+    struct dspaces_mod_param *dsp_params;
+    int num_params;
+    PyObject *key, *val, *key_bstr, *val_bstr, *keys, *ret, *arr;
+    struct dspaces_req out;
+    PyArray_Descr *descr;
+    void *data;
+    int ndim;
+    npy_intp *dims;
+    int i, err;
+
+    keys = PyDict_Keys(params);
+    num_params = PyList_Size(keys);
+
+    if(num_params > 0) {
+        dsp_params = malloc(sizeof(*dsp_params) * num_params);
+    }
+    for(i = 0; i < num_params; i++) {
+        dsp_params[i].type = DSP_JSON;
+        key = PyList_GetItem(keys, i);
+        key_bstr = PyUnicode_AsASCIIString(key);
+        dsp_params[i].key = strdup(PyBytes_AsString(key_bstr));
+        Py_DECREF(key_bstr);
+        val = PyDict_GetItem(params, key);
+        val_bstr = PyUnicode_AsASCIIString(val);
+        dsp_params[i].val.s = strdup(PyBytes_AsString(val_bstr));
+        Py_DECREF(val_bstr);
+    }
+    Py_DECREF(keys);
+
+    // clang-format off
+    Py_BEGIN_ALLOW_THREADS
+    err = dspaces_get_module(*clientp, module, dsp_params, num_params, &out);
+    Py_END_ALLOW_THREADS
+        // clang-format on
+
+        data = out.buf;
+    for(i = 0; i < num_params; i++) {
+        free(dsp_params[i].key);
+        free(dsp_params[i].val.s);
+    }
+    if(num_params > 0) {
+        free(dsp_params);
+    }
+
+    ret = PyTuple_New(2);
+
+    PyTuple_SET_ITEM(ret, 1, PyLong_FromLong(err));
+
+    if(!data) {
+        Py_INCREF(Py_None);
+        PyTuple_SET_ITEM(ret, 0, Py_None);
+        return (ret);
+    }
+    descr = PyArray_DescrNewFromType(out.tag);
+    ndim = out.ndim;
+    dims = malloc(sizeof(*dims) * ndim);
+    for(i = 0; i < ndim; i++) {
+        dims[(ndim - i) - 1] = (out.ub[i] - out.lb[i]) + 1;
+    }
+    arr = PyArray_NewFromDescr(&PyArray_Type, descr, ndim, dims, NULL, data, 0,
+                               NULL);
+    if(!arr) {
+        PyErr_SetString(PyExc_RuntimeError, "failed to create numpy array");
+        return (NULL);
+    }
+    PyTuple_SET_ITEM(ret, 0, arr);
+    free(dims);
+
+    return (ret);
 }
 
 PyObject *wrapper_dspaces_pexec(PyObject *clientppy, PyObject *req_list,
@@ -714,6 +791,7 @@ PyObject *wrapper_dspaces_register(PyObject *clientppy, const char *type,
         PyTuple_SET_ITEM(ret, 0,
                          PyUnicode_DecodeASCII(nspace, strlen(nspace), NULL));
     } else {
+        Py_INCREF(Py_None);
         PyTuple_SET_ITEM(ret, 0, Py_None);
     }
 
