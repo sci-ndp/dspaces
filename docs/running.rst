@@ -41,7 +41,7 @@ Bootstrapping communication
 ---------------------------
 The server produces a bootstrap file during its init phase, ``conf.ds``. This file must be read by the clients (or rank zero of the clients 
 if ``dspaces_init_mpi()`` is being used. This file provides the clients with enough information to make initial contact with the server and
-perform wire-up. In order to find this file, the server and client application must be run in the same working directory, or at last a symlink of ``ds.conf`` should be present.
+perform wire-up. In order to find this file, the server and client application must be run in the same working directory, or at last a symlink of ``conf.ds`` should be present.
 
 Environment variables
 ---------------------
