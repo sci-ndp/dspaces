@@ -237,75 +237,151 @@ static void parse_storage_table(toml_table_t *storage, struct ds_conf *conf)
     }
 }
 
+char *dspaces_download_module(const char *name, const char *url, char *file)
+{
+    char *arg_part;
+    char *fname;
+    FILE *mod_file;
+    
+#ifdef DSPACES_HAVE_CURL
+    static CURL *curl = NULL;
+    if(!curl) {
+        curl = curl_easy_init();
+    }
+    if(!curl) {
+        fprintf(stderr, "ERROR: could not initialize curl.\n");
+        return(NULL);
+    }
+    if(!file) {
+        file = strdup(strrchr(url, '/')) + 1;
+        arg_part = strchr(file, '?');
+        if(arg_part) {
+            arg_part[0] = '\0';
+        }
+    }
+    fname = malloc(strlen(xstr(DSPACES_MOD_DIR)) + strlen(file) + 2);
+    sprintf(fname, "%s/%s", xstr(DSPACES_MOD_DIR), file);
+    DEBUG_OUT("downloading module '%s' to '%s'\n", name, fname);
+    mod_file = fopen(fname, "wb");
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, mod_file);
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    if(curl_easy_perform(curl) != CURLE_OK) {
+        fprintf(stderr,
+                "ERROR: could not download module '%s' from '%s'.\n",
+                name, url);
+        fclose(mod_file);
+        free(fname);
+        return(NULL);
+    }
+    fclose(mod_file);
+    DEBUG_OUT("downloaded completed successfully.\n");
+    free(fname);
+#else
+    fprintf(stderr,
+            "WARNING: could not download module '%s': compiled without "
+            "curl support.\n",
+            name);
+    return(NULL);
+#endif // DSPACES_HAVE_CURL
+    return(file);
+}
+
+static struct dspaces_module *parse_module(char *name, toml_table_t *module)
+{
+    struct dspaces_module *mod;
+    char *file, *url, *ext;
+    char *arg_part;
+    char *fname;
+    FILE *mod_file;
+
+    mod = calloc(1, sizeof(*mod));
+    if(!mod) {
+        fprintf(stderr, "ERROR: could not allocate memory for module '%s'.\n", name);
+        return NULL;
+    }
+    mod->name = strdup(name);
+    get_toml_str(module, "namespace", &mod->namespace);
+    if(!mod->namespace) {
+        fprintf(stderr,
+                "WARNING: No namespace for '%s'. Query matching currently "
+                "requires a namespace.\n",
+                mod->name);
+    }
+    url = NULL;
+    file = NULL;
+    get_toml_str(module, "url", &url);
+    get_toml_str(module, "file", &file);
+    if(url) {
+        if(file) {
+            fprintf(stderr,
+                    "WARNING: both 'url' and 'file' specified for module '%s'. "
+                    "Using 'url'.\n",
+                    mod->name);
+        }
+        file = dspaces_download_module(name, url, file);
+        if(!file) {
+            fprintf(stderr,
+                    "ERROR: could not download module '%s' from '%s'.\n",
+                    mod->name, url);
+            free(url);
+            free(mod);
+            return NULL;
+        }
+        free(url);
+    }
+    if(file) {
+        ext = strrchr(file, '.');
+        if(strcmp(ext, ".py") == 0) {
+            mod->type = DSPACES_MOD_PY;
+            ext[0] = '\0';
+            mod->file = file;
+        } else {
+            fprintf(stderr,
+                    "WARNING: could not determine type of module '%s', "
+                    "with extension '%s'. Skipping.\n",
+                    mod->name, ext);
+            free(file);
+            return NULL;
+        }
+    }
+    return mod;
+}
+
 static void parse_modules_table(toml_table_t *modules, struct ds_conf *conf)
 {
     struct dspaces_module *mod;
     toml_table_t *module;
-    char *server, *file, *url, *type, *ext;
-    char *fname;
-    char *arg_part;
-    FILE *mod_file;
+    char *name;
     int nmod;
 #ifdef DSPACES_HAVE_CURL
     CURL *curl = curl_easy_init();
+    if(!curl) {
+        fprintf(stderr, "ERROR: could not initialize curl.\n");
+    }
 #endif
     int i;
 
     nmod = toml_table_ntab(modules);
+    DEBUG_OUT("found %d modules\n", nmod);
     for(i = 0; i < nmod; i++) {
-        mod = calloc(1, sizeof(*mod));
-        mod->name = strdup(toml_key_in(modules, i));
-        module = toml_table_in(modules, mod->name);
-        get_toml_str(module, "namespace", &mod->namespace);
-        if(!mod->namespace) {
-            fprintf(stderr,
-                    "WARNING: No namespace for '%s'. Query matching currently "
-                    "requires a namespace.\n",
-                    mod->name);
+        name = strdup(toml_key_in(modules, i));
+        if(!name) {
+            fprintf(stderr, "ERROR: could not get module name.\n");
+            continue;
         }
-        url = NULL;
-        file = NULL;
-        get_toml_str(module, "url", &url);
-        get_toml_str(module, "file", &file);
-        if(url) {
-#ifdef DSPACES_HAVE_CURL
-            if(!file) {
-                file = strdup(strrchr(url, '/')) + 1;
-                arg_part = strchr(file, '?');
-                if(arg_part) {
-                    arg_part[0] = '\0';
-                }
-            }
-            fname = malloc(strlen(xstr(DSPACES_MOD_DIR)) + strlen(file) + 2);
-            sprintf(fname, "%s/%s", xstr(DSPACES_MOD_DIR), file);
-            mod_file = fopen(fname, "wb");
-            curl_easy_setopt(curl, CURLOPT_WRITEDATA, mod_file);
-            curl_easy_setopt(curl, CURLOPT_URL, url);
-            curl_easy_perform(curl);
-            fclose(mod_file);
-            free(fname);
-#else
-            fprintf(stderr,
-                    "WARNING: could not download module '%s': compiled without "
-                    "curl support.\n",
-                    mod->name);
-#endif // DSPACES_HAVE_CURL
+        DEBUG_OUT("configuring module '%s'\n", name);
+        module = toml_table_in(modules, name);
+        if(!module) {
+            fprintf(stderr, "ERROR: could not get module '%s'.\n", name);
+            continue;
         }
-        if(file) {
-            ext = strrchr(file, '.');
-            if(strcmp(ext, ".py") == 0) {
-                mod->type = DSPACES_MOD_PY;
-                ext[0] = '\0';
-                mod->file = file;
-            } else {
-                fprintf(stderr,
-                        "WARNING: could not determine type of module '%s', "
-                        "with extension '%s'. Skipping.\n",
-                        mod->name, ext);
-                free(file);
-                continue;
-            }
+        mod = parse_module(name, module);
+        if(!mod) {
+            fprintf(stderr, "ERROR: could not parse module '%s'.\n", mod->name);
+            continue;
         }
+        free(name);
+        DEBUG_OUT("adding module '%s' to module list\n", mod->name);
         list_add(&mod->entry, conf->mods);
     }
 #ifdef DSPACES_HAVE_CURL

@@ -65,3 +65,5 @@ PyObject *wrapper_dspaces_ops_calc(PyObject *clientppy, PyObject *exprppy);
 
 PyObject *wrapper_dspaces_register(PyObject *clientppy, const char *type,
                                    const char *name, const char *data);
+
+                                   PyObject *wrapper_dspaces_add_module(PyObject *clientppy, const char *name, const char *namespace, const char *url);

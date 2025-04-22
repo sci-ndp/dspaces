@@ -1,5 +1,6 @@
 #include "dspaces-modules.h"
 #include "dspaces-common.h"
+#include "dspaces-conf.h"
 #include "dspaces-logging.h"
 #include "ss_data.h"
 
@@ -21,6 +22,7 @@ static int dspaces_init_py_mod(struct dspaces_module *mod)
         return (-1);
     }
 
+    DEBUG_OUT("loading module '%s' as %s\n", mod->name, mod->file);
     pName = PyUnicode_DecodeFSDefault(mod->file);
     mod->pModule = PyImport_Import(pName);
     if(!mod->pModule) {
@@ -63,15 +65,9 @@ static void add_builtin_mods(struct list_head *mods)
     }
 }
 
-int dspaces_init_mods(struct list_head *mods)
+static int dspaces_init_mod(struct dspaces_module *mod)
 {
-    struct dspaces_module *mod;
-
-    add_builtin_mods(mods);
-
-    list_for_each_entry(mod, mods, struct dspaces_module, entry)
-    {
-        switch(mod->type) {
+    switch(mod->type) {
         case DSPACES_MOD_PY:
 #ifdef DSPACES_HAVE_PYTHON
             dspaces_init_py_mod(mod);
@@ -81,16 +77,86 @@ int dspaces_init_mods(struct list_head *mods)
                     "module. DataSpaces was compiled without Python support.\n",
                     mod->name);
 #endif // DSPACES_HAVE_PYTHON
-            break;
+            return(0);
         default:
             fprintf(stderr,
                     "WARNING: unknown type %i for module '%s'. Corruption?\n",
                     mod->type, mod->name);
-        }
+            return(-1);
         // TODO: unlink module on init failure?
+    }
+}
+
+int dspaces_init_mods(struct list_head *mods)
+{
+    struct dspaces_module *mod;
+
+    add_builtin_mods(mods);
+
+    list_for_each_entry(mod, mods, struct dspaces_module, entry)
+    {
+        dspaces_init_mod(mod);
     }
 
     return (0);
+}
+
+static struct dspaces_module *find_mod(struct list_head *mods,
+                                       const char *mod_name)
+{
+    struct dspaces_module *mod;
+    int i;
+
+    list_for_each_entry(mod, mods, struct dspaces_module, entry)
+    {
+        if(strcmp(mod_name, mod->name) == 0) {
+            return (mod);
+        }
+    }
+
+    return (NULL);
+}
+
+int dspaces_server_add_module(struct list_head *mods, const char *name,
+                       const char *namespace, const char *url,
+                       enum dspaces_mod_type type)
+{
+    struct dspaces_module *mod;
+    char *ext;
+    int ret;
+
+    if(find_mod(mods, name)) {
+        fprintf(stderr, "WARNING: module '%s' already exists.\n", name);
+        return (-1);
+    }
+
+    mod = malloc(sizeof(*mod));
+    if(!mod) {
+        return (-1);
+    }
+
+    mod->name = strdup(name);
+    mod->namespace = strdup(namespace);
+    mod->file = dspaces_download_module(name, url, mod->file);
+    ext = strrchr(mod->file, '.');
+    if(strcmp(ext, ".py") == 0) {
+        mod->type = DSPACES_MOD_PY;
+        ext[0] = '\0';
+    } else {
+        mod->type = type;
+    }
+    list_add(&mod->entry, mods);
+    
+#ifdef DSPACES_HAVE_PYTHON
+    PyGILState_STATE gstate;
+    gstate = PyGILState_Ensure();
+#endif // DSPACES_HAVE_PYTHON
+    ret = dspaces_init_mod(mod);
+#ifdef DSPACES_HAVE_PYTHON
+    PyGILState_Release(gstate);
+#endif // DSPACES_HAVE_PYTHON
+
+    return(ret);
 }
 
 int build_module_arg_from_rank(long rank, struct dspaces_module_args *arg)
@@ -283,22 +349,6 @@ void free_arg_list(struct dspaces_module_args *args, int len)
         fprintf(stderr, "WARNING: trying to free NULL argument list in %s\n",
                 __func__);
     }
-}
-
-static struct dspaces_module *find_mod(struct list_head *mods,
-                                       const char *mod_name)
-{
-    struct dspaces_module *mod;
-    int i;
-
-    list_for_each_entry(mod, mods, struct dspaces_module, entry)
-    {
-        if(strcmp(mod_name, mod->name) == 0) {
-            return (mod);
-        }
-    }
-
-    return (NULL);
 }
 
 struct dspaces_module *dspaces_mod_by_od(struct list_head *mods,

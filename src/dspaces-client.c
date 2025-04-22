@@ -99,6 +99,7 @@ struct dspaces_client {
     hg_id_t reg_id;
     hg_id_t get_mods_id;
     hg_id_t get_mod_id;
+    hg_id_t add_mod_id;
     struct dc_gspace *dcg;
     char **server_address;
     char **node_names;
@@ -588,6 +589,7 @@ static int dspaces_init_margo(dspaces_client_t client,
                               &flag);
         margo_registered_name(client->mid, "get_mod_rpc", &client->get_mod_id,
                               &flag);
+        margo_registered_name(client->mid, "add_mod_rpc", &client->add_mod_id, &flag);
     } else {
         client->put_id = MARGO_REGISTER(client->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, NULL);
@@ -655,6 +657,8 @@ static int dspaces_init_margo(dspaces_client_t client,
                                              name_list_t, NULL);
         client->get_mod_id = MARGO_REGISTER(client->mid, "get_mod_rpc",
                                             get_mod_in_t, get_mod_out_t, NULL);
+        client->add_mod_id = MARGO_REGISTER(client->mid, "add_mod_rpc", add_mod_in_t, int8_t, NULL);
+
     }
 
     return (dspaces_SUCCESS);
@@ -3204,4 +3208,43 @@ int dspaces_get_modules(dspaces_client_t client, char ***mod_names)
     margo_destroy(h);
 
     return (ret);
+}
+
+int dspaces_add_module(dspaces_client_t client, const char *name, const char *namespace, const char *url)
+{
+    hg_addr_t server_addr;
+    hg_handle_t h;
+    add_mod_in_t in;
+    int8_t result;
+    hg_return_t hret;
+    int err;
+
+    in.name = strdup(name);
+    in.namespace = strdup(namespace);
+    in.url = strdup(url);
+    // rpc handler ignores in.type - assumes python module
+    in.type = 0;
+
+    get_server_address(client, &server_addr);
+    HG_TRY(margo_create(client->mid, server_addr, client->add_mod_id, &h),
+           DS_MOD_ECLIENT, err_out, "margo_create() failed.\n");
+    HG_TRY(margo_forward(h, &in), DS_MOD_ECLIENT, err_destroy,
+           "margo_forward() failed.\n");
+    HG_TRY(margo_get_output(h, &result), DS_MOD_ECLIENT, err_destroy,
+           "margo_get_output() failed\n");
+    if(result == 0) {
+        err = 0;
+    } else {
+        DEBUG_OUT("WARNING: (%s): server responded with %d\n", __func__, result);
+        err = DS_MOD_EFAULT;   
+    }
+
+err_destroy:
+    margo_addr_free(client->mid, server_addr);
+    margo_destroy(h);
+err_out:
+    free(in.name);
+    free(in.namespace);
+    free(in.url);
+    return (err);
 }

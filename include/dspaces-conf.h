@@ -26,4 +26,6 @@ int parse_conf_toml(const char *fname, struct ds_conf *conf);
 
 void print_conf(struct ds_conf *conf);
 
+char *dspaces_download_module(const char *name, const char *url, char *file);
+
 #endif // __DSPACES_CONF_H

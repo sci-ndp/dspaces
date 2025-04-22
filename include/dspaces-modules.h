@@ -70,6 +70,10 @@ struct dspaces_module_ret {
 
 int dspaces_init_mods(struct list_head *mods);
 
+int dspaces_server_add_module(struct list_head *mods, const char *name,
+    const char *namespace, const char *url,
+    enum dspaces_mod_type type);
+
 int build_module_args_from_dict(size_t dict_len, int8_t *types, char **keys,
                                 void **vals,
                                 struct dspaces_module_args **argsp);

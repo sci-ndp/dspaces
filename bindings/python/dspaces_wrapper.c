@@ -222,7 +222,7 @@ void wrapper_dspaces_put(PyObject *clientppy, PyObject *obj, const char *name,
     Py_END_ALLOW_THREADS
         // clang-format on
 
-        return;
+    return;
 }
 
 PyObject *wrapper_dspaces_get(PyObject *clientppy, const char *name,
@@ -430,9 +430,9 @@ PyObject *wrapper_dspaces_pexec(PyObject *clientppy, PyObject *req_list,
     dspaces_mpexec(*clientp, num_reqs, reqs, PyBytes_AsString(fn),
                   PyBytes_Size(fn) + 1, fn_name, &data, &data_size);
     Py_END_ALLOW_THREADS
-        // clang-format on
+    // clang-format on
 
-        if(data_size > 0)
+    if(data_size > 0)
     {
         result = PyBytes_FromStringAndSize(data, data_size);
     }
@@ -798,4 +798,24 @@ PyObject *wrapper_dspaces_register(PyObject *clientppy, const char *type,
     PyTuple_SET_ITEM(ret, 1, PyLong_FromLong(id));
 
     return (ret);
+}
+
+PyObject *wrapper_dspaces_add_module(PyObject *clientppy, const char *name, const char *namespace, const char *url)
+{
+    dspaces_client_t *clientp = PyLong_AsVoidPtr(clientppy);
+    int8_t result;
+
+    // clang-format off
+    Py_BEGIN_ALLOW_THREADS
+    result = dspaces_add_module(*clientp, name, namespace, url);
+    Py_END_ALLOW_THREADS
+    // clang-format on
+
+    if(result != 0) {
+        PyErr_SetString(PyExc_RuntimeError, "dspaces_add_module() failed");
+        return(NULL);
+    }
+
+    Py_INCREF(Py_None);
+    return (Py_None);
 }

@@ -90,6 +90,7 @@ struct dspaces_provider {
     hg_id_t reg_id;
     hg_id_t get_mods_id;
     hg_id_t get_mod_id;
+    hg_id_t add_mod_id;
     struct list_head mods;
     struct ds_gspace *dsg;
     char **server_address;
@@ -112,6 +113,7 @@ struct dspaces_provider {
     ABT_mutex dht_mutex;
     ABT_mutex sspace_mutex;
     ABT_mutex kill_mutex;
+    ABT_mutex mod_mutex;
 
     ABT_xstream drain_xstream;
     ABT_pool drain_pool;
@@ -158,6 +160,7 @@ DECLARE_MARGO_RPC_HANDLER(get_var_objs_rpc);
 DECLARE_MARGO_RPC_HANDLER(reg_rpc);
 DECLARE_MARGO_RPC_HANDLER(get_mods_rpc);
 DECLARE_MARGO_RPC_HANDLER(get_mod_rpc);
+DECLARE_MARGO_RPC_HANDLER(add_mod_rpc);
 
 static int init_sspace(dspaces_provider_t server, struct bbox *default_domain,
                        struct ds_gspace *dsg_l)
@@ -896,6 +899,7 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
     ABT_mutex_create(&server->dht_mutex);
     ABT_mutex_create(&server->sspace_mutex);
     ABT_mutex_create(&server->kill_mutex);
+    ABT_mutex_create(&server->mod_mutex);
 
     hg = margo_get_class(server->mid);
 
@@ -983,6 +987,10 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
                               &flag);
         DS_HG_REGISTER(hg, server->get_mod_id, get_mod_in_t, get_mod_out_t,
                        get_mod_rpc);
+        margo_registered_name(server->mid, "add_mod_rpc", &server->add_mod_id,
+                              &flag);
+        DS_HG_REGISTER(hg, server->add_mod_id, add_mod_in_t, int8_t,
+                       add_mod_rpc);
     } else {
         server->put_id = MARGO_REGISTER(server->mid, "put_rpc", bulk_gdim_t,
                                         bulk_out_t, put_rpc);
@@ -1089,6 +1097,11 @@ int dspaces_server_init(const char *listen_addr_str, MPI_Comm comm,
             MARGO_REGISTER(server->mid, "get_mod_rpc", get_mod_in_t,
                            get_mod_out_t, get_mod_rpc);
         margo_register_data(server->mid, server->get_mod_id, (void *)server,
+                            NULL);
+        server->add_mod_id =
+            MARGO_REGISTER(server->mid, "add_mod_rpc", add_mod_in_t, int8_t,
+                           add_mod_rpc);
+        margo_register_data(server->mid, server->add_mod_id, (void *)server,
                             NULL);
     }
     int err = dsg_alloc(server, conf_file, comm);
@@ -3631,6 +3644,33 @@ static void get_mods_rpc(hg_handle_t handle)
     margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(get_mods_rpc);
+
+static void add_mod_rpc(hg_handle_t handle)
+{
+    margo_instance_id mid = margo_hg_handle_get_instance(handle);
+    const struct hg_info *info = margo_get_info(handle);
+    dspaces_provider_t server =
+        (dspaces_provider_t)margo_registered_data(mid, info->id);
+    add_mod_in_t in;
+    int8_t err;
+
+    margo_get_input(handle, &in);
+    DEBUG_OUT("Received request to add module '%s'.\n", in.name);
+
+    ABT_mutex_lock(server->mod_mutex);
+    // TOOD: don't ignore in.type
+    err = dspaces_server_add_module(&server->mods, in.name, in.namespace, in.url, DSPACES_MOD_PY);
+    ABT_mutex_unlock(server->mod_mutex);
+    if(err != 0) {
+        fprintf(stderr, "ERROR: (%s): failed to add module '%s' with %d\n",
+                __func__, in.name, err);
+    }
+    
+    margo_respond(handle, &err);
+    margo_free_input(handle, &in);
+    margo_destroy(handle);
+}
+DEFINE_MARGO_RPC_HANDLER(add_mod_rpc);
 
 void dspaces_server_fini(dspaces_provider_t server)
 {

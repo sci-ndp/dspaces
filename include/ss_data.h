@@ -529,6 +529,7 @@ MERCURY_GEN_PROC(reg_in_t,
                      (hg_string_t)(reg_data))((int32_t)(src))((uint64_t)(id)))
 MERCURY_GEN_PROC(get_mod_in_t, ((hg_string_t)(name))((dsp_dict_t)(params)))
 MERCURY_GEN_PROC(get_mod_out_t, ((odsc_list_t)(odscs))((int32_t)(ret)))
+MERCURY_GEN_PROC(add_mod_in_t, ((hg_string_t)(name))((int8_t)(type))((hg_string_t)(url))((hg_string_t)(namespace)))
 
 char *obj_desc_sprint(obj_descriptor *);
 //

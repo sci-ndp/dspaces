@@ -490,6 +490,8 @@ int dspaces_get_modules(dspaces_client_t client, char ***mod_names);
 long dspaces_register_simple(dspaces_client_t client, const char *type,
                              const char *name, const char *data, char **nspace);
 
+                             int dspaces_add_module(dspaces_client_t client, const char *name, const char *namespace, const char *url);
+
 #if defined(__cplusplus)
 }
 #endif
