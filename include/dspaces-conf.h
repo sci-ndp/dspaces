@@ -5,6 +5,10 @@
 #include "dspaces-remote.h"
 #include "list.h"
 
+#ifdef DSPACES_HAVE_FILE_STORAGE
+#include "file_storage/policy.h"
+#endif
+
 static char *hash_strings[] = {"Dynamic", "Unitary", "SFC", "Bisection"};
 
 /* Server configuration parameters */
@@ -18,6 +22,9 @@ struct ds_conf {
     struct remote **remotes;
     int nremote;
     struct list_head *mods;
+#ifdef DSPACES_HAVE_FILE_STORAGE
+    struct swap_config swap;
+#endif
 };
 
 int parse_conf(const char *fname, struct ds_conf *conf);

@@ -1674,7 +1674,12 @@ static void fill_odsc(dspaces_client_t client, const char *var_name,
     odsc->version = ver;
     memset(odsc->owner, 0, sizeof(odsc->owner));
     odsc->st = st;
-    odsc->size = elem_size;
+    if(elem_size < 0) {
+        odsc->type = elem_size;
+        odsc->size = type_to_size(elem_size);
+    } else {
+        odsc->size = elem_size;
+    }
     odsc->bb.num_dims = ndim;
 
     memset(odsc->bb.lb.c, 0, sizeof(uint64_t) * BBOX_MAX_NDIM);

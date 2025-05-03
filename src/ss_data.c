@@ -1068,6 +1068,28 @@ struct obj_data *ls_find(ss_storage *ls, obj_descriptor *odsc)
     return NULL;
 }
 
+/*
+  Find an object in the local storage that includes
+  the object descriptor 'odsc'.
+*/
+struct obj_data *ls_find_include(ss_storage *ls, obj_descriptor *odsc)
+{
+    struct obj_data *od;
+    struct list_head *list;
+    int index;
+
+    index = odsc->version % ls->size_hash;
+    list = &ls->obj_hash[index];
+
+    list_for_each_entry(od, list, struct obj_data, obj_entry)
+    {
+        if(obj_desc_equals_include(&od->obj_desc, odsc))
+            return od;
+    }
+
+    return NULL;
+}
+
 int ls_find_all_no_version(ss_storage *ls, const char *var_name,
                            obj_descriptor ***odscs)
 {
@@ -1331,7 +1353,7 @@ int obj_desc_equals(obj_descriptor *odsc1, obj_descriptor *odsc2)
  *   Test if two object descriptors have the same name and versions and
  *     their bounding boxes intersect.
  *     */
-int obj_desc_equals_intersect(obj_descriptor *odsc1, obj_descriptor *odsc2)
+int obj_desc_equals_intersect(const obj_descriptor *odsc1, const obj_descriptor *odsc2)
 {
     if(strcmp(odsc1->name, odsc2->name) == 0 &&
        odsc1->version == odsc2->version &&
@@ -1349,6 +1371,19 @@ int obj_desc_by_name_intersect(const obj_descriptor *odsc1,
 {
     if(strcmp(odsc1->name, odsc2->name) == 0 &&
        bbox_does_intersect(&odsc1->bb, &odsc2->bb))
+        return 1;
+    return 0;
+}
+
+/*
+ *   Test if two object descriptors have the same name and versions and
+ *     odsc1's bbox includes odsc2's bbox.
+ *     */
+int obj_desc_equals_include(const obj_descriptor *odsc1, const obj_descriptor *odsc2)
+{
+    if(strcmp(odsc1->name, odsc2->name) == 0 &&
+       odsc1->version == odsc2->version &&
+       bbox_include(&odsc1->bb, &odsc2->bb))
         return 1;
     return 0;
 }

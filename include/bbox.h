@@ -42,6 +42,11 @@ int bbox_include(const struct bbox *, const struct bbox *);
 int bbox_does_intersect(const struct bbox *, const struct bbox *);
 void bbox_intersect(const struct bbox *, const struct bbox *, struct bbox *);
 int bbox_equals(const struct bbox *, const struct bbox *);
+int bbox_include_ondim(const struct bbox *b0, const struct bbox *b1, int dim);
+int bbox_can_include(struct bbox* bbox0, struct bbox* bbox1);
+int bbox_can_union(const struct bbox* bbox0, const struct bbox* bbox1);
+void bbox_union_ondim(const struct bbox* bbox0, const struct bbox* bbox1, int dim, struct bbox* bbox2);
+int bbox_union(const struct bbox* bbox0, const struct bbox* bbox1, struct bbox* bbox2);
 
 uint64_t bbox_volume(const struct bbox *);
 void bbox_to_intv(const struct bbox *, uint64_t, int, struct intv **, int *);

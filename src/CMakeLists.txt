@@ -35,6 +35,14 @@ set_target_properties (dspaces
 
 set(dspaces-server-src util.c bbox.c ss_data.c dspaces-server.c dspaces-conf.c dspaces-modules.c dspaces-logging.c toml.c)
 
+if(ENABLE_FILE_STORAGE)
+    list(APPEND dspaces-server-src file_storage/policy.c file_storage/file.c)
+endif()
+
+if(HDF5_FOUND)
+    list(APPEND dspaces-server-src file_storage/file_hdf5.c)
+endif()
+
 add_library(dspaces-server ${dspaces-server-src} ${dspaces-src})
 if(HAVE_DRC)
     target_link_libraries (dspaces-server margo m pthread ${DRC_LIBRARIES} liblz4)
@@ -56,6 +64,10 @@ endif()
 if(CURL_FOUND)
     target_link_libraries(dspaces-server curl)
     target_include_directories (dspaces-server BEFORE PUBLIC ${CURL_INCLUDE_DIR})
+endif()
+
+if(HDF5_FOUND)
+    target_link_libraries(dspaces-server HDF5::HDF5)
 endif()
 
 target_compile_definitions(dspaces-server PRIVATE DSPACES_MOD_DIR=${CMAKE_INSTALL_PREFIX}/share/modules)

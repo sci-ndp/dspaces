@@ -17,6 +17,8 @@
 #include "ss_data.h"
 #include "str_hash.h"
 #include "toml.h"
+#include "util.h"
+
 #include <abt.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -30,6 +32,10 @@
 #include <unistd.h>
 #ifdef OPS_USE_OPENMP
 #include <omp.h>
+#endif
+
+#ifdef DSPACES_HAVE_FILE_STORAGE
+#include "file_storage/file.h"
 #endif
 
 #ifdef DSPACES_HAVE_PYTHON
@@ -399,6 +405,10 @@ static int dsg_alloc(dspaces_provider_t server, const char *conf_name,
         fprintf(stderr, "%s(): ERROR ls_alloc() failed\n", __func__);
         goto err_free;
     }
+
+#ifdef DSPACES_HAVE_FILE_STORAGE
+    INIT_LIST_HEAD(&dsg_l->ls_od_list);
+#endif // DSPACES_HAVE_FILE_STORAGE
 
     // proxy storage
     dsg_l->ps = ls_alloc(server->conf.max_versions);
@@ -1240,6 +1250,9 @@ static int server_destroy(dspaces_provider_t server)
     }
 
     free_sspace(server->dsg);
+#ifdef DSPACES_HAVE_FILE_STORAGE
+    free_ls_od_list(&server->dsg->ls_od_list);
+#endif // DSPACES_HAVE_FILE_STORAGE
     ls_free(server->dsg->ls);
     free(server->dsg);
     free(server->server_address[0]);
@@ -1287,6 +1300,41 @@ static void odsc_take_ownership(dspaces_provider_t server, obj_descriptor *odsc)
     }
 }
 
+#ifdef DSPACES_HAVE_FILE_STORAGE
+static int od_swap_out(dspaces_provider_t server)
+{
+    int ret;
+    struct obj_data *swap_od;
+    /* Find the od that we want to swap out */
+    ABT_mutex_lock(server->ls_mutex);
+    swap_od = which_swap_out(&server->conf.swap, &server->dsg->ls_od_list);
+    if(!swap_od) {
+        fprintf(stderr, "DATASPACES: ERROR: %s: Object data list has nothing to swap out! "
+                        "This should not happen... The primary reason could be either the "
+                        "server node memory capacity is too small, or the user-configured "
+                        "server memory quota is too small.", __func__);
+        return dspaces_ERR_UNKNOWN_OBJ;
+    }
+    
+    /* Write od to HDF5 */
+    ret = file_write_od(&server->conf.swap, swap_od);
+    if(ret != dspaces_SUCCESS) {
+        ABT_mutex_unlock(server->ls_mutex);
+        return ret;
+    }
+
+    /* Delete the od from both the local stroage list & flat list */
+    ls_remove(server->dsg->ls, swap_od);
+    list_del(&swap_od->flat_list_entry.entry);
+    ABT_mutex_unlock(server->ls_mutex);
+
+    /* Free od */
+    obj_data_free(swap_od);
+
+    return dspaces_SUCCESS;
+}
+#endif // DSPACES_HAVE_FILE_STORAGE
+
 static void put_rpc(hg_handle_t handle)
 {
     hg_return_t hret;
@@ -1321,6 +1369,15 @@ static void put_rpc(hg_handle_t handle)
     // set the owner to be this server address
     odsc_take_ownership(server, &in_odsc);
 
+#ifdef DSPACES_HAVE_FILE_STORAGE
+    /* Check if needs to swap data out to HDF5*/
+    uint64_t size_MB = obj_data_size(&in_odsc) >> 20;
+
+    while(need_swap_out(&server->conf.swap, size_MB)) {
+        od_swap_out(server);
+    }
+#endif // DSPACES_HAVE_FILE_STORAGE
+    
     struct obj_data *od;
     od = obj_data_alloc(&in_odsc);
     memcpy(&od->gdim, in.odsc.raw_gdim, sizeof(struct global_dimension));
@@ -1371,6 +1428,10 @@ static void put_rpc(hg_handle_t handle)
 
     ABT_mutex_lock(server->ls_mutex);
     ls_add_obj(server->dsg->ls, od);
+#ifdef DSPACES_HAVE_FILE_STORAGE
+    /* add obj_data to the flat od_list for swap out */
+    list_add_tail(&od->flat_list_entry.entry, &server->dsg->ls_od_list);
+#endif // DSPACES_HAVE_FILE_STORAGE
     ABT_mutex_unlock(server->ls_mutex);
 
     DEBUG_OUT("Received obj %s\n", obj_desc_sprint(&od->obj_desc));
@@ -2383,18 +2444,41 @@ static void get_rpc(hg_handle_t handle)
 
     struct obj_data *od, *from_obj;
 
+#ifdef DSPACES_HAVE_FILE_STORAGE
+    while(!(od = obj_data_alloc(&in_odsc))) {
+        /* Failed to allocate od, the primary reason is insufficient memory. */
+        od_swap_out(server);
+    }
+#else
+    od = obj_data_alloc(&in_odsc);
+#endif // DSPACES_HAVE_FILE_STORAGE
+
+    DEBUG_OUT("allocated target object\n");
+
     ABT_mutex_lock(server->ls_mutex);
     if(server->remotes && ls_lookup(server->dsg->ps, in_odsc.name)) {
-        from_obj = ls_find(server->dsg->ps, &in_odsc);
+        from_obj = ls_find_include(server->dsg->ps, &in_odsc);
     } else {
-        from_obj = ls_find(server->dsg->ls, &in_odsc);
+        from_obj = ls_find_include(server->dsg->ls, &in_odsc);
     }
-    DEBUG_OUT("found source data object\n");
-    od = obj_data_alloc(&in_odsc);
-    DEBUG_OUT("allocated target object\n");
-    ssd_copy(od, from_obj);
-    DEBUG_OUT("copied object data\n");
+    if(from_obj) {
+        DEBUG_OUT("found source data object from staging memory\n");
+        ssd_copy(od, from_obj);
+        DEBUG_OUT("copied object data\n");
+#ifdef DSPACES_HAVE_FILE_STORAGE
+        from_obj->flat_list_entry.usecnt++;
+#endif // DSPACES_HAVE_FILE_STORAGE
+    }
     ABT_mutex_unlock(server->ls_mutex);
+
+#ifdef DSPACES_HAVE_FILE_STORAGE
+    if(!from_obj) {
+        /* Did not find the from_obj from staging memory, 
+         * search it in the swap space */
+        file_read_od(&server->conf.swap, od);
+    }
+#endif // DSPACES_HAVE_FILE_STORAGE
+
     hg_size_t size = (in_odsc.size) * bbox_volume(&(in_odsc.bb));
     void *buffer = (void *)od->data;
     cbuffer = malloc(size);
@@ -2446,7 +2530,23 @@ static void get_rpc(hg_handle_t handle)
     margo_bulk_free(bulk_handle);
     out.ret = dspaces_SUCCESS;
     out.len = csize;
-    obj_data_free(od);
+    /* If we read the od back from the swap space, 
+     * then we keep it in the staging memory */
+    if(from_obj) {
+        obj_data_free(od);
+    }
+#ifdef DSPACES_HAVE_FILE_STORAGE
+    else {
+        /* We add the read-back od to the local storage */
+        ABT_mutex_lock(server->ls_mutex);
+        ls_add_obj(server->dsg->ls, od);
+        /* add obj_data to the flat od_list for swap out */
+        od->flat_list_entry.usecnt++;
+        list_add_tail(&od->flat_list_entry.entry, &server->dsg->ls_od_list);
+        ABT_mutex_unlock(server->ls_mutex);
+    }
+#endif // DSPACES_HAVE_FILE_STORAGE
+
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
     margo_destroy(handle);

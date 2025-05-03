@@ -99,7 +99,7 @@ void bbox_divide(struct bbox *b0, struct bbox *b_tab)
 /*
    Test if bounding box b0 includes b1 along dimension dim.
 */
-static inline int bbox_include_ondim(const struct bbox *b0,
+int bbox_include_ondim(const struct bbox *b0,
                                      const struct bbox *b1, int dim)
 {
     if((b0->lb.c[dim] <= b1->lb.c[dim]) && (b0->ub.c[dim] >= b1->ub.c[dim]))
@@ -120,6 +120,46 @@ int bbox_include(const struct bbox *b0, const struct bbox *b1)
             return 0;
     }
     return 1;
+}
+
+/* Test if bounding box bbox0 includes bbox1 or bbox1 includes bbox0
+ * along all dimensions. Return value could be:
+ * 0 - no include relationship
+ * 1 - bbox0 includes bbox1
+ * 2 - bbox1 includes bbox0
+ * */
+int bbox_can_include(struct bbox* bbox0, struct bbox* bbox1)
+{
+    int ret;
+    struct bbox* big, *small;
+
+    // Find the bigger bbox first
+    if(bbox_dist(bbox0, 0)<=bbox_dist(bbox1, 0)) {
+        big = bbox1;
+        small = bbox0;
+        ret = 2;
+    } else {
+        big = bbox0;
+        small = bbox1;
+        ret = 1;
+    }
+
+    // If we cannot find a bbox whose size on every dimension is
+    // bigger than the other one, then there is no chance for either
+    // 1 bbox to include the other 
+    for(int i=1; i<bbox0->num_dims; i++) {
+        if(bbox_dist(small, i)>bbox_dist(big, i)) {
+            return 0;
+        }
+    }
+
+    for(int i=0; i<bbox0->num_dims; i++) {
+        if(!bbox_include_ondim(big, small, i)) {
+            return 0;
+        }
+    }
+
+    return ret;
 }
 
 /*
@@ -180,6 +220,102 @@ int bbox_equals(const struct bbox *bb0, const struct bbox *bb1)
         return 1;
     }
     return 0;
+}
+
+/* Test if bounding box bbox0 and bbox1 can union.
+ * Return value is the dimension where they can union along,
+ * -1 when they cannot union.
+ * */
+int bbox_can_union(const struct bbox* bbox0, const struct bbox* bbox1)
+{
+    int share;
+    /* Two bbox can union means that they share a common
+     * (n-1) dim coordinates, and has 1 dimension extended. */
+    for(int i=0; i<bbox0->num_dims; i++) { // Choose 1 dimension
+        // check the coordinates of the other (n-1) dimension
+        share = 1;
+        for(int j=0; j<bbox0->num_dims; j++) {
+            if(j==i) continue;
+            if(bbox0->lb.c[j] != bbox1->lb.c[j] || bbox0->ub.c[j] != bbox1->ub.c[j]) {
+                share = 0;
+                break;
+            }
+        }
+
+        if(!share) continue; // choose the next dimension
+
+        if(share && bbox_intersect_ondim(bbox0, bbox1, i)) return i;
+    }
+    return -1;
+}
+
+/* Compute the union result of bounding box bbox0 and bbox1.
+ * Require to test if bbox0 & bbox1 can union before calling
+ * this function. Need the union dimension as the input.
+ * The result will be stored in bbox2.
+ * */
+void bbox_union_ondim(const struct bbox* bbox0, const struct bbox* bbox1,
+                                int dim, struct bbox* bbox2)
+{
+    bbox2->num_dims = bbox0->num_dims;
+    for(int i=0; i<bbox0->num_dims; i++) {
+        if(i==dim) {
+            bbox2->lb.c[i] = min(bbox0->lb.c[i], bbox1->lb.c[i]);
+            bbox2->ub.c[i] = min(bbox0->ub.c[i], bbox1->ub.c[i]);
+        } else {
+            bbox2->lb.c[i] = bbox0->lb.c[i];
+            bbox2->ub.c[i] = bbox0->ub.c[i];
+        }
+    }
+}
+
+/* Test if bounding box bbox0 and bbox1 can union and
+ * compute their union bbox. The result will be stored in bbox2.
+ * Return value is 1 when they can union, otherwise 0.
+ * */
+int bbox_union(const struct bbox* bbox0, const struct bbox* bbox1, struct bbox* bbox2)
+{
+    int found = 0, share;
+    int dim;
+    /* Two bbox can union means that they share a common
+        (n-1) dim coordinates, and has 1 dimension extended. */
+    for(int i=0; i<bbox0->num_dims; i++) { // Choose 1 dimension
+        // check the coordinates of the other (n-1) dimension
+        share = 1;
+        for(int j=0; j<bbox0->num_dims; j++) {
+            if(j==i) continue;
+            if(bbox0->lb.c[j] != bbox1->lb.c[j] || bbox0->ub.c[j] != bbox1->ub.c[j]) {
+                share = 0;
+                break;
+            }
+        }
+
+        if(!share) continue; // choose the next dimension
+
+        found = share && bbox_intersect_ondim(bbox0, bbox1, i);
+
+        if(found) {
+            dim = i;
+            break;
+        }
+    }
+
+    if(!found) {
+        return 0;
+    } else { // fill bbox2
+        bbox2->num_dims = bbox0->num_dims;
+        for(int i=0; i<bbox0->num_dims; i++) {
+            if(i==dim) {
+                bbox2->lb.c[i] = min(bbox0->lb.c[i], bbox1->lb.c[i]);
+                bbox2->ub.c[i] = min(bbox0->ub.c[i], bbox1->ub.c[i]);
+            } else {
+                bbox2->lb.c[i] = bbox0->lb.c[i];
+                bbox2->ub.c[i] = bbox0->ub.c[i];
+            }
+        }
+        return 1;
+    }
+
 }
 
 uint64_t bbox_volume(const struct bbox *bb)
