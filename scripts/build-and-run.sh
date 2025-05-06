@@ -15,8 +15,6 @@ cmake ${src_dir} -DCMAKE_INSTALL_PREFIX=${install_dir} -DENABLE_TESTS=True -DCMA
 make
 make install
 
-fi_info
-
 cd /
 if [ -f dspaces.toml ] ; then
     ${install_dir}/bin/dspaces_server ${ofi_str} dspaces.toml &
