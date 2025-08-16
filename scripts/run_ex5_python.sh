@@ -187,21 +187,32 @@ if [[ $NO_TAIL -eq 0 ]]; then
   echo "[INFO] All components launched. Tailing logs (Ctrl-C to stop)."
   echo "[INFO] --- server.log / writer.log / reader.log ---"
   echo
-  # Tail combined view with prefixes
-  tail -n0 -F "$LOG_SERVER" "$LOG_WRITER" "$LOG_READER" | awk '
-    BEGIN{ while((getline)<0); }
-    FILENAME!=last { last=FILENAME }
-    { printf("[%s] (%s) %s\n", strftime("%H:%M:%S"), FILENAME, $0); fflush(); }
-  '
+  # Tail combined view with prefixes in background so we can still wait for processes
+  (
+    tail -n0 -F "$LOG_SERVER" "$LOG_WRITER" "$LOG_READER" 2>/dev/null &
+    TAIL_INNER_PID=$!
+    # Forward tail output with timestamps & filename
+    awk 'FILENAME!=last { last=FILENAME } { printf("[%s] (%s) %s\n", strftime("%H:%M:%S"), FILENAME, $0); fflush(); }' <(tail -n0 -F "$LOG_SERVER" "$LOG_WRITER" "$LOG_READER" 2>/dev/null) &
+    AWK_PID=$!
+    wait $TAIL_INNER_PID 2>/dev/null || true
+  ) &
+  TAIL_PID=$!
 fi
 
-wait $WRITER_PID || true
-wait $READER_PID || true
-wait $SERVER_PID || true
-
-SERVER_RC=$?
+# Capture exit codes
 WRITER_RC=0
 READER_RC=0
+SERVER_RC=0
+
+wait $WRITER_PID 2>/dev/null; WRITER_RC=$?
+wait $READER_PID 2>/dev/null; READER_RC=$?
+wait $SERVER_PID 2>/dev/null; SERVER_RC=$?
+
+# Stop tailer if still running
+if [[ ${TAIL_PID:-0} -ne 0 ]] && kill -0 $TAIL_PID 2>/dev/null; then
+  kill $TAIL_PID 2>/dev/null || true
+fi
+
 echo "[INFO] Finished. Exit codes: server($SERVER_RC), writer($WRITER_RC), reader($READER_RC)." 
 if [[ $NO_TAIL -eq 1 ]]; then
   echo "[INFO] --- server.log (tail) ---"; tail -n 40 "$LOG_SERVER" || true
