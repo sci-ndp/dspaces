@@ -92,8 +92,9 @@ def pquery(id, **kwargs):
 
 if __name__ == '__main__':
     id = register('s3nc_mod', 'abc', json.dumps({'bucket':'noaa-goes17','path':'ABI-L1b-RadM/2020/215/15/OR_ABI-L1b-RadM1-M6C02_G17_s20202151508255_e20202151508312_c20202151508338.nc'}), 45)
-    res = query('abcdef\id:45,var_name:Rad', 2, (1,1), (4,2))
+    # Use a raw string for the test query to avoid a SyntaxWarning about an invalid escape sequence ("\\i").
+    res = query(r'abcdef\id:45,var_name:Rad', 2, (1,1), (4,2))
     params = {'id':id, 'var_name': 'Rad', 'version':2, 'lb':(1,1), 'ub':(4,2)}
-    #res = pquery(**params)
+    # res = pquery(**params)
     print(res)
     
